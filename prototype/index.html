@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<title>Tiny Titans Food Fight</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Rubik:wght@400;500;700;800&display=swap">
+<style>
+:root {
+  color-scheme: dark;
+  --ink: #22142a;
+  --ink-2: #34213f;
+  --ink-glass: rgba(34, 20, 42, 0.86);
+  --paper: #fff4e2;
+  --paper-dim: #cdb9c9;
+  --butter: #ffd447;
+  --tomato: #f0503a;
+  --glaze: #8fd8f0;
+  --basil: #5fbf8f;
+  --display: "Bagel Fat One", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif;
+  --body: "Rubik", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --r: 14px;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; overflow: hidden; background: var(--ink); color: var(--paper); font-family: var(--body); }
+body { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
+canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: #e8d6bd; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--butter); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------ HUD */
+#hud { position: fixed; inset: 0; pointer-events: none; }
+.tl { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); left: 16px; display: flex; gap: 8px; }
+.tag { background: var(--ink-glass); border-radius: var(--r); padding: 6px 12px 7px; display: grid; justify-items: start; line-height: 1; }
+.tag b { font-family: var(--display); font-weight: 400; font-size: 26px; font-variant-numeric: tabular-nums; color: var(--butter); }
+.tag small { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--paper-dim); margin-top: 3px; }
+.tide-banner { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
+  background: var(--ink-glass); padding: 8px 16px; border-radius: 999px; font-weight: 700; font-size: 14px; white-space: nowrap;
+  border: 2px solid rgba(143, 216, 240, 0.5); color: var(--glaze); }
+.tide-banner.urgent { border-color: var(--tomato); color: var(--paper); background: rgba(160, 36, 24, 0.85); animation: throb 1s ease-in-out infinite; }
+@keyframes throb { 50% { transform: translateX(-50%) scale(1.04); } }
+.feed { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 16px; margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; justify-items: end; max-width: min(360px, 46vw); }
+.feed li { background: var(--ink-glass); padding: 5px 10px; border-radius: 10px; font-size: 13px; transition: opacity 0.6s; }
+.feed li.mine { border: 2px solid var(--butter); }
+.feed li.old { opacity: 0.35; }
+.feed em { font-style: normal; color: var(--butter); }
+
+.crosshair { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; transform: translate(-50%, -50%); }
+.crosshair svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.crosshair circle { fill: none; stroke-width: 3; }
+.crosshair .track { stroke: rgba(255, 244, 226, 0.25); }
+#chargeRing { stroke: var(--butter); stroke-dasharray: 176; stroke-dashoffset: 176; stroke-linecap: round; transition: stroke 0.1s; }
+.crosshair.full #chargeRing { stroke: var(--tomato); }
+.crosshair .dot { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: var(--paper); box-shadow: 0 0 0 1.5px var(--ink); }
+.crosshair[data-profile="line"] .dot { width: 4px; height: 4px; margin: -2px; }
+.crosshair[data-profile="line"] .track { stroke: transparent; }
+.crosshair[data-profile="line"]::before, .crosshair[data-profile="line"]::after { content: ""; position: absolute; background: var(--paper); box-shadow: 0 0 0 1px var(--ink); }
+.crosshair[data-profile="line"]::before { left: 50%; top: 18px; bottom: 18px; width: 2px; margin-left: -1px; clip-path: polygon(0 0,100% 0,100% 35%,0 35%,0 65%,100% 65%,100% 100%,0 100%); }
+.crosshair[data-profile="line"]::after { top: 50%; left: 18px; right: 18px; height: 2px; margin-top: -1px; clip-path: polygon(0 0,35% 0,35% 100%,0 100%,0 0,65% 0,100% 0,100% 100%,65% 100%); }
+.crosshair.cooldown .dot { background: var(--paper-dim); opacity: 0.6; }
+.hitmarker { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%) rotate(45deg); opacity: 0; }
+.hitmarker::before, .hitmarker::after { content: ""; position: absolute; background: var(--paper); border-radius: 2px; box-shadow: 0 0 0 1px var(--ink); }
+.hitmarker::before { left: 50%; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; clip-path: polygon(0 0,100% 0,100% 30%,0 30%,0 70%,100% 70%,100% 100%,0 100%); }
+.hitmarker::after { top: 50%; left: 0; right: 0; height: 3px; margin-top: -1.5px; clip-path: polygon(0 0,30% 0,30% 100%,0 100%,0 0,70% 0,100% 0,100% 100%,70% 100%); }
+.hitmarker.on { opacity: 1; }
+.hitmarker.head::before, .hitmarker.head::after { background: var(--butter); }
+.hitmarker.kill { width: 42px; height: 42px; }
+.hitmarker.kill::before, .hitmarker.kill::after { background: var(--tomato); }
+
+.bottom { position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: grid; justify-items: center; gap: 8px; width: min(440px, calc(100vw - 32px)); }
+.statuses { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; min-height: 22px; }
+.chip { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: var(--ink-glass); border: 2px solid var(--paper-dim); }
+.chip.frozen, .chip.wet { border-color: var(--glaze); color: var(--glaze); }
+.chip.juiced, .chip.burning { border-color: var(--tomato); color: #ffb3a6; }
+.chip.sticky { border-color: #c98a4a; color: #f3c89a; }
+.chip.slick, .chip.tripped { border-color: var(--butter); color: var(--butter); }
+.chip.shield { border-color: var(--butter); color: var(--butter); }
+.bars { width: 100%; display: grid; gap: 4px; }
+.bar { position: relative; height: 14px; border-radius: 7px; background:
+  repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), rgba(255,244,226,0.3) calc(25% - 1px) 25%), var(--ink-glass); overflow: hidden; }
+.bar.hp { height: 18px; border-radius: 9px; }
+.bar > div { position: absolute; inset: 0; transform-origin: left; transition: transform 0.15s; }
+.bar.hp > div { background: linear-gradient(180deg, #ff7a63, var(--tomato)); }
+.bar.glaze > div { background: linear-gradient(180deg, #c6f0ff, var(--glaze)); }
+.bar span { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-weight: 800; font-size: 11px; color: var(--paper); text-shadow: 0 1px 2px var(--ink), 0 0 3px var(--ink); font-variant-numeric: tabular-nums; }
+.bar.hp span { font-size: 13px; }
+.bar::after { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--paper); text-shadow: 0 1px 2px var(--ink); }
+.bar.hp::after { content: "Health"; }
+.bar.glaze::after { content: "Glaze"; }
+.hotbar { display: flex; gap: 8px; pointer-events: auto; }
+.slot { position: relative; width: 62px; height: 62px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+  background: radial-gradient(circle at 50% 50%, #fffaf2 0 56%, #e9dccb 57% 64%, #fffaf2 65% 100%);
+  box-shadow: 0 3px 0 rgba(0,0,0,0.35), inset 0 -3px 0 rgba(0,0,0,0.08); transition: transform 0.12s; }
+.slot img { width: 76%; height: 76%; object-fit: contain; margin-top: 12%; pointer-events: none; }
+.slot img:not([src]) { visibility: hidden; }
+.slot.empty { background: radial-gradient(circle, rgba(255,244,226,0.16) 0 64%, rgba(255,244,226,0.28) 65% 100%); box-shadow: none; }
+.slot.sel { transform: translateY(-6px); box-shadow: 0 0 0 4px var(--butter), 0 6px 0 rgba(0,0,0,0.35); }
+.slot .key { position: absolute; left: -2px; top: -4px; font-size: 11px; font-weight: 800; background: var(--ink); color: var(--paper-dim); border-radius: 6px; padding: 1px 5px; }
+.slot .count { position: absolute; right: -2px; bottom: -4px; min-width: 20px; font-family: var(--display); font-size: 16px; background: var(--tomato); color: var(--paper); border-radius: 10px; padding: 0 5px; line-height: 20px; }
+.slot .count:empty { display: none; }
+.hint { font-size: 13px; background: var(--ink-glass); padding: 5px 12px; border-radius: 999px; text-align: center; max-width: 100%; }
+.hint b { color: var(--butter); }
+.hint .alt { color: var(--glaze); margin-left: 6px; white-space: nowrap; }
+.toast { position: absolute; right: 16px; bottom: calc(130px + env(safe-area-inset-bottom, 0px)); background: var(--basil); color: var(--ink); font-weight: 800; padding: 6px 12px; border-radius: 10px; opacity: 0; transform: translateY(8px); transition: 0.2s; }
+.toast.on { opacity: 1; transform: none; }
+.banner { position: absolute; left: 0; right: 0; top: 22%; display: grid; justify-items: center; gap: 4px; opacity: 0; transform: scale(0.8); transition: 0.25s cubic-bezier(.2,1.6,.4,1); text-align: center; padding-inline: 16px; }
+.banner.on { opacity: 1; transform: none; }
+.banner strong { font-family: var(--display); font-weight: 400; font-size: clamp(34px, 7vw, 64px); color: var(--butter); text-shadow: 3px 4px 0 var(--tomato), 0 0 24px rgba(34,20,42,0.6); line-height: 1; }
+.banner span { font-weight: 700; background: var(--ink-glass); padding: 4px 12px; border-radius: 999px; }
+.plate { position: absolute; left: 0; top: 0; display: grid; justify-items: center; gap: 2px; will-change: transform; }
+.plate .name { font-size: 12px; font-weight: 800; color: var(--paper); text-shadow: 0 1px 2px var(--ink), 0 0 6px var(--ink); }
+.plate .mini { position: relative; width: 44px; height: 6px; background: rgba(34,20,42,0.75); border-radius: 3px; overflow: hidden; display: grid; }
+.plate .mini i { grid-area: 1/1; height: 100%; }
+.plate .h { background: var(--c, var(--tomato)); }
+.plate .g { background: var(--glaze); opacity: 0.9; height: 2px !important; align-self: start; z-index: 1; }
+.floater { position: absolute; left: 0; top: 0; font-family: var(--display); font-size: 22px; color: var(--paper); text-shadow: 2px 2px 0 var(--ink); pointer-events: none; will-change: transform; }
+.floater.crit { color: var(--butter); font-size: 30px; }
+.floater.immune { color: var(--glaze); font-size: 16px; }
+.floater.slip { color: var(--butter); font-size: 18px; }
+.fps { position: absolute; left: 16px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); font-size: 11px; color: var(--paper-dim); font-variant-numeric: tabular-nums; }
+.fx-overlay { position: absolute; inset: 0; transition: box-shadow 0.25s, background 0.25s; }
+.fx-overlay.juiced { box-shadow: inset 0 60px 50px -40px rgba(200, 20, 10, 0.55); }
+.fx-overlay.wet { background: rgba(120, 190, 255, 0.07); }
+.fx-overlay.burning { box-shadow: inset 0 0 90px 10px rgba(255, 110, 0, 0.55); animation: flick 0.2s infinite alternate; }
+@keyframes flick { to { box-shadow: inset 0 0 70px 6px rgba(255, 60, 0, 0.5); } }
+.fx-overlay.frozen { box-shadow: inset 0 0 110px 30px rgba(190, 235, 255, 0.85); background: rgba(210, 240, 255, 0.12); }
+.fx-overlay.lowhp { box-shadow: inset 0 0 90px 20px rgba(200, 20, 20, 0.45); }
+.fx-overlay.hurt { background: rgba(240, 80, 58, 0.18); }
+
+/* ------------------------------------------------------------------ touch */
+.touch { position: fixed; inset: 0; pointer-events: none; }
+.stick { position: fixed; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 3px solid rgba(255,244,226,0.4); background: rgba(34,20,42,0.3); opacity: 0; transition: opacity 0.15s; }
+.stick.on { opacity: 1; }
+.stick div { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,244,226,0.75); }
+.tbtn { position: fixed; pointer-events: auto; border-radius: 50%; border: 3px solid rgba(34,20,42,0.6); font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; background: rgba(255,244,226,0.82); color: var(--ink); }
+.tbtn.fire { width: 86px; height: 86px; right: 20px; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); background: var(--butter); font-size: 14px; }
+.tbtn.jump { width: 60px; height: 60px; right: 33px; bottom: calc(122px + env(safe-area-inset-bottom, 0px)); }
+.tbtn.roll { width: 54px; height: 54px; right: 108px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+.tbtn.alt { width: 54px; height: 54px; right: 36px; bottom: calc(196px + env(safe-area-inset-bottom, 0px)); background: var(--glaze); }
+@media (pointer: coarse) {
+  .bottom { left: 16px; transform: none; width: min(300px, calc(100vw - 136px)); justify-items: start; }
+  .slot { width: 48px; height: 48px; }
+  .hotbar { gap: 6px; }
+  .hint { display: none; }
+  .fps { display: none; }
+  .feed { font-size: 11px; max-width: 42vw; }
+}
+
+/* ------------------------------------------------------------------ menus */
+.menu { position: fixed; inset: 0; display: flex; align-items: stretch; pointer-events: none; }
+.menu-panel { pointer-events: auto; width: min(470px, 100%); box-sizing: border-box; overflow-y: auto; background: var(--ink-glass);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); padding: calc(28px + env(safe-area-inset-top, 0px)) 28px calc(24px + env(safe-area-inset-bottom, 0px));
+  display: grid; align-content: start; gap: 18px; -webkit-user-select: text; user-select: text; touch-action: pan-y; }
+.eyebrow { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--glaze); font-weight: 700; margin: 0; }
+.title { margin: 0; font-family: var(--display); font-weight: 400; line-height: 0.88; text-wrap: balance; }
+.title .big { display: block; font-size: clamp(54px, 13vw, 84px); color: var(--butter); text-shadow: 4px 5px 0 var(--tomato); letter-spacing: -0.01em; }
+.title .small { display: block; font-size: clamp(26px, 6vw, 36px); color: var(--paper); margin-top: 8px; }
+.lede { margin: 0; font-size: 15px; line-height: 1.5; color: var(--paper); max-width: 42ch; }
+.lede b { color: var(--butter); font-weight: 700; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn { border: 0; border-radius: 999px; padding: 13px 26px; font-weight: 800; font-size: 17px; cursor: pointer; background: var(--butter); color: var(--ink); box-shadow: 0 4px 0 #b8901a; transition: transform 0.1s, box-shadow 0.1s; }
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #b8901a; }
+.btn.ghost { background: transparent; color: var(--paper); box-shadow: inset 0 0 0 2px var(--paper-dim); }
+.field { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--paper-dim); }
+select { font: inherit; font-weight: 700; color: var(--paper); background: var(--ink-2); border: 2px solid var(--paper-dim); border-radius: 10px; padding: 7px 10px; }
+h2 { margin: 0; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--paper-dim); font-weight: 700; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 13px; margin: 0; align-items: center; }
+.keys dt { white-space: nowrap; }
+.keys dd { margin: 0; color: var(--paper-dim); }
+kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: var(--paper); color: var(--ink); border-radius: 5px; padding: 2px 6px; box-shadow: 0 2px 0 var(--paper-dim); }
+.legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.legend li { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: center; }
+.legend img { width: 44px; height: 44px; border-radius: 50%; background: radial-gradient(circle, #fffaf2 0 60%, #e9dccb 61%); }
+.legend b { display: block; font-size: 14px; }
+.legend span { font-size: 12.5px; color: var(--paper-dim); line-height: 1.35; }
+.foot { font-size: 11.5px; color: var(--paper-dim); margin: 0; line-height: 1.5; }
+.touch-only { display: none; }
+@media (pointer: coarse) { .touch-only { display: grid; } .desk-only { display: none; } }
+@media (max-width: 640px) {
+  .tag { padding: 5px 9px 6px; }
+  .tag b { font-size: 20px; }
+  .tide-banner { top: calc(62px + env(safe-area-inset-top, 0px)); left: 16px; transform: none; font-size: 12px; padding: 6px 12px; }
+  .tide-banner.urgent { animation: none; }
+  .feed { top: calc(100px + env(safe-area-inset-top, 0px)); left: 16px; right: auto; justify-items: start; max-width: 70vw; }
+}
+.live { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); font-size: 12px; font-weight: 700; background: var(--ink-glass); padding: 6px 12px; border-radius: 999px; }
+.live::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--tomato); margin-right: 8px; animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: 0.3; } }
+@media (max-width: 640px) { .live { display: none; } }
+.overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(34, 20, 42, 0.55); padding-inline: 16px; }
+.card { background: var(--ink); border-radius: 22px; padding: 26px 26px 22px; width: min(420px, 100%); box-sizing: border-box; display: grid; gap: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+.card h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 44px; color: var(--butter); text-shadow: 3px 4px 0 var(--tomato); line-height: 1; }
+.card p { margin: 0; color: var(--paper-dim); line-height: 1.45; }
+.stats { display: flex; gap: 10px; }
+.stats div { flex: 1; background: var(--ink-2); border-radius: 12px; padding: 10px 12px; display: grid; }
+.stats b { font-family: var(--display); font-weight: 400; font-size: 32px; color: var(--paper); font-variant-numeric: tabular-nums; }
+.stats small { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--paper-dim); }
+#menu-error { color: #ffb3a6; font-weight: 700; margin: 0; }
+@media (max-width: 520px) { .menu-panel { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="game" aria-label="Tiny Titans Food Fight game view"></canvas>
+
+<div id="hud" hidden>
+  <div class="tl">
+    <div class="tag"><b id="alive">8</b><small>Titans left</small></div>
+    <div class="tag"><b id="kills">0</b><small>Your splats</small></div>
+  </div>
+  <div id="tide" class="tide-banner">Soap Tide</div>
+  <ol id="feed" class="feed" aria-live="polite"></ol>
+  <div id="crosshair" class="crosshair" data-profile="lob">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><circle class="track" cx="32" cy="32" r="28"></circle><circle id="chargeRing" cx="32" cy="32" r="28"></circle></svg>
+    <div class="dot"></div>
+  </div>
+  <div id="hitmarker" class="hitmarker"></div>
+  <div id="fx-overlay" class="fx-overlay"></div>
+  <div id="nameplates"></div>
+  <div id="floaters"></div>
+  <div class="bottom">
+    <div id="statuses" class="statuses"></div>
+    <div class="bars">
+      <div class="bar glaze"><div id="glazeFill"></div><span id="glazeText">0</span></div>
+      <div class="bar hp"><div id="hpFill"></div><span id="hpText">100</span></div>
+    </div>
+    <div id="hotbar" class="hotbar"></div>
+    <div id="hint" class="hint"></div>
+  </div>
+  <div id="toast" class="toast"></div>
+  <div id="banner" class="banner"></div>
+  <div id="fps" class="fps"></div>
+</div>
+
+<div id="touch" class="touch" hidden>
+  <div id="stick" class="stick"><div></div></div>
+  <button data-touch-btn id="tFire" class="tbtn fire" type="button">Throw</button>
+  <button data-touch-btn id="tJump" class="tbtn jump" type="button">Jump</button>
+  <button data-touch-btn id="tRoll" class="tbtn roll" type="button">Roll</button>
+  <button data-touch-btn id="tAlt" class="tbtn alt" type="button">Alt</button>
+</div>
+
+<section id="menu" class="menu" aria-label="Main menu">
+  <div class="menu-panel">
+    <p class="eyebrow">Prototype 0.1 · Chop Block Central</p>
+    <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
+    <p class="lede">You're frog-sized. The kitchen island is a 120&nbsp;m plateau. <b>Food is the only weapon.</b> Drop in with 7 bots, grab what's lying around, and be the last Titan standing when the Soap Tide closes in.</p>
+    <div class="row">
+      <button id="play" class="btn" type="button">Play</button>
+      <label class="field" for="quality">Graphics
+        <select id="quality">
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+      </label>
+    </div>
+    <p id="menu-error" hidden></p>
+    <h2>Controls</h2>
+    <dl class="keys desk-only">
+      <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move · <kbd>Shift</kbd> sprint</dd>
+      <dt><kbd>Mouse</kbd></dt><dd>Aim · hold left button to charge, release to throw</dd>
+      <dt><kbd>Right-click</kbd> <kbd>Q</kbd></dt><dd>Food's alt action (eat, shield, fizz jump)</dd>
+      <dt><kbd>Space</kbd></dt><dd>Jump</dd>
+      <dt><kbd>C</kbd></dt><dd>Duck &amp; Roll dodge</dd>
+      <dt><kbd>1</kbd>–<kbd>5</kbd> <kbd>Wheel</kbd></dt><dd>Pick food</dd>
+      <dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd>Pause</dd>
+    </dl>
+    <dl class="keys touch-only">
+      <dt>Left thumb</dt><dd>Drag anywhere on the left to move (push far to sprint)</dd>
+      <dt>Right thumb</dt><dd>Drag on the right to aim</dd>
+      <dt>Throw</dt><dd>Hold to charge, release to throw</dd>
+      <dt>Plates</dt><dd>Tap a food plate to switch</dd>
+    </dl>
+    <h2>On the menu today</h2>
+    <ul id="legend" class="legend"></ul>
+    <p class="foot">Hazards: the hot plate cycles on (don't stand on it), spilled water makes you Wet (cleanses sticky and fire, but freezes last longer), the honey pool refills your Glaze shield, and the red spatula pads on the floor fling you back up. Smash the giant tomato for extra ammo.</p>
+    <p class="foot">Phase 0 "Food Feel" prototype of the Tiny Titans design document: 6 of 30 foods, one countertop, bots only.</p>
+  </div>
+  <p class="live">Bots are fighting live behind this menu</p>
+</section>
+
+<section id="pause" class="overlay" hidden>
+  <div class="card">
+    <h3>Paused</h3>
+    <p>The food will wait for you.</p>
+    <div class="row"><button id="resume" class="btn" type="button">Resume</button></div>
+  </div>
+</section>
+
+<section id="end" class="overlay" hidden>
+  <div class="card">
+    <h3 id="end-title">Splatted!</h3>
+    <p id="end-sub"></p>
+    <div class="stats">
+      <div><b id="end-place">#8</b><small>Placement</small></div>
+      <div><b id="end-kills">0</b><small>Splats</small></div>
+    </div>
+    <div class="row">
+      <button id="again" class="btn" type="button">Play again</button>
+      <button id="spectate" class="btn ghost" type="button">Keep watching</button>
+      <button id="end-menu" class="btn ghost" type="button">Menu</button>
+    </div>
+  </div>
+</section>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,444 @@
+// Match orchestration: a mini "Last Bite Standing" (GDD 3.2) on one countertop.
+// 8 Titans drop in on napkin gliders, loot food, and fight while the Soap Tide closes.
+import * as THREE from 'three';
+import {
+  G, clamp, lerp, rand, damp, forwardOf, rightOf, raycastWorld, hasLineOfSight, solidAt, FLOOR_Y, bus,
+} from './core.js';
+import { World } from './world.js';
+import { Surface } from './surface.js';
+import { FX } from './fx.js';
+import { Actor } from './actors.js';
+import { Projectiles } from './projectiles.js';
+import { Items } from './items.js';
+import { BotBrain, BOT_NAMES } from './bots.js';
+import { FOODS, FEED_VERB, lobSpeed, lobDir } from './foods.js';
+
+const PLAYER_COLOR = '#ff9a1f';
+const BOT_COLORS = ['#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#f2f2f2', '#ffcf3a'];
+const TIDE_PHASES = [
+  { wait: 35, r: 50, shrink: 22, dps: 3 },
+  { wait: 26, r: 32, shrink: 18, dps: 5 },
+  { wait: 22, r: 18, shrink: 16, dps: 8 },
+  { wait: 18, r: 8, shrink: 16, dps: 12 },
+  { wait: 14, r: 0, shrink: 20, dps: 16 },
+];
+const ENV = new Set(['burner', 'burning', 'tide']);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+const _d = new THREE.Vector3(), _o = new THREE.Vector3(), _c = new THREE.Vector3(), _f = new THREE.Vector3();
+const _r = new THREE.Vector3(), _t = new THREE.Vector3(), _v = new THREE.Vector3();
+
+export class Game {
+  constructor({ renderer, scene, camera, quality, hud, input, sfx }) {
+    Object.assign(this, { renderer, scene, camera, quality, hud, input, sfx });
+    this.time = 0;
+    this.state = 'menu';
+    this.paused = false;
+    this.world = new World(scene, renderer, quality);
+    this.surface = new Surface(scene);
+    this.fx = new FX(scene, quality);
+    this.projectiles = new Projectiles(this);
+    this.items = new Items(this);
+    this.actors = [];
+    for (let i = 0; i < 8; i++) {
+      this.actors.push(new Actor(this, { id: i, name: i === 0 ? 'You' : BOT_NAMES[i], color: i === 0 ? PLAYER_COLOR : BOT_COLORS[i - 1], isBot: i > 0 }));
+    }
+    this.brains = new Map();
+    this.player = null;
+    this.tide = { x: 0, z: 0, r: 112, dps: 2, phase: 0, mode: 'wait', t: 99, phases: TIDE_PHASES };
+    this.hitStopUntil = 0;
+    this.camYaw = 0; this.camPivotY = 0; this.camDist = 5.6;
+    this.spectate = null;
+    this.endAt = 0;
+
+    // aim-preview dots for lobbed foods (GDD 5.1: arc shows the first part of the path only)
+    this.previewDots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffd447', transparent: true, opacity: 0.85, depthWrite: false }), 40);
+    this.previewDots.frustumCulled = false;
+    this.previewDots.count = 0;
+    scene.add(this.previewDots);
+    this._m = new THREE.Matrix4();
+  }
+
+  aliveCount() { return this.actors.filter((a) => a.alive).length; }
+
+  newMatch(withPlayer) {
+    this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
+    this.world.resetRound();
+    this.hud.clearFeed();
+    const names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
+    const spots = [];
+    this.brains.clear();
+    this.actors.forEach((a, i) => {
+      a.reset();
+      a.isBot = !(withPlayer && i === 0);
+      a.name = withPlayer && i === 0 ? 'You' : names[i];
+      let p;
+      for (let k = 0; k < 30; k++) {
+        p = this.world.randomOpenSpot(8);
+        if (spots.every((s) => s.distanceTo(p) > 14)) break;
+      }
+      spots.push(p);
+      a.pos.set(p.x, 30 + rand(0, 7), p.z);
+      a.yaw = Math.atan2(p.x, p.z); // face roughly toward the centre
+      a.gliding = true; a.onGround = false;
+      a.give('tomato', 2);
+      if (a.isBot) this.brains.set(a, new BotBrain(a, this, rand(0.3, 0.75)));
+    });
+    this.player = withPlayer ? this.actors[0] : null;
+    if (this.player) {
+      this.input.yaw = this.player.yaw; this.input.pitch = -0.25;
+      this.camPivotY = this.player.pos.y;
+    }
+    Object.assign(this.tide, { x: 0, z: 0, r: 112, dps: 2, phase: 0, mode: 'wait', t: TIDE_PHASES[0].wait });
+    this.world.setTide(0, 0, 112);
+    this.items.fillSpawners(this.time);
+    this.state = 'drop'; this.stateT = 0;
+    this.spectate = null; this.endAt = 0; this.winner = null;
+    this.onMatchEvent?.('start');
+    if (withPlayer) this.hud.banner('Drop in!', 'Steer your napkin glider onto the counter');
+  }
+
+  // ------------------------------------------------------------------ combat API used by foods
+  damage(target, amount, attacker, foodId, opts = {}) {
+    if (!target.alive || amount <= 0 || this.state === 'over') return 0;
+    let amt = amount;
+    if (target.isFrozen() && !ENV.has(foodId)) { // any hit shatters the ice for bonus damage
+      target.frozenUntil = 0;
+      amt += 15;
+      this.fx.burst('ice', target.center(_c), 1.4);
+      this.sfx.play('shatter', target.pos, 1.2);
+      this.floatText(target, 'SHATTER +15', 'crit');
+    }
+    target.takeDamage(amt);
+    if (attacker && attacker !== target) { target.lastHitBy = attacker; target.lastHitFood = foodId; target.lastHitAt = this.time; }
+    const byPlayer = this.player && attacker === this.player && target !== attacker;
+    if (byPlayer) {
+      this.hud.float(target.headPos(_c).setY(target.pos.y + 2.3), Math.round(amt), opts.head ? 'crit' : 'dmg');
+      this.hud.hitmarker(opts.head, target.hp <= 0);
+      this.sfx.play(opts.head ? 'headshot' : 'hit', null, 0.9);
+      if (amt >= 35) this.hitStopUntil = performance.now() + 45;
+    }
+    if (target === this.player) {
+      this.hud.hurt();
+      if (!ENV.has(foodId) || amt > 4) this.fx.shake(Math.min(0.45, amt / 70));
+    }
+    if (target.hp <= 0) this.kill(target, attacker, foodId);
+    return amt;
+  }
+
+  damageShield(a, amt, attacker) {
+    const slot = a.selected();
+    if (!slot || slot.id !== 'cheese') return;
+    slot.hp -= amt;
+    a.shieldHp = slot.hp;
+    forwardOf(a.yaw, _f);
+    const sp = _c.copy(a.pos).addScaledVector(_f, 1.45).setY(a.pos.y + 1);
+    this.fx.burst('cheese', sp, 0.4);
+    this.sfx.play('shield', sp);
+    if (slot.hp < 150) this.surface.stamp(sp.x, a.pos.y, sp.z, 1.2, 'sticky', 3, this.time, { slow: 0.25 });
+    if (slot.hp <= 0) {
+      this.surface.stamp(sp.x, a.pos.y, sp.z, 4, 'sticky', 6, this.time, { slow: 0.35, visual: 'melt' });
+      this.world.paintSplat(sp.x, a.pos.y, sp.z, 3, 'cheese');
+      a.shieldUp = false;
+      a.consume(1);
+      this.floatText(a, 'SHIELD MELTED', 'slip');
+    }
+  }
+
+  splash(point, r, dmg, attacker, foodId, { exclude = null, onHit = null } = {}) {
+    for (const a of this.actors) {
+      if (!a.alive || a === exclude) continue;
+      const c = a.center(_c);
+      const d = Math.max(0, c.distanceTo(point) - 0.45);
+      if (d > r || !hasLineOfSight(_o.copy(point).setY(point.y + 0.3), c)) continue;
+      const k = 1 - 0.6 * clamp(d / r, 0, 1);
+      if (a === attacker) { onHit?.(a, k); continue; }
+      if (a.shieldUp && this._inFront(a, point)) { this.damageShield(a, dmg * k, attacker); continue; }
+      this.damage(a, dmg * k, attacker, foodId);
+      onHit?.(a, k);
+    }
+  }
+
+  explode(point, r, dmg, owner, foodId, force) {
+    for (const a of this.actors) {
+      if (!a.alive) continue;
+      const c = a.center(_c);
+      const dist = c.distanceTo(point);
+      if (dist > r + 0.5 || !hasLineOfSight(_o.copy(point).setY(point.y + 0.3), c)) continue;
+      const k = 1 - 0.6 * clamp(dist / r, 0, 1);
+      if (a !== owner) {
+        if (a.shieldUp && this._inFront(a, point)) this.damageShield(a, dmg * k, owner);
+        else this.damage(a, dmg * k, owner, foodId);
+      }
+      if (!a.alive) continue;
+      _d.subVectors(c, point); _d.y = Math.max(_d.y, 0.1);
+      _d.normalize(); _d.y = Math.max(_d.y, 0.45); _d.normalize();
+      a.knock(_d.multiplyScalar(force * k * (a === owner ? 0.9 : 1)));
+    }
+    const camD = this.camera.position.distanceTo(point);
+    this.fx.shake(clamp(0.6 - camD / 60, 0, 0.6));
+  }
+
+  _inFront(a, point) {
+    forwardOf(a.yaw, _f);
+    return (point.x - a.pos.x) * _f.x + (point.z - a.pos.z) * _f.z > 0.3;
+  }
+
+  hitLandmark(amount, attacker, point) {
+    const L = this.world.landmark;
+    if (!L.alive) return;
+    L.hp -= amount; L.flash = 1;
+    if (L.hp > 0) return;
+    // burst: harvest the giant tomato (GDD 2.3 landmark foods)
+    L.alive = false; L.group.visible = false; L.collider.enabled = false; L.regrowAt = this.time + 40;
+    const c = _c.set(L.x, L.y, L.z);
+    for (let i = 0; i < 3; i++) this.fx.burst('tomato', _o.copy(c).add(_v.set(rand(-3, 3), rand(-2, 3), rand(-3, 3))), 2);
+    for (let i = 0; i < 9; i++) this.world.paintSplat(L.x + rand(-8, 8), 0, L.z + rand(-8, 8), rand(2, 4), 'tomato');
+    this.surface.stamp(L.x, 0, L.z, 7, 'slick', 10, this.time);
+    this.sfx.play('boom', c); this.sfx.play('splat', c, 1.5);
+    this.fx.shake(0.3);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + rand(-0.3, 0.3);
+      this.items.drop('tomato', 2, _o.set(L.x, 3, L.z), _v.set(Math.cos(a) * 8, 10, Math.sin(a) * 8));
+    }
+    if (attacker === this.player) this.hud.toast('Giant Tomato harvested: 8 tomatoes dropped');
+  }
+
+  kill(victim, attacker, foodId) {
+    victim.alive = false; victim.hp = 0;
+    let killer = attacker && attacker !== victim ? attacker : null;
+    if (!killer && this.time - victim.lastHitAt < 6 && victim.lastHitBy !== victim) killer = victim.lastHitBy;
+    if (killer) killer.kills++;
+    victim.placement = this.aliveCount() + 1;
+    const c = victim.center(_c).clone();
+    this.fx.burst('splat-out', c);
+    this.fx.burst('tomato', c, 0.6);
+    this.sfx.play('splatout', c);
+    this.world.paintSplat(c.x, victim.pos.y, c.z, 3, 'tomato');
+    victim.inv.forEach((s) => {
+      if (!s) return;
+      const a = rand(0, Math.PI * 2);
+      this.items.drop(s.id, s.count, c, _v.set(Math.cos(a) * 5, 8, Math.sin(a) * 5));
+    });
+    victim.inv = [null, null, null, null, null];
+    victim.hide();
+
+    // kill feed
+    const food = foodId === 'burning' ? 'burner' : foodId;
+    const vName = `<b style="color:${victim.color}">${esc(victim.name)}</b>`;
+    let html;
+    if (killer) {
+      const kName = `<b style="color:${killer.color}">${esc(killer.name)}</b>`;
+      if (food === 'burner') html = `${kName} cooked ${vName} on the burner`;
+      else if (food === 'tide') html = `${kName} sent ${vName} into the Soap Tide`;
+      else html = `${kName} <em>${FEED_VERB[food] || 'splatted'}</em> ${vName}`;
+    } else {
+      html = food === 'burner' ? `${vName} got cooked on the burner`
+        : food === 'tide' ? `${vName} was washed away by the Soap Tide` : `${vName} splatted out`;
+    }
+    const mine = victim === this.player || killer === this.player;
+    this.hud.feed(html, mine);
+    if (killer === this.player) this.hud.banner('Splat!', `${esc(victim.name)} is out · ${this.aliveCount()} left`, 1.6);
+
+    if (victim === this.player) {
+      this.spectate = killer && killer.alive ? killer : null;
+      this.onMatchEvent?.('playerDown', { killer, placement: victim.placement, food });
+    }
+    if (this.aliveCount() <= 1) this._finish();
+  }
+
+  _finish() {
+    if (this.state === 'over') return;
+    this.state = 'over';
+    const w = this.actors.find((a) => a.alive) || null;
+    this.winner = w;
+    if (w) w.placement = 1;
+    this.endAt = this.time;
+    if (w && w === this.player) { this.sfx.play('win'); this.hud.banner("Chef's Kiss!", 'Last Bite Standing', 4); }
+    this.onMatchEvent?.('over', { winner: w });
+  }
+
+  floatText(actor, text, kind) {
+    if (!this.player) return;
+    if (actor.pos.distanceTo(this.camera.position) > 40) return;
+    this.hud.float(actor.headPos(_c).setY(actor.pos.y + 2.6), text, kind);
+  }
+
+  // ------------------------------------------------------------------ main update
+  update(realDt) {
+    realDt = Math.max(0, realDt);
+    let total = this.paused ? 0 : Math.min(realDt, 0.1);
+    if (performance.now() < this.hitStopUntil) total *= 0.08; // local hit-stop on heavy hits
+    // Up to 3 fixed substeps of <= 1/30 s, so a slow device plays at normal speed.
+    const steps = Math.min(3, Math.max(1, Math.ceil(total * 30 - 1e-6)));
+    const dt = total / steps;
+    if (total > 0 && this.state !== 'menu') {
+      const intent = this.input.enabled ? this.input.intent() : null;
+      for (let s = 0; s < steps; s++) {
+        // edge-triggered presses only count once per frame
+        if (s === 1 && intent) Object.assign(intent, { jump: false, dodge: false, alt: false, slot: -1, cycle: 0 });
+        this._step(dt, intent);
+      }
+    }
+    for (const a of this.actors) a.updateVisual(realDt, this.camera);
+    this._camera(realDt);
+    this._preview();
+    this.hud.update(this, realDt);
+  }
+
+  _step(dt, intent) {
+    this.time += dt;
+    const p = this.player;
+    if (p && p.alive && intent) {
+      this._playerAim();
+      p.update(dt, intent);
+    }
+    for (const [a, brain] of this.brains) if (a.alive) a.update(dt, brain.intent(dt));
+
+    if (this.state === 'drop') {
+      this.stateT += dt;
+      if (this.actors.every((a) => !a.alive || a.onGround) || this.stateT > 12) {
+        this.state = 'play';
+        if (this.player) this.hud.banner('Last Bite Standing', 'Food is the only weapon. Good luck.', 2.2);
+      }
+    } else if (this.state === 'play') {
+      this._tideUpdate(dt);
+    }
+    this.projectiles.update(dt);
+    this.items.update(dt);
+    this.surface.update(dt, this.time);
+    this.world.update(dt, this.time, this.fx, this.sfx);
+    this.fx.update(dt);
+    if (this.state === 'play' && Math.random() < dt * 30) this._tideBubbles();
+  }
+
+  _tideUpdate(dt) {
+    const T = this.tide;
+    if (T.phase >= TIDE_PHASES.length) return;
+    const P = TIDE_PHASES[T.phase];
+    T.t -= dt;
+    if (T.mode === 'wait') {
+      if (T.t <= 0) {
+        T.mode = 'shrink'; T.t = P.shrink;
+        T.from = { x: T.x, z: T.z, r: T.r };
+        const slack = Math.max(0, T.r - P.r);
+        const a = rand(0, Math.PI * 2), d = rand(0, slack * 0.8);
+        T.to = { x: clamp(T.x + Math.cos(a) * d, -40, 40), z: clamp(T.z + Math.sin(a) * d, -18, 18), r: P.r };
+        T.dps = P.dps;
+        this.sfx.play('tide', null, 0.7);
+        if (this.player) this.hud.banner('The Soap Tide is rising', 'Get inside the circle', 2);
+      }
+    } else {
+      const k = 1 - clamp(T.t / P.shrink, 0, 1);
+      T.x = lerp(T.from.x, T.to.x, k); T.z = lerp(T.from.z, T.to.z, k); T.r = lerp(T.from.r, T.to.r, k);
+      if (T.t <= 0) {
+        T.phase++;
+        if (T.phase < TIDE_PHASES.length) { T.mode = 'wait'; T.t = TIDE_PHASES[T.phase].wait; }
+      }
+    }
+    this.world.setTide(T.x, T.z, T.r);
+  }
+
+  _tideBubbles() {
+    const T = this.tide;
+    if (T.r < 1) return;
+    const a = rand(0, Math.PI * 2);
+    const p = _o.set(T.x + Math.cos(a) * T.r, 0, T.z + Math.sin(a) * T.r);
+    if (Math.abs(p.x) > 60 || Math.abs(p.z) > 32) p.y = FLOOR_Y;
+    this.fx.burst('bubbles', p);
+  }
+
+  _playerAim() {
+    const p = this.player, cam = this.camera;
+    cam.getWorldDirection(_d);
+    const o = _o.copy(cam.position).addScaledVector(_d, this.camDist * 0.95);
+    let t = raycastWorld(o, _d, 320);
+    for (const a of this.actors) {
+      if (a === p || !a.alive) continue;
+      a.center(_c).sub(o);
+      const b = _c.dot(_d);
+      if (b < 0) continue;
+      const d2 = _c.lengthSq() - b * b;
+      if (d2 < 0.8 && b < t) t = b;
+    }
+    p.aimDir.copy(_d);
+    p.aimPoint.copy(o).addScaledVector(_d, t);
+    p.yaw = this.input.yaw;
+  }
+
+  _camera(dt) {
+    const cam = this.camera, p = this.player;
+    let fov = 70;
+    if (!p || this.state === 'menu') {
+      const t = this.time * 0.06;
+      cam.position.set(Math.cos(t) * 92, 30 + Math.sin(t * 0.7) * 6, Math.sin(t) * 64);
+      cam.lookAt(0, -2, 0);
+    } else if (p.alive) {
+      const zoom = p.charging && p.selected()?.id === 'carrot' ? clamp(p.chargeT, 0, 1) : 0;
+      fov = lerp(70, 30, zoom);
+      const dist = lerp(5.6, 3.6, zoom), shoulder = lerp(1.15, 0.75, zoom);
+      this.camDist = dist;
+      this.input.zoomSens = lerp(1, 0.4, zoom);
+      this.camPivotY = damp(this.camPivotY, p.pos.y, 14, dt);
+      const yaw = this.input.yaw, pitch = this.input.pitch;
+      const pivot = _o.set(p.pos.x, this.camPivotY + 1.75, p.pos.z);
+      _f.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
+      rightOf(yaw, _r);
+      const start = _c.copy(pivot).addScaledVector(_r, shoulder * 0.6);
+      _t.copy(pivot).addScaledVector(_f, -dist).addScaledVector(_r, shoulder).y += 0.35;
+      _d.subVectors(_t, start);
+      const len = _d.length();
+      _d.divideScalar(len);
+      const hit = raycastWorld(start, _d, len + 0.3);
+      if (hit < len + 0.3) _t.copy(start).addScaledVector(_d, Math.max(0.3, hit - 0.35));
+      cam.position.copy(_t);
+      cam.rotation.set(pitch, yaw, 0, 'YXZ');
+    } else {
+      // spectate: orbit whoever splatted you, or the current leader
+      if (!this.spectate || !this.spectate.alive) {
+        this.spectate = this.actors.filter((a) => a.alive).sort((a, b) => b.kills - a.kills)[0] || null;
+      }
+      const s = this.spectate;
+      if (s) {
+        this.camYaw += dt * 0.25;
+        _t.set(s.pos.x + Math.sin(this.camYaw) * 11, s.pos.y + 5, s.pos.z + Math.cos(this.camYaw) * 11);
+        cam.position.lerp(_t, 1 - Math.exp(-4 * dt));
+        cam.lookAt(s.pos.x, s.pos.y + 1.4, s.pos.z);
+      }
+    }
+    if (this.fx.shakeAmt > 0) {
+      const s = this.fx.shakeAmt * 0.25;
+      cam.position.x += rand(-s, s); cam.position.y += rand(-s, s); cam.position.z += rand(-s, s);
+    }
+    if (Math.abs(cam.fov - fov) > 0.05) { cam.fov = damp(cam.fov, fov, 12, dt); cam.updateProjectionMatrix(); }
+    rightOf(this.input.yaw, _r);
+    this.sfx.setListener(cam.position, p ? _r : _r.set(1, 0, 0));
+  }
+
+  _preview() {
+    const p = this.player;
+    const food = p && p.alive ? p.selectedFood() : null;
+    const id = p?.selected()?.id;
+    if (!food || food.profile !== 'lob' || !p.charging) { this.previewDots.count = 0; return; }
+    const c = clamp(p.chargeT / food.charge, 0, 1);
+    const pos = p.handPos(_o);
+    const vel = lobDir(p, _v).multiplyScalar(lobSpeed(id, c));
+    const pts = [];
+    for (let i = 0; i < 90; i++) {
+      vel.y -= G * 0.03; pos.addScaledVector(vel, 0.03);
+      if (solidAt(pos)) break;
+      pts.push(pos.clone());
+    }
+    const shown = Math.min(40, Math.ceil(pts.length * 0.5)); // only the first half of the arc
+    let n = 0;
+    for (let i = 1; i < shown; i += 1) {
+      const s = 1 - i / (shown + 4);
+      this._m.makeScale(s, s, s).setPosition(pts[i]);
+      this.previewDots.setMatrixAt(n++, this._m);
+    }
+    this.previewDots.count = n;
+    this.previewDots.instanceMatrix.needsUpdate = true;
+  }
+}
+
+export { bus };
