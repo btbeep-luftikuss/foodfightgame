@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G, COUNTER, FLOOR_Y, addBox, addCyl, clearColliders, groundHeight, rand, clamp } from './core.js';
+import { Stains } from './stains.js';
 
 // ---------------------------------------------------------------------------
 // Procedural textures (no image files).
@@ -175,6 +176,8 @@ export class World {
     this._spawns();
     this.drawCallsBefore = this._countMeshes();
     this._mergeStatic();
+    // food stains on every surface (built after all colliders exist)
+    this.stains = new Stains(this.scene, this.quality, { minX: -245, maxX: 245, minZ: -178, maxZ: 170, floorY: F, wallTop: F + 110 });
   }
 
   // ------------------------------------------------------------------ lighting and materials
@@ -291,17 +294,6 @@ export class World {
     this._mesh(new THREE.BoxGeometry(w - 5, 3, d - 5), m.dark, 0, F + 1.5, 0, { cast: false });
     addBox(minX, maxX, minZ, maxZ, F, 0, { surface: 'wood', counter: true });
 
-    // splat canvas: persistent food stains painted onto the countertop (GDD 11.4)
-    const res = this.quality.splatRes;
-    this.splatCanvas = document.createElement('canvas');
-    this.splatCanvas.width = res; this.splatCanvas.height = Math.round(res * d / w);
-    this.splatCtx = this.splatCanvas.getContext('2d');
-    this.splatTex = new THREE.CanvasTexture(this.splatCanvas);
-    this.splatTex.colorSpace = THREE.SRGBColorSpace;
-    const splatMat = new THREE.MeshStandardMaterial({ map: this.splatTex, transparent: true, roughness: 0.18, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
-    const plane = this._mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), splatMat, 0, 0.015, 0, { cast: false, dyn: true });
-    plane.renderOrder = 1;
-    this.splatDirty = false; this.splatT = 0;
 
     // props (same layout as the first prototype)
     const shadowy = {};
@@ -746,56 +738,9 @@ export class World {
     return new THREE.Vector3(0, 0, 0);
   }
 
-  // ------------------------------------------------------------------ splat canvas (island top)
-  paintSplat(x, y, z, radius, kind) {
-    const { minX, maxX, minZ, maxZ } = COUNTER;
-    if (y > 0.6 || y < -0.6 || x < minX || x > maxX || z < minZ || z > maxZ) return;
-    const ctx = this.splatCtx, W = this.splatCanvas.width, H = this.splatCanvas.height;
-    const px = ((x - minX) / (maxX - minX)) * W, py = ((z - minZ) / (maxZ - minZ)) * H;
-    const pr = (radius / (maxX - minX)) * W;
-    const looks = {
-      tomato: ['rgba(196,22,14,0.85)', 'rgba(230,50,30,0.7)', 'rgba(150,10,8,0.8)'],
-      drip: ['rgba(200,30,20,0.55)'],
-      soda: ['rgba(80,34,12,0.55)', 'rgba(110,55,20,0.45)'],
-      cheese: ['rgba(255,196,40,0.75)', 'rgba(240,170,20,0.7)'],
-      carrot: ['rgba(255,138,28,0.8)'],
-      banana: ['rgba(250,220,60,0.6)'],
-      grape: ['rgba(110,30,120,0.7)', 'rgba(140,50,150,0.55)'],
-      melon: ['rgba(240,70,90,0.8)', 'rgba(255,110,120,0.65)'],
-      jelly: ['rgba(90,200,90,0.5)'],
-      berry: ['rgba(45,55,140,0.7)', 'rgba(80,60,150,0.55)'],
-      chili: ['rgba(40,20,10,0.35)'],
-    }[kind];
-    if (!looks) return;
-    const blobs = kind === 'drip' ? 1 : 7;
-    for (let i = 0; i < blobs; i++) {
-      const a = Math.random() * Math.PI * 2, d = Math.random() * pr * 0.8;
-      const r = pr * (i === 0 ? 0.7 : rand(0.15, 0.45));
-      ctx.fillStyle = looks[i % looks.length];
-      ctx.beginPath();
-      ctx.ellipse(px + Math.cos(a) * d, py + Math.sin(a) * d, r, r * rand(0.7, 1), a, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    if (kind === 'tomato' || kind === 'melon') {
-      ctx.fillStyle = kind === 'melon' ? 'rgba(30,20,20,0.85)' : 'rgba(245,225,150,0.9)';
-      for (let i = 0; i < 10; i++) {
-        const a = Math.random() * Math.PI * 2, d = Math.random() * pr;
-        ctx.beginPath(); ctx.ellipse(px + Math.cos(a) * d, py + Math.sin(a) * d, pr * 0.05, pr * 0.03, a, 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.strokeStyle = looks[0];
-      ctx.lineWidth = Math.max(1, pr * 0.08);
-      for (let i = 0; i < 6; i++) {
-        const a = Math.random() * Math.PI * 2;
-        ctx.beginPath(); ctx.moveTo(px, py);
-        ctx.lineTo(px + Math.cos(a) * pr * rand(1.1, 1.8), py + Math.sin(a) * pr * rand(1.1, 1.8)); ctx.stroke();
-      }
-    }
-    this.splatDirty = true;
-  }
-  clearSplats() {
-    this.splatCtx.clearRect(0, 0, this.splatCanvas.width, this.splatCanvas.height);
-    this.splatDirty = true;
-  }
+  // ------------------------------------------------------------------ food stains (see stains.js)
+  paintSplat(x, y, z, radius, kind) { this.stains?.paint(x, y, z, radius, kind); }
+  clearSplats() { this.stains?.clear(); }
 
   // ------------------------------------------------------------------ optimisation: merge static scenery
   _countMeshes() { let n = 0; this.scene.traverse((o) => { if (o.isMesh) n++; }); return n; }
@@ -885,8 +830,7 @@ export class World {
     L.body.material.emissive.setRGB(L.flash * 0.6, L.flash * 0.1, 0);
     this.tideMesh.material.uniforms.uTime.value = now;
     if (this.motes) { this.motes.rotation.y = Math.sin(now * 0.05) * 0.02; this.motes.position.y = Math.sin(now * 0.3) * 0.8; }
-    this.splatT += dt;
-    if (this.splatDirty && this.splatT > 0.08) { this.splatTex.needsUpdate = true; this.splatDirty = false; this.splatT = 0; }
+    this.stains.update(dt);
   }
 
   resetRound() {

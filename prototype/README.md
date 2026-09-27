@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.13:**
+
+- **Food stains on every surface** (`src/stains.js`), not just the island top: the floor, the top of every counter, table, chair, box, can and plate, the sides of boxes and cabinets, and all four kitchen walls. Wall hits stain the wall; big splashes on the floor or a counter also run up nearby walls and cabinet fronts; juice from a Titan hit in mid-air lands on the ground below. Round props (glasses, fruit, the giant tomato) stay clean because a flat stain would float off them.
+- How it stays cheap: every surface is cut into 512 px tiles, and a tile only gets a canvas, texture and mesh the first time it's splatted, so clean surfaces cost nothing. Each splat is generated once in metres and drawn into every tile it touches (no seams). Dirty tiles upload at most every 80 ms, and the tile count is capped per preset (70 / 90 / 110). A 90-second bot match stains about 40-55 tiles.
+- Stains are less glossy (roughness 0.18 → 0.5, softer reflections) so their colour reads under the bright kitchen lighting.
+
 **Version 0.12:**
 
 - **Graphics settings** (menu → Graphics, and in the pause card; saved on the device):
