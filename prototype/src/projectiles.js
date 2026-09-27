@@ -226,7 +226,7 @@ export class Projectiles {
     for (const a of game.actors) {
       if (!a.alive || a === p.owner || p.hitSet.has(a)) continue;
       _a.set(a.pos.x, a.pos.y + 0.5, a.pos.z); _b.set(a.pos.x, a.pos.y + 1.0, a.pos.z);
-      _h.set(a.pos.x, a.pos.y + 1.7, a.pos.z);
+      _h.set(a.pos.x, a.pos.y + 1.74, a.pos.z);
       const headHit = segPointDist2(_prev, p.pos, _h) < (0.3 + rad) ** 2; // human head (0.22 m) with a little slack
       const bodyHit = segSegDist2(_prev, p.pos, _a, _b) < (0.45 + rad) ** 2;
       if (!headHit && !bodyHit) continue;

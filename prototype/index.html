@@ -138,10 +138,13 @@ button { font: inherit; color: inherit; }
 .online input { font: inherit; font-size: 16px; color: var(--paper); background: var(--ink); border: 2px solid var(--paper-dim); border-radius: 10px; padding: 8px 10px; }
 .online p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--paper-dim); }
 .online p.err { color: #ffb3a6; }
+.locker-stage { height: 280px; border-radius: 14px; overflow: hidden; touch-action: pan-y; cursor: grab; --rar: #9aa3ad;
+  background: radial-gradient(ellipse at 50% 85%, color-mix(in srgb, var(--rar) 55%, #22142a) 0%, #22142a 70%); }
+.locker-stage canvas { display: block; width: 100%; height: 100%; }
 .locker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
 .locker-grid button { display: grid; justify-items: center; gap: 1px; padding: 6px 4px 8px; border-radius: 12px; border: 2px solid transparent; cursor: pointer; font: inherit; color: var(--paper);
   background: linear-gradient(180deg, color-mix(in srgb, var(--rar) 55%, #22142a) 0%, #22142a 100%); }
-.locker-grid button img { width: 84px; height: 84px; }
+.locker-grid button img { width: 88px; height: 88px; }
 .locker-grid button b { font-size: 12.5px; line-height: 1.15; text-align: center; }
 .locker-grid button small { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--rar); }
 .locker-grid button[aria-pressed="true"] { border-color: var(--butter); box-shadow: 0 0 0 2px var(--butter); }
@@ -328,7 +331,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 
 <section id="menu" class="menu" aria-label="Main menu">
   <div class="menu-panel">
-    <p class="eyebrow">Prototype 0.13 · The Grand Kitchen</p>
+    <p class="eyebrow">Prototype 0.14 · The Grand Kitchen</p>
     <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
     <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Play in first person against 11 bots until the Soap Tide closes in, or online against your friends. Blueberries fire like a machine gun.</p>
     <div class="row">
@@ -341,6 +344,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     <p id="menu-error" hidden></p>
     <div id="locker" class="online" hidden>
       <p id="locker-now"></p>
+      <div id="locker-stage" class="locker-stage" aria-label="Your Titan in the selected skin; drag to spin"></div>
       <div id="locker-grid" class="locker-grid" role="group" aria-label="Skins"></div>
     </div>
     <div id="modes" class="online" hidden>

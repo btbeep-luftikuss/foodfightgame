@@ -620,7 +620,7 @@ export class Game {
       this.camPivotY = damp(this.camPivotY, p.pos.y, 20, dt);
       const speed = Math.hypot(p.vel.x, p.vel.z);
       const bob = p.onGround && speed > 0.5 ? Math.abs(Math.sin(p.walkPhase)) * 0.06 * Math.min(1.5, speed / 6) : 0;
-      const eyeY = p.isTripped() ? 0.5 : 1.62;
+      const eyeY = p.isTripped() ? 0.5 : 1.72; // the Titan's eyes
       cam.position.set(p.pos.x, this.camPivotY + eyeY + bob, p.pos.z);
       cam.rotation.set(this.input.pitch, this.input.yaw, p.dashT > 0 ? -0.03 : 0, 'YXZ');
     } else if (p.alive) {

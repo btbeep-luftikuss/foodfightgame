@@ -82,16 +82,21 @@ function renderIcons() {
     icons[id] = r.domElement.toDataURL('image/png');
     scene.remove(m);
   }
-  // Locker thumbnails: each skin on a standing Titan, turned a little toward the light.
+  // Locker thumbnails: each skin on a standing Titan, turned a little toward the light (2x for sharp cards).
+  r.setSize(192, 192, false);
+  const rim = new THREE.DirectionalLight('#bfe0ff', 1.4);
+  rim.position.set(-3, 2, -3);
+  scene.add(rim);
   for (const s of SKINS) {
-    const m = titanPreview(s.id);
-    m.rotation.y = 0.45;
-    scene.add(m);
-    cam.position.set(0, 1.25, 4.1);
-    cam.lookAt(0, 1.08, 0);
+    const rig = titanPreview(s.id);
+    rig.object.rotation.y = 0.42;
+    scene.add(rig.object);
+    cam.position.set(0, 1.08, 4.35);
+    cam.lookAt(0, 1.0, 0);
     r.render(scene, cam);
     icons['skin:' + s.id] = r.domElement.toDataURL('image/png');
-    scene.remove(m);
+    scene.remove(rig.object);
+    rig.material.dispose();
   }
   pm.dispose();
   r.dispose();
@@ -141,6 +146,8 @@ function boot() {
   let playing = false;
 
   function enterPlay() {
+    closeStage();
+    $('locker').hidden = true;
     game.paused = false;
     playing = true;
     input.enabled = true;
@@ -166,7 +173,7 @@ function boot() {
   // Play opens the mode chooser: Classic starts right away, Chef's Choice opens the food picker.
   const reveal = (el) => requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
   $('play').addEventListener('click', () => {
-    $('modes').hidden = false; $('online').hidden = true; $('locker').hidden = true;
+    $('modes').hidden = false; $('online').hidden = true; $('locker').hidden = true; closeStage();
     reveal($('modes'));
   });
   $('mode-classic').addEventListener('click', () => start({}));
@@ -195,11 +202,80 @@ function boot() {
     skinId = b.dataset.id; game.playerSkin = skinId;
     try { localStorage.setItem('tt-skin', skinId); } catch { /* storage blocked */ }
     renderLocker();
+    showOnStage(skinId);
   });
   renderLocker();
+
+  // Locker stage: the selected skin on a live turntable (idles, blinks, waves when picked; drag to spin).
+  // Its own small renderer, only alive while the Locker is open.
+  let stage = null;
+  function openStage() {
+    if (stage) return;
+    const box = $('locker-stage');
+    let r;
+    try { r = new THREE.WebGLRenderer({ antialias: true, alpha: true }); } catch { box.hidden = true; return; }
+    r.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    r.outputColorSpace = THREE.SRGBColorSpace;
+    r.toneMapping = THREE.ACESFilmicToneMapping;
+    box.appendChild(r.domElement);
+    const scene = new THREE.Scene();
+    const pm = new THREE.PMREMGenerator(r);
+    scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+    pm.dispose();
+    scene.add(new THREE.HemisphereLight('#fff3e0', '#6b4a2e', 0.8));
+    const key = new THREE.DirectionalLight('#ffffff', 2.3); key.position.set(2, 4, 3); scene.add(key);
+    const rim = new THREE.DirectionalLight('#9fd0ff', 1.8); rim.position.set(-3, 2.5, -3); scene.add(rim);
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(0.75, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({
+      map: new THREE.CanvasTexture((() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'); const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(0,0,0,0.45)'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); return c; })()),
+      transparent: true, depthWrite: false,
+    }));
+    scene.add(floor);
+    const cam = new THREE.PerspectiveCamera(24, 1, 0.1, 30);
+    stage = { r, scene, cam, box, rig: null, spin: 0.5, vel: 0.45, drag: null, t: 0, waveUntil: 0, last: performance.now(), raf: 0 };
+    const cv = r.domElement;
+    cv.addEventListener('pointerdown', (e) => { stage.drag = e.clientX; cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener('pointermove', (e) => { if (!stage || stage.drag === null) return; const d = (e.clientX - stage.drag) * 0.012; stage.spin += d; stage.vel = d * 30; stage.drag = e.clientX; });
+    const up = () => { if (stage) stage.drag = null; };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    showOnStage(skinId);
+    const loop = (now) => {
+      if (!stage) return;
+      stage.raf = requestAnimationFrame(loop);
+      const dt = Math.min(0.05, (now - stage.last) / 1000);
+      stage.last = now; stage.t += dt;
+      const w = box.clientWidth, h = box.clientHeight;
+      if (w && (cv.width !== Math.round(w * r.getPixelRatio()) || cv.height !== Math.round(h * r.getPixelRatio()))) {
+        r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix();
+      }
+      const dist = cam.aspect < 0.9 ? 7 : 5.7; // room for tall hats and the wave
+      cam.position.set(0, 1.18, dist); cam.lookAt(0, 1.06, 0);
+      if (stage.drag === null) { stage.vel += (0.45 - stage.vel) * Math.min(1, dt * 2); stage.spin += stage.vel * dt; }
+      if (stage.rig) {
+        stage.rig.object.rotation.y = stage.spin;
+        stage.rig.pose({ t: stage.t, onGround: true, lookAround: true, wave: stage.t < stage.waveUntil }, dt);
+      }
+      r.render(scene, cam);
+    };
+    stage.raf = requestAnimationFrame(loop);
+  }
+  function showOnStage(id) {
+    if (!stage) return;
+    if (stage.rig) { stage.scene.remove(stage.rig.object); stage.rig.material.dispose(); }
+    stage.rig = titanPreview(id);
+    stage.scene.add(stage.rig.object);
+    stage.waveUntil = stage.t + 1.8;
+    stage.box.style.setProperty('--rar', RARITY[SKIN_BY_ID[id].rarity].color);
+  }
+  function closeStage() {
+    if (!stage) return;
+    cancelAnimationFrame(stage.raf);
+    stage.r.domElement.remove();
+    stage.r.dispose(); stage.r.forceContextLoss?.();
+    stage = null;
+  }
   $('locker-open').addEventListener('click', () => {
     $('locker').hidden = !$('locker').hidden; $('modes').hidden = true; $('online').hidden = true;
-    if (!$('locker').hidden) reveal($('locker'));
+    if (!$('locker').hidden) { openStage(); reveal($('locker')); } else closeStage();
   });
 
   // Chef's Choice: pick 3 foods that never run out; nothing spawns on the map.
@@ -235,7 +311,7 @@ function boot() {
   // Online: join a room code; everyone with the same code plays together.
   const status = $('online-status');
   try { $('nick').value = localStorage.getItem('tt-nick') || ''; } catch { /* storage blocked */ }
-  $('online-open').addEventListener('click', () => { $('online').hidden = !$('online').hidden; $('modes').hidden = true; $('locker').hidden = true; if (!$('online').hidden) $('nick').focus(); });
+  $('online-open').addEventListener('click', () => { $('online').hidden = !$('online').hidden; $('modes').hidden = true; $('locker').hidden = true; closeStage(); if (!$('online').hidden) $('nick').focus(); });
   $('online').addEventListener('submit', async (e) => {
     e.preventDefault();
     sfx.unlock();

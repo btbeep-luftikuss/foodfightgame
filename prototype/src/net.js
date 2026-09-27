@@ -224,6 +224,7 @@ export class Net {
     pr.target.set(num(s[0], B.minX, B.maxX), num(s[1], -40, 120), num(s[2], B.minZ, B.maxZ));
     pr.netVel.set(num(s[3], -80, 80), num(s[4], -80, 80), num(s[5], -80, 80));
     a.yaw = num(s[6], -1e3, 1e3);
+    a.lookPitch = num(s[7], -1.6, 1.6); // their Titan looks up and down where they aim
     a.hp = num(s[8], 0, 200, 200);
     a.glaze = num(s[9], 0, 100);
     const alive = s[10] === 1;

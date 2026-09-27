@@ -63,6 +63,19 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.14: new player models** (`src/human.js`)
+
+- **One sculpted, skinned body per Titan** instead of about 20 capsules and spheres. The torso is lofted from cross-sections (chest, shoulder blades, spine, waist, glutes) with a ribbed crew-neck collar, a shirt hem over a belt with a buckle, and jeans. Arms and legs are single continuous limbs that bend smoothly at the elbow and knee (vertices blend between two bones), with deltoid, biceps and calf shapes, sleeve hems and flared pant hems. Hands have four fingers and a thumb (three joints each). Sneakers have soles, a toe bumper, a heel tab and laces, with socks showing above them.
+- **A real face:** the skull is sculpted from a sphere (narrowing jaw, chin, cheekbones, eye sockets, temples, flat forehead). Eyes have a white, an iris, a pupil and a catchlight; upper eyelids blink every few seconds on their own bone. There are brows, a nose bridge, tip and wings with nostrils, upper and lower lips, a mouth line and ears.
+- **10 hairstyles** (short with a fringe, spiky, long, bun, buzz, curly, mohawk, ponytail, bob, afro) and **3 beard styles** (stubble, full, goatee). Hair is a shell over the scalp that dips just under the skin past the hairline, so the hairline is a smooth curve. Each Titan also gets its own eye colour, sneakers and a height within ±4%.
+- **Animation:** an 18-bone skeleton is posed every frame. There are walk and run cycles (thigh swing, knee bend on the swing leg, foot roll, hip bob and sway, spine counter-twist, arm swing with elbow bend) and poses for jumping, falling, gliding with the napkin, dashing, tripping, winding up and throwing, rapid-fire aiming, eating, the cheese shield, carrying a watermelon and flinching when hit. The head and chest tilt with the aim, and online players' aim pitch is sent so you see where they look.
+- **Palette shader:** each vertex stores a part id (skin, shirt, cuffs, gloves, belt, buckle, shoes, soles, laces, iris...). The vertex shader looks up colour, roughness, metalness and glow in the Titan's palette. The whole body is **one draw call** whatever the outfit, and skins restyle it for free (long or short sleeves, gloves, boots, trims, collars, metal parts, glowing suits). A per-vertex AO term darkens armpits, creases, the crotch and under the chin.
+- **Level of detail:** about 9k vertices within 30 m (14 m on Low) and 1.5k beyond, sharing the skeleton. Draw calls in a bot match went *down*, 208 → 170. Building all the geometry takes about 60 ms at startup.
+- **Skins refitted:** every costume piece was remodelled around the new head and body and attached to the head, chest or hip bone, so helmets turn with the head and capes and backpacks move with the chest. Each skin also has full clothing colours (the ninja's red sash and gloves, the hero's red boots and gloves, the robot's chrome, the knight's chainmail).
+- **First-person arm:** your own forearm and hand with fingers cupped under the food, in your skin tone, sleeve and gloves.
+- **Locker:** 2x-resolution thumbnails and a live 3D turntable of the selected skin that idles, blinks, looks around and waves when you pick it. You can drag it to spin; its small renderer only runs while the Locker is open.
+- Face hits use the new head position (hit sphere at 1.74 m). The first-person eye height is 1.72 m.
+
 **Version 0.13:**
 
 - **Food stains on every surface** (`src/stains.js`), not just the island top: the floor, the top of every counter, table, chair, box, can and plate, the sides of boxes and cabinets, and all four kitchen walls. Wall hits stain the wall; big splashes on the floor or a counter also run up nearby walls and cabinet fronts; juice from a Titan hit in mid-air lands on the ground below. Round props (glasses, fruit, the giant tomato) stay clean because a flat stain would float off them.
@@ -136,7 +149,11 @@ npm run dev          # http://localhost:5173
 | `src/core.js` | Constants, collision (boxes and cylinders), ground queries, raycasts, lob solver |
 | `src/world.js` | The kitchen, countertop props, hazards, launch pads, landmark tomato, Soap Tide wall, splat canvas |
 | `src/foods.js` | All food data and behaviour: meshes, throw, impact, alt actions |
-| `src/actors.js` | Titans: movement, statuses, diminishing returns, inventory, animation |
+| `src/actors.js` | Titans: movement, statuses, diminishing returns, inventory; drives the rig each frame |
+| `src/human.js` | The human model: lofted, skinned body and face, hair and beards, palette shader, skeleton posing, first-person arm |
+| `src/skins.js` | Skins: rarity, clothing palettes, costume pieces on the head, chest and hip bones |
+| `src/stains.js` | Food stains on every surface (lazily created tiles) |
+| `src/net.js`, `src/viewmodel.js` | Online rooms; first-person arm and held food |
 | `src/projectiles.js` | Projectile flight, boomerang steering, rolling, hit detection (body capsule and head) |
 | `src/items.js` | Pickups and spawners, peel traps, stuck carrots |
 | `src/surface.js` | Surface State Grid and zone visuals |

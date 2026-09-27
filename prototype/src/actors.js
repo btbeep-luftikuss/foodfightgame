@@ -6,8 +6,8 @@ import {
   groundHeight, resolveHorizontal,
 } from './core.js';
 import { FOODS, makeFoodMesh } from './foods.js';
-import { SKIN_BY_ID, makeOutfit } from './skins.js';
-import { buildHuman, hairGeometry, SKIN_TONES, HAIR_COLORS, HAIR_STYLES, pick } from './human.js';
+import { dress } from './skins.js';
+import { HumanRig, SKIN_TONES, HAIR_COLORS, HAIR_STYLES, IRIS_COLORS, SHOE_COLORS, BEARDS, pick } from './human.js';
 
 const JUMP_V = Math.sqrt(2 * G * 6);   // 6 m jump: about three times a Titan's height
 const JUMP2_V = Math.sqrt(2 * G * 5);  // double jump adds another 5 m
@@ -34,43 +34,13 @@ function glintTexture() {
 }
 let GLINT_TEX = null;
 
-// Materials for one human Titan; tone/hair are the person, shirt/pants come from the skin.
-function humanMats(shirt, pants, tone, hair) {
-  return {
-    tone: new THREE.MeshStandardMaterial({ color: tone, roughness: 0.62 }),
-    shirt: new THREE.MeshPhysicalMaterial({ color: shirt, roughness: 0.55, sheen: 0.4 }),
-    pants: new THREE.MeshStandardMaterial({ color: pants, roughness: 0.7 }),
-    hair: new THREE.MeshStandardMaterial({ color: hair, roughness: 0.8 }),
-    white: new THREE.MeshStandardMaterial({ color: '#fffaf2', roughness: 0.5 }),
-    black: new THREE.MeshStandardMaterial({ color: '#1d1620', roughness: 0.4 }),
-    band: new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.5 }),
-    shoe: new THREE.MeshStandardMaterial({ color: '#2b2230', roughness: 0.6 }),
-  };
-}
-const pantsFor = (skin) => skin.belly || '#35486e'; // default: blue jeans
-
-// A standing Titan wearing a skin, for the locker thumbnails.
-export function titanPreview(skinId, baseColor = '#ff9a1f') {
-  const skin = SKIN_BY_ID[skinId] || SKIN_BY_ID.chef;
-  const g = new THREE.Group();
-  const mats = humanMats(skin.color || baseColor, pantsFor(skin), skin.tone || SKIN_TONES[1], HAIR_COLORS[1]);
-  if (skin.glow) mats.shirt.emissive.set(skin.glow);
-  const h = buildHuman(g, mats, skin.hair || 'short');
-  h.chefHat.visible = !!skin.hat;
-  h.hair.visible = !skin.hideHair;
-  h.armL.pivot.rotation.z = 0.25; h.armR.pivot.rotation.z = -0.25;
-  g.add(makeOutfit(skin.id));
-  return g;
-}
-
-// A soft rim light keeps Titans readable against busy food splats (GDD 11.1).
-function addRimLight(mat) {
-  mat.onBeforeCompile = (sh) => {
-    sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-      float rimF = 1.0 - clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0);
-      totalEmissiveRadiance += vec3(1.0, 0.9, 0.75) * 0.45 * pow(rimF, 2.6);`);
-  };
-  mat.customProgramCacheKey = () => 'titan-rim';
+// A standing Titan wearing a skin, for the Locker (thumbnails and the turntable).
+const SHOWCASE = { tone: SKIN_TONES[1], hairColor: HAIR_COLORS[1], hairStyle: 'short', iris: IRIS_COLORS[2], shoes: SHOE_COLORS[0], beard: null, baseColor: '#ff9a1f' };
+export function titanPreview(skinId, who = SHOWCASE) {
+  const rig = new HumanRig({ lod: false });
+  dress(rig, skinId, who);
+  rig.pose({ t: 0, onGround: true, snap: true }, 1 / 60);
+  return rig;
 }
 
 export class Actor {
@@ -108,16 +78,18 @@ export class Actor {
     const root = new THREE.Group();
     const body = new THREE.Group();
     root.add(body);
-    // Each Titan is a person: their own skin tone and hair; the skin (outfit) sets shirt and pants.
+    // Each Titan is a person (skin tone, hair, eyes, sneakers, maybe a beard, a little taller or shorter);
+    // the skin they wear sets the clothes and costume. See human.js and skins.js.
     this.baseColor = this.color;
-    this.tone = pick(SKIN_TONES); this.hairColor = pick(HAIR_COLORS); this.hairStyle = pick(HAIR_STYLES);
-    const mats = humanMats(this.color, '#35486e', this.tone, this.hairColor);
-    this.mats = mats;
-    this.skinMat = mats.shirt; this.bellyMat = mats.pants; this.toneMat = mats.tone; this.bandMat = mats.band;
-    addRimLight(mats.shirt); addRimLight(mats.tone);
-    const h = buildHuman(body, mats, this.hairStyle);
-    this.armL = h.armL; this.armR = h.armR; this.legs = h.legs; this.hair = h.hair; this.chefHat = h.chefHat;
-    this.outfit = null; this.skinId = 'chef'; this.skinGlow = new THREE.Color(0, 0, 0);
+    this.who = {
+      tone: pick(SKIN_TONES), hairColor: pick(HAIR_COLORS), hairStyle: pick(HAIR_STYLES), iris: pick(IRIS_COLORS),
+      shoes: pick(SHOE_COLORS), beard: Math.random() < 0.3 ? pick(BEARDS) : null, baseColor: this.color,
+    };
+    this.rig = new HumanRig({ lod: true });
+    this.rig.object.scale.setScalar(rand(0.96, 1.04));
+    body.add(this.rig.object);
+    this.skinId = 'chef';
+    dress(this.rig, 'chef', this.who);
 
     // napkin glider
     const napkinTex = (() => {
@@ -154,6 +126,7 @@ export class Actor {
 
     root.traverse((o) => { if (o.isMesh) { o.castShadow = !!this.game.quality.dynamicShadows; } });
     this.iceBlock.castShadow = false;
+    this.rig.setShadows(!!this.game.quality.dynamicShadows);
     this.root = root; this.body = body;
     this.heldMesh = null; this.heldId = null;
     this.shieldMesh = makeFoodMesh('cheese');
@@ -173,36 +146,27 @@ export class Actor {
 
   // Dress this Titan in a skin (see skins.js). 'chef' keeps the Titan's own colour.
   applySkin(id) {
-    const skin = SKIN_BY_ID[id] || SKIN_BY_ID.chef;
-    this.skinId = skin.id;
-    this.color = skin.color || this.baseColor;
-    this.skinMat.color.set(this.color);
-    this.bellyMat.color.set(pantsFor(skin));
-    this.bandMat.color.set(this.color);
-    this.toneMat.color.set(skin.tone || this.tone);
-    this.skinGlow.set(skin.glow || '#000000');
-    this.chefHat.visible = !!skin.hat;
-    this.hair.visible = !skin.hideHair;
-    this.hair.geometry = hairGeometry(skin.hair || this.hairStyle);
-    if (this.outfit) this.body.remove(this.outfit);
-    this.outfit = makeOutfit(skin.id);
-    const shadows = !!this.game.quality.dynamicShadows;
-    this.outfit.traverse((o) => { if (o.isMesh && !o.material.transparent) o.castShadow = shadows; });
-    this.body.add(this.outfit);
+    this.skinId = id;
+    this.color = dress(this.rig, id, this.who);
+    this.rig.setShadows(!!this.game.quality.dynamicShadows);
   }
 
   _refreshHeld() {
     const slot = this.inv[this.sel];
     const id = slot ? slot.id : null;
     if (id === this.heldId) return;
-    if (this.heldMesh) this.armR.hand.remove(this.heldMesh);
+    if (this.heldMesh) this.heldMesh.parent?.remove(this.heldMesh);
     this.heldMesh = null; this.heldId = id;
     if (id) {
+      // held in the right palm, pushed out so the food sits in the hand instead of around it
       this.heldMesh = makeFoodMesh(id);
-      const s = { cheese: 0.7, carrot: 0.8, banana: 0.9 }[id] || 0.9;
+      const s = { cheese: 0.55, carrot: 0.7, banana: 0.75, watermelon: 0.55, pineapple: 0.6 }[id] || 0.7;
       this.heldMesh.scale.setScalar(s);
       if (id === 'carrot') this.heldMesh.rotation.x = Math.PI / 2;
-      this.armR.hand.add(this.heldMesh);
+      const r = new THREE.Box3().setFromObject(this.heldMesh).getBoundingSphere(new THREE.Sphere()).radius;
+      this.heldMesh.position.set(r * 0.55, -r * 0.35, r * 0.35);
+      this.rig.handAnchorR.add(this.heldMesh);
+      this.heldMesh.traverse((o) => { if (o.isMesh) o.castShadow = !!this.game.quality.dynamicShadows; });
     }
   }
 
@@ -216,7 +180,7 @@ export class Actor {
     return out.copy(this.pos).addScaledVector(_r, 0.5).addScaledVector(_f, 0.45).setY(this.pos.y + 1.45);
   }
   center(out = new THREE.Vector3()) { return out.copy(this.pos).setY(this.pos.y + 0.95); }
-  headPos(out = new THREE.Vector3()) { return out.copy(this.pos).setY(this.pos.y + 1.7); }
+  headPos(out = new THREE.Vector3()) { return out.copy(this.pos).setY(this.pos.y + 1.74); }
   isFrozen() { return this.game.time < this.frozenUntil; }
   isTripped() { return this.game.time < this.trippedUntil; }
   isWet() { return this.game.time < this.wetUntil; }
@@ -560,48 +524,37 @@ export class Actor {
     if (!this.alive) return;
     const speed = Math.hypot(this.vel.x, this.vel.z);
     const moving = this.onGround && speed > 0.5 && !this.isFrozen();
-    this.walkPhase += dt * speed * 2.1;
-    const bob = moving ? Math.abs(Math.sin(this.walkPhase)) * 0.08 : 0;
+    if (!this.isFrozen()) this.walkPhase += dt * speed * 1.7;
     this.squash = Math.max(0, this.squash - dt * 4);
     const sq = this.squash * 0.35;
     this.body.scale.set(1 + sq * 0.6, 1 - sq + (this.charging && this.selected()?.id === 'soda' ? Math.sin(t * 40) * 0.02 : 0), 1 + sq * 0.6);
-    this.body.position.y = bob;
+    this.body.position.y = 0;
 
     // lean into movement, lie flat when slipped, tumble when dodging
     const fwd = forwardOf(this.yaw, _f), right = rightOf(this.yaw, _r);
     const vf = (this.vel.x * fwd.x + this.vel.z * fwd.z) / 8, vr = (this.vel.x * right.x + this.vel.z * right.z) / 8;
-    let tiltX = clamp(vf, -1, 1) * 0.18, tiltZ = -clamp(vr, -1, 1) * 0.15;
+    let tiltX = clamp(vf, -1, 1) * 0.08, tiltZ = -clamp(vr, -1, 1) * 0.1;
     if (this.isTripped()) tiltX = -1.45;
-    if (this.dashT > 0) tiltX = 0.55; // lean hard into a dash
+    if (this.dashT > 0) tiltX = 0.35; // lean hard into a dash
     else if (this.airJumps > 0 && !this.onGround && this.vel.y > 0) tiltX = -0.6 + (JUMP2_V - this.vel.y) * 0.05; // flip-ish tuck
     this.body.rotation.x = damp(this.body.rotation.x, tiltX, this.dashT > 0 ? 30 : 12, dt);
     this.body.rotation.z = damp(this.body.rotation.z, tiltZ, 12, dt);
     this.body.position.y += this.isTripped() ? 0.35 : 0;
 
-    // arms: swing when walking, pull back while charging, snap forward on throw
+    // Level of detail: the full model (fingers, eyelids, laces) up close, a 1.5k-vertex one further away.
+    const d2 = camera.position.distanceToSquared(this.pos), lodR = this.game.quality.name === 'Low' ? 14 : 30;
+    this.rig.setNear(d2 < lodR * lodR);
     this.armT = Math.max(0, this.armT - dt);
-    const swing = moving ? Math.sin(this.walkPhase) * 0.6 : 0;
-    let rx = -swing, lx = swing;
-    if (this.charging) {
-      const f = this.selectedFood();
-      rx = 2.4 * Math.min(1, this.chargeT / Math.max(0.2, f ? f.charge : 1)) + 0.4;
-    }
-    if (this.armT > 0) rx = -1.8 * (this.armT / 0.3);
-    if (this.eat) { rx = -2.4; lx = -0.6; }
-    if (this.gliding) { rx = lx = Math.PI; }
-    if (this.shieldUp) { rx = lx = -1.4; }
-    this.armR.pivot.rotation.x = damp(this.armR.pivot.rotation.x, rx, 20, dt);
-    this.armL.pivot.rotation.x = damp(this.armL.pivot.rotation.x, lx, 20, dt);
-    // legs stride opposite the arms; in the air one knee comes up
-    const stride = moving ? swing * 1.15 : (this.onGround ? 0 : 0.35);
-    this.legs[0].rotation.x = damp(this.legs[0].rotation.x, stride, 20, dt);
-    this.legs[1].rotation.x = damp(this.legs[1].rotation.x, moving ? -stride : -stride * 0.5, 20, dt);
-
-    // Level of detail: far-away Titans drop their arms, which you can't make out anyway (4 fewer draw calls each).
-    const near = camera.position.distanceToSquared(this.pos) < 70 * 70;
-    if (near !== this.lodNear) {
-      this.lodNear = near;
-      this.armL.pivot.visible = this.armR.pivot.visible = near;
+    const food = this.selectedFood();
+    const pitch = this.isRemote ? (this.lookPitch || 0) : Math.asin(clamp(this.aimDir.y, -1, 1));
+    if (d2 < 140 * 140 || this === this.game.player) {
+      this.rig.pose({
+        t, phase: this.walkPhase, stride: moving ? clamp(speed / 9, 0, 1.3) : 0, sprint: speed > 8.5, onGround: this.onGround, vy: this.vel.y,
+        gliding: this.gliding, dashing: this.dashT > 0, tripped: this.isTripped(), frozen: this.isFrozen(),
+        charging: this.charging, charge: this.charging && food ? clamp(this.chargeT / Math.max(0.2, food.charge || 1), 0, 1) : 0,
+        throwK: this.armT / 0.3, auto: !!(food && food.auto && this.armT > 0), eating: !!this.eat, shield: this.shieldUp,
+        heavy: this.heavy() && !this.shieldUp, holding: !!this.heldMesh, pitch: clamp(pitch, -1, 1), hit: this.hitFlash,
+      }, dt);
     }
     this.napkin.visible = this.gliding;
     if (this.gliding) this.napkin.rotation.z = Math.sin(t * 3) * 0.08;
@@ -613,9 +566,7 @@ export class Actor {
 
     this.hitFlash = Math.max(0, this.hitFlash - dt * 6);
     const burnGlow = this.isBurning() ? 0.25 + 0.15 * Math.sin(t * 20) : 0;
-    const gl = this.skinGlow;
-    this.skinMat.emissive.setRGB(gl.r + this.hitFlash * 0.9 + burnGlow, gl.g + this.hitFlash * 0.9 + burnGlow * 0.3, gl.b + this.hitFlash * 0.9);
-    this.toneMat.emissive.setRGB(this.hitFlash * 0.9 + burnGlow, this.hitFlash * 0.9 + burnGlow * 0.3, this.hitFlash * 0.9);
+    this.rig.material.emissive.setRGB(this.hitFlash * 0.9 + burnGlow, this.hitFlash * 0.9 + burnGlow * 0.3, this.hitFlash * 0.9);
 
     // carrot glint while charging
     const glinting = this.charging && this.selected()?.id === 'carrot';
