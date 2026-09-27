@@ -78,7 +78,7 @@ export class Actor {
 
   reset() {
     this.alive = true; this.hp = MAX_HP; this.glaze = 0; this.kills = 0;
-    this.airJumps = 0; this.airDashes = 0; this.dashT = 0; this.noiseAt = -99;
+    this.airJumps = 0; this.airDashes = 0; this.dashT = 0; this.noiseAt = -99; this.fpCam = null;
     this.vel.set(0, 0, 0); this.yaw = 0; this.onGround = false; this.gliding = false;
     this.inv = [null, null, null, null, null]; this.sel = 0;
     this.sticky = []; this.surfaceSlow = 0; this.surfaceSlowUntil = 0;
@@ -199,6 +199,10 @@ export class Actor {
 
   // ------------------------------------------------------------------ queries
   handPos(out = new THREE.Vector3()) {
+    if (this.fpCam) { // first person: food leaves from the viewmodel hand, lower right of the view
+      const c = this.fpCam;
+      return out.set(0.48, -0.36, -1.0).applyQuaternion(c.quaternion).add(c.position);
+    }
     forwardOf(this.yaw, _f); rightOf(this.yaw, _r);
     return out.copy(this.pos).addScaledVector(_r, 0.5).addScaledVector(_f, 0.45).setY(this.pos.y + 1.45);
   }
@@ -247,17 +251,20 @@ export class Actor {
   }
   heal(n) { this.hp = Math.min(MAX_HP, this.hp + n); }
   addSticky(amt, dur) {
+    if (this.isRemote) return false; // remote Titans are moved by their own player's game
     if (this.isWet()) return;
     this.sticky.push({ amt, until: this.game.time + dur });
   }
-  juice(dur) { if (!this.isWet()) this.juicedUntil = Math.max(this.juicedUntil, this.game.time + dur); }
+  juice(dur) { if (this.isRemote) return false; if (!this.isWet()) this.juicedUntil = Math.max(this.juicedUntil, this.game.time + dur); }
   setWet(dur) {
+    if (this.isRemote) return false; // remote Titans are moved by their own player's game
     const t = this.game.time;
     this.wetUntil = Math.max(this.wetUntil, t + dur);
     this.sticky.length = 0; this.juicedUntil = 0; this.burnUntil = 0; this.surfaceSlowUntil = 0;
   }
-  burn(dur) { if (!this.isWet()) this.burnUntil = Math.max(this.burnUntil, this.game.time + dur); }
+  burn(dur) { if (this.isRemote) return false; if (!this.isWet()) this.burnUntil = Math.max(this.burnUntil, this.game.time + dur); }
   knock(v) {
+    if (this.isRemote) return false; // remote Titans are moved by their own player's game
     this.vel.add(v);
     if (v.y > 0) this.onGround = false;
     this.knockUntil = this.game.time + 0.45;
@@ -266,6 +273,7 @@ export class Actor {
   // Hard CC with shared diminishing returns: 2nd within 6 s is halved, 3rd is immune,
   // and no more than 2.5 s of hard CC in any 6 s window (GDD 5.4).
   applyHardCC(kind, dur) {
+    if (this.isRemote) return false; // remote Titans are moved by their own player's game
     const t = this.game.time;
     this.ccLog = this.ccLog.filter((e) => t - e.t < 6);
     const n = this.ccLog.length;
@@ -283,6 +291,7 @@ export class Actor {
   }
 
   trip(owner) {
+    if (this.isRemote) return false; // remote Titans are moved by their own player's game
     if (!this.applyHardCC('tripped', 1.0)) return false;
     const h = _v.set(this.vel.x, 0, this.vel.z);
     if (h.lengthSq() < 1) forwardOf(this.yaw, h);
@@ -487,7 +496,9 @@ export class Actor {
     if (!food || !this.canControl()) { this.charging = false; this.primaryPrev = it.primary; return; }
     if (it.alt && food.alt && ready) food.alt(this, g);
     if (!ready) { this.primaryPrev = it.primary; return; }
-    if (food.charge > 0) {
+    if (food.auto) { // rapid fire: keeps firing while held
+      if (it.primary) this._release(food, 1);
+    } else if (food.charge > 0) {
       if (it.primary && !this.charging && !this.primaryPrev) { this.charging = true; this.chargeT = 0; }
       if (this.charging) {
         this.chargeT += dt;

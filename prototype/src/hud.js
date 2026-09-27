@@ -62,10 +62,17 @@ export class HUD {
       this.fpsAcc = 0; this.fpsN = 0;
     }
 
-    $('alive').textContent = game.aliveCount();
+    $('alive').textContent = game.online && game.net ? game.net.playerCount() : game.aliveCount();
+    if (!game.online) { $('alive-label').textContent = 'Titans left'; $('scores').hidden = true; }
     const T = game.tide;
     const tideEl = $('tide');
-    if (game.state === 'drop') { tideEl.textContent = 'Glide down and grab food'; tideEl.className = 'tide-banner'; }
+    if (game.online && game.net) {
+      const n = game.net.playerCount();
+      tideEl.textContent = `Online · room ${game.net.roomName} · ${n} player${n === 1 ? '' : 's'}${game.net.connected ? '' : ' · reconnecting'}`;
+      tideEl.className = 'tide-banner';
+      $('alive-label').textContent = 'Players';
+      this._scoreboard(game);
+    } else if (game.state === 'drop') { tideEl.textContent = 'Glide down and grab food'; tideEl.className = 'tide-banner'; }
     else if (T.phase >= T.phases.length) { tideEl.textContent = 'Final circle'; tideEl.className = 'tide-banner urgent'; }
     else if (T.mode === 'wait') {
       const s = Math.ceil(T.t);
@@ -122,6 +129,23 @@ export class HUD {
     this._nameplates(game, cam);
     this._radar(game, cam);
     this._floaters(cam, dt);
+  }
+
+  // Online scoreboard: everyone in the room by splats (names are plain text).
+  _scoreboard(game) {
+    this.sbT = (this.sbT || 0) + 1;
+    if (this.sbT % 20) return;
+    const el = $('scores');
+    el.hidden = false;
+    const rows = game.actors.filter((a) => a === game.player || a.isRemote)
+      .sort((a, b) => b.kills - a.kills).slice(0, 8);
+    el.replaceChildren(...rows.map((a) => {
+      const li = document.createElement('li');
+      const n = document.createElement('span'); n.textContent = a === game.player ? `${a.name} (you)` : a.name; n.style.color = a.color;
+      const k = document.createElement('b'); k.textContent = a.kills;
+      li.append(n, k);
+      return li;
+    }));
   }
 
   // Noise arrows around the crosshair: direction only (plus distance while sniffing).
@@ -182,9 +206,7 @@ export class HUD {
         layer.appendChild(el);
         this.plates.set(a, el);
       }
-      // quiet Titans hiding in a bush keep their hiding spot: no floating name gives them away
-      const hidden = game.player && game.time - a.noiseAt > 1.5 && game.items.inBush(a) && a.pos.distanceTo(game.player.pos) > 8;
-      const show = a.alive && a !== game.player && game.state !== 'menu' && !hidden;
+      const show = a.alive && a !== game.player && game.state !== 'menu';
       let pos = null;
       if (show) {
         a.headPos(_e).y += 1.0;

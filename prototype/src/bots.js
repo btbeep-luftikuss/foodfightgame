@@ -16,7 +16,7 @@ const RANGE = {
   carrot: [20, 70, 3.2], tomato: [6, 28, 2.6], ice: [5, 24, 2.3], soda: [5, 22, 2.5],
   banana: [4, 20, 1.9], cheese: [4, 20, 2.4], peel: [0, 7, 1.2],
   grapes: [2, 14, 2.6], chili: [6, 40, 2.5], cookie: [5, 30, 1.9], watermelon: [4, 22, 2.4],
-  pineapple: [6, 24, 2.4], jelly: [5, 22, 2.1],
+  pineapple: [6, 24, 2.4], jelly: [5, 22, 2.1], blueberry: [2, 35, 2.7],
 };
 
 export class BotBrain {
@@ -42,7 +42,6 @@ export class BotBrain {
       if (o === a || !o.alive) continue;
       const d = o.pos.distanceTo(a.pos);
       const bias = o === a.lastHitBy && now - a.lastHitAt < 4 ? 15 : 0;
-      if (d > 10 && now - o.noiseAt > 1.5 && g.items.inBush(o)) continue; // quiet Titans in bushes stay hidden
       if (d - bias < bestD && hasLineOfSight(eye, o.headPos(_w))) { best = o; bestD = d - bias; }
     }
     this.target = best;
@@ -231,7 +230,7 @@ export class BotBrain {
       a.botTarget = t;
       if (food.profile === 'lob') {
         solveLob(from, _aim, speed, G * (food.gravity ?? 1), a.aimDir);
-      } else if (food.profile === 'line' || food.profile === 'spray') {
+      } else if (food.profile === 'line' || food.profile === 'spray' || food.profile === 'auto') {
         _aim.y += 0.5 * G * (food.gravity ?? 0.3) * tFlight * tFlight;
         a.aimDir.subVectors(_aim, from).normalize();
       } else if (food.profile === 'seek') {
@@ -255,6 +254,10 @@ export class BotBrain {
       if (slot.id === 'cheese') {
         if (!a.shieldUp && d > 12 && now > this.nextShotAt) { this.pendingAlt = true; this.nextShotAt = now + 1; }
         else if (d < 13 && now > this.nextShotAt) { it.primary = true; this.nextShotAt = now + rand(0.6, 1.2); }
+      } else if (food.auto) { // blueberries: fire in bursts
+        if (this.burstEnd && now > this.burstEnd) { this.burstEnd = 0; this.nextShotAt = now + rand(0.4, 0.9) * (1.4 - this.skill); }
+        else if (this.burstEnd) it.primary = true;
+        else if (inRange && now > this.nextShotAt) { this.burstEnd = now + rand(0.6, 1.2); it.primary = true; }
       } else if (slot.id === 'peel') {
         if (d < 7 && now > this.nextShotAt) { it.primary = true; this.nextShotAt = now + 2; }
       } else if (food.charge > 0) {

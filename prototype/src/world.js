@@ -761,6 +761,7 @@ export class World {
       grape: ['rgba(110,30,120,0.7)', 'rgba(140,50,150,0.55)'],
       melon: ['rgba(240,70,90,0.8)', 'rgba(255,110,120,0.65)'],
       jelly: ['rgba(90,200,90,0.5)'],
+      berry: ['rgba(45,55,140,0.7)', 'rgba(80,60,150,0.55)'],
       chili: ['rgba(40,20,10,0.35)'],
     }[kind];
     if (!looks) return;

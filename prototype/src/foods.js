@@ -229,6 +229,24 @@ const MAKERS = {
     }
     return g;
   },
+  blueberry() { // a handful of blueberries
+    const g = new THREE.Group();
+    const bm = once(mat, 'berry', () => new THREE.MeshPhysicalMaterial({ color: '#3b4ea8', roughness: 0.35, sheen: 0.8, sheenColor: new THREE.Color('#aab8f0'), clearcoat: 0.3 }));
+    const bg = once(geo, 'berryBig', () => new THREE.SphereGeometry(0.17, 12, 10));
+    for (const [x, y, z] of [[0, 0, 0], [0.3, 0, 0.05], [-0.28, 0.02, 0.1], [0.05, 0.02, 0.3], [0.1, 0.26, 0.12], [-0.12, 0.02, -0.26]]) {
+      const b = new THREE.Mesh(bg, bm); b.position.set(x, y, z); g.add(b);
+    }
+    return g;
+  },
+  berry() { // one blueberry in flight
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(once(geo, 'berry', () => new THREE.SphereGeometry(0.13, 10, 8)),
+      once(mat, 'berry', () => new THREE.MeshPhysicalMaterial({ color: '#3b4ea8', roughness: 0.35, sheen: 0.8, sheenColor: new THREE.Color('#aab8f0'), clearcoat: 0.3 }))));
+    const crown = new THREE.Mesh(once(geo, 'crown', () => new THREE.ConeGeometry(0.05, 0.05, 5)), once(mat, 'crown', () => new THREE.MeshStandardMaterial({ color: '#1d2340' })));
+    crown.position.y = 0.13; crown.rotation.x = Math.PI;
+    g.add(crown);
+    return g;
+  },
   jelly() {
     return new THREE.Mesh(once(geo, 'jelly', () => {
       const b = new THREE.BoxGeometry(0.62, 0.62, 0.62, 3, 3, 3);
@@ -490,6 +508,41 @@ export const FOODS = {
       game.sfx.play('shield', a.pos, 0.6);
     },
   },
+  // ---------------------------------------------------------------- added in prototype 0.6
+  blueberry: {
+    name: 'Blueberries', role: 'Rapid fire', maxStack: 240, give: 40, weight: 12,
+    profile: 'auto', auto: true, charge: 0, speed: 75, gravity: 0.25, recovery: 1 / 12, radius: 0.13, dmg: 5, verb: 'berry-blasted',
+    hint: 'Hold to fire about 12 berries a second. Aim drifts the longer you hold, so fire in bursts.',
+    ammo: () => rollAmmo() * 6, // they come by the handful: 24-90 berries per pickup
+    release(a, c, game) {
+      const from = a.handPos();
+      const dir = a.isBot ? a.aimDir.clone() : _v.subVectors(a.aimPoint, from).normalize().clone();
+      // spray grows while the trigger is held and settles when you let go
+      const t = game.time;
+      a.berryHeat = Math.min(1, Math.max(0, (a.berryHeat || 0) - (t - (a.berryLast || 0)) * 2) + 0.12);
+      a.berryLast = t;
+      const s = 0.012 + 0.05 * a.berryHeat;
+      dir.x += rand(-s, s); dir.y += rand(-s, s); dir.z += rand(-s, s);
+      dir.normalize();
+      game.projectiles.launch({ food: 'berry', owner: a, pos: from, vel: dir.multiplyScalar(this.speed), gravity: 0.25, radius: 0.13, life: 2.5, orient: false, spin: 12 });
+      a.consume(1);
+      if (Math.random() < 0.5) game.sfx.play('berry', a.pos, a === game.player ? 0.6 : 0.4);
+    },
+  },
+  berry: { // one blueberry in flight (not a pickup)
+    name: 'Blueberry', hidden: true, profile: 'line', radius: 0.13, dmg: 5, verb: 'berry-blasted',
+    impact(p, hit, game) {
+      if (hit.actor) {
+        game.damage(hit.actor, 5, p.owner, 'blueberry', { head: hit.head });
+        game.fx.burst('berry', hit.point, 0.5);
+        return true;
+      }
+      game.world.paintSplat(hit.point.x, hit.point.y, hit.point.z, 0.5, 'berry');
+      game.fx.burst('berry', hit.point, 0.3);
+      return true;
+    },
+  },
+
   // ---------------------------------------------------------------- added in prototype 0.2
   grapes: {
     name: 'Grapes', role: 'Scatter shot · snack', maxStack: 2, give: 1, weight: 10,
@@ -607,7 +660,7 @@ export const FOODS = {
       game.sfx.play('splat', p.pos, 1.5); game.sfx.play('thud', p.pos, 1.2);
       for (let i = 0; i < 4; i++) {
         const ang = (i / 4) * Math.PI * 2 + rand(-0.4, 0.4);
-        game.projectiles.launch({ food: 'melonchunk', owner: p.owner, pos: p.pos.clone().setY(p.pos.y + 0.3), vel: new THREE.Vector3(Math.cos(ang) * 9, 8, Math.sin(ang) * 9), gravity: 1, radius: 0.35, life: 3, spin: 9, bounces: 1 });
+        game.projectiles.launch({ food: 'melonchunk', owner: p.owner, local: true, pos: p.pos.clone().setY(p.pos.y + 0.3), vel: new THREE.Vector3(Math.cos(ang) * 9, 8, Math.sin(ang) * 9), gravity: 1, radius: 0.35, life: 3, spin: 9, bounces: 1 });
       }
     },
   },
@@ -690,8 +743,9 @@ export const FOODS = {
 
 // Every food pickup holds a random 4-15 of that food; a slot stacks up to 30.
 export const AMMO_MIN = 4, AMMO_MAX = 15, STACK_MAX = 30;
+export const pickupAmmo = (id) => (FOODS[id].ammo ? FOODS[id].ammo() : rollAmmo());
 export const rollAmmo = () => AMMO_MIN + Math.floor(Math.random() * (AMMO_MAX - AMMO_MIN + 1));
-export const FOOD_IDS = ['tomato', 'banana', 'carrot', 'ice', 'soda', 'cheese', 'grapes', 'chili', 'cookie', 'watermelon', 'pineapple', 'jelly'];
+export const FOOD_IDS = ['tomato', 'banana', 'carrot', 'ice', 'soda', 'cheese', 'grapes', 'chili', 'cookie', 'watermelon', 'pineapple', 'jelly', 'blueberry'];
 
 // Food casts real shadows only when the shadow map updates every frame (High).
 let FOOD_SHADOWS = true;
@@ -729,7 +783,7 @@ export function makeFoodMesh(id) {
   return grp;
 }
 
-for (const id of FOOD_IDS) FOODS[id].maxStack = STACK_MAX;
+for (const id of FOOD_IDS) FOODS[id].maxStack = id === 'blueberry' ? 240 : STACK_MAX;
 
 export function randomFoodId() {
   let total = 0;
@@ -742,5 +796,5 @@ export function randomFoodId() {
 export const FEED_VERB = {
   tomato: "tomato'd", banana: 'boomeranged', peel: 'slipped up', carrot: 'sniped', ice: 'iced',
   soda: 'fizzed', cheese: 'rolled over', landmark: 'buried', grapes: 'grape-shot', chili: 'torched',
-  cookie: 'cookied', watermelon: 'flattened', pineapple: 'spiked', jelly: 'jellied',
+  cookie: 'cookied', watermelon: 'flattened', pineapple: 'spiked', jelly: 'jellied', blueberry: 'berry-blasted',
 };

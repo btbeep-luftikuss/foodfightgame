@@ -11,7 +11,8 @@ import { Actor } from './actors.js';
 import { Projectiles } from './projectiles.js';
 import { Items } from './items.js';
 import { BotBrain, BOT_NAMES } from './bots.js';
-import { FOODS, FEED_VERB, lobSpeed, lobDir, randomFoodId, rollAmmo } from './foods.js';
+import { ViewModel } from './viewmodel.js';
+import { FOODS, FEED_VERB, lobSpeed, lobDir, randomFoodId, rollAmmo, pickupAmmo } from './foods.js';
 
 const PLAYER_COLOR = '#ff9a1f';
 const BOT_COLORS = ['#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#f2f2f2', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5'];
@@ -46,10 +47,14 @@ export class Game {
       this.actors.push(new Actor(this, { id: i, name: i === 0 ? 'You' : BOT_NAMES[i], color: i === 0 ? PLAYER_COLOR : BOT_COLORS[i - 1], isBot: i > 0 }));
     }
     this.brains = new Map();
+    this.botActors = this.actors;
+    this.net = null; this.online = false; this.respawnAt = 0;
     this.player = null;
     this.tide = { x: 0, z: 0, r: 330, dps: 2, phase: 0, mode: 'wait', t: 99, phases: TIDE_PHASES };
     this.hitStopUntil = 0;
     this.camYaw = 0; this.camPivotY = 0; this.camDist = 5.6;
+    this.firstPerson = true; // V toggles
+    this.viewModel = new ViewModel(camera);
     this.spectate = null;
     this.endAt = 0;
 
@@ -77,6 +82,44 @@ export class Game {
     this.blobs.renderOrder = 2;
     this.blobs.count = 0;
     scene.add(this.blobs);
+  }
+
+  // ------------------------------------------------------------------ online (0.6)
+  // Free-for-all food fight with respawns; no Soap Tide (players join at different times).
+  startOnline(net) {
+    this.net = net; this.online = true;
+    this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
+    this.world.resetRound(); this.hud.clearFeed(); this.brains.clear();
+    for (const a of this.botActors.slice(1)) { a.alive = false; a.hide(); }
+    this.actors = [this.botActors[0]];
+    this.player = this.botActors[0];
+    this.player.isBot = false;
+    Object.assign(this.tide, { x: 0, z: 0, r: 330, phase: TIDE_PHASES.length, mode: 'wait', t: 0 });
+    this.world.setTide(0, 0, 330);
+    this.player.kills = 0;
+    this._respawn();
+    this.items.fillSpawners(this.time);
+    this.state = 'play';
+    this.hud.banner('Online food fight', `Room "${esc(net.roomName)}" · splat whoever you see`, 2.6);
+  }
+  async stopOnline() {
+    const net = this.net;
+    this.net = null; this.online = false;
+    if (net) await net.leave();
+    this.actors = this.botActors;
+  }
+  _respawn() {
+    const p = this.player, kills = p.kills;
+    p.reset();
+    p.isBot = false; p.kills = kills; p.name = this.net ? this.net.name : 'You';
+    const spot = this.world.randomOpenSpot();
+    p.pos.set(spot.x, spot.y + 26, spot.z);
+    p.gliding = true; p.onGround = false;
+    p.give('tomato', 3);
+    p.give('blueberry', 30);
+    this.input.yaw = Math.atan2(spot.x, spot.z); this.input.pitch = -0.2;
+    this.camPivotY = p.pos.y;
+    this.respawnAt = 0;
   }
 
   // ------------------------------------------------------------------ finding players (0.5)
@@ -180,7 +223,6 @@ export class Game {
     }
     const cam = this.camera.position;
     for (const it of this.items.list) if (!it.vel && it.pos.distanceToSquared(cam) < 70 * 70) place(it.pos.x, it.pos.y, it.pos.z, 1.3);
-    for (const b of this.items.bushes) if (b.pos.distanceToSquared(cam) < 90 * 90) place(b.pos.x, b.pos.y, b.pos.z, 4.2);
     this.blobs.count = n;
     this.blobs.instanceMatrix.needsUpdate = true;
   }
@@ -188,6 +230,7 @@ export class Game {
   aliveCount() { return this.actors.filter((a) => a.alive).length; }
 
   newMatch(withPlayer) {
+    this.actors = this.botActors;
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
     this.world.resetRound();
     this.hud.clearFeed();
@@ -229,6 +272,14 @@ export class Game {
   // ------------------------------------------------------------------ combat API used by foods
   damage(target, amount, attacker, foodId, opts = {}) {
     if (!target.alive || amount <= 0 || this.state === 'over') return 0;
+    if (target.isRemote) { // online: that player's own game decides; we only show our hit
+      if (attacker === this.player) {
+        this.hud.float(target.headPos(_c).setY(target.pos.y + 2.3), Math.round(amount), opts.head ? 'crit' : 'dmg');
+        this.hud.hitmarker(opts.head, false);
+        this.sfx.play(opts.head ? 'headshot' : 'hit', null, 0.9);
+      }
+      return amount;
+    }
     let amt = amount;
     if (target.isFrozen() && !ENV.has(foodId)) { // any hit shatters the ice for bonus damage
       target.frozenUntil = 0;
@@ -352,8 +403,37 @@ export class Game {
     victim.inv = [null, null, null, null, null];
     victim.hide();
 
-    // kill feed
     const food = foodId === 'burning' ? 'burner' : foodId;
+    this._feed(victim, killer, food);
+
+    if (this.online) { // online: tell the room, respawn in 3 s
+      if (victim === this.player) {
+        this.net.event('d', killer ? this.net._peerOf(killer) : '', food || '');
+        this.respawnAt = this.time + 3;
+        this.spectate = killer && killer.alive ? killer : null;
+        this.hud.banner('Splatted!', killer ? `by ${esc(killer.name)} · back in 3 s` : 'Back in 3 s', 2.8);
+      }
+      return;
+    }
+    if (killer === this.player) this.hud.banner('Splat!', `${esc(victim.name)} is out · ${this.aliveCount()} left`, 1.6);
+    if (victim === this.player) {
+      this.spectate = killer && killer.alive ? killer : null;
+      this.onMatchEvent?.('playerDown', { killer, placement: victim.placement, food });
+    }
+    if (this.aliveCount() <= 1) this._finish();
+  }
+
+  // Another player's game says they were knocked out (online).
+  remoteKnockout(victim, killer, food) {
+    this._feed(victim, killer, food);
+    if (killer === this.player) {
+      this.player.kills++;
+      this.hud.banner('Splat!', `${esc(victim.name)} is out`, 1.6);
+      this.sfx.play('headshot', null, 0.8);
+    }
+  }
+
+  _feed(victim, killer, food) {
     const vName = `<b style="color:${victim.color}">${esc(victim.name)}</b>`;
     let html;
     if (killer) {
@@ -367,13 +447,6 @@ export class Game {
     }
     const mine = victim === this.player || killer === this.player;
     this.hud.feed(html, mine);
-    if (killer === this.player) this.hud.banner('Splat!', `${esc(victim.name)} is out · ${this.aliveCount()} left`, 1.6);
-
-    if (victim === this.player) {
-      this.spectate = killer && killer.alive ? killer : null;
-      this.onMatchEvent?.('playerDown', { killer, placement: victim.placement, food });
-    }
-    if (this.aliveCount() <= 1) this._finish();
   }
 
   _finish() {
@@ -405,10 +478,11 @@ export class Game {
       const intent = this.input.enabled ? this.input.intent() : null;
       for (let s = 0; s < steps; s++) {
         // edge-triggered presses only count once per frame
-        if (s === 1 && intent) Object.assign(intent, { jump: false, dodge: false, alt: false, sniff: false, slot: -1, cycle: 0 });
+        if (s === 1 && intent) Object.assign(intent, { jump: false, dodge: false, alt: false, sniff: false, view: false, slot: -1, cycle: 0 });
         this._step(dt, intent);
       }
     }
+    if (this.net) this.net.tick(realDt);
     for (const a of this.actors) a.updateVisual(realDt, this.camera);
     this._camera(realDt);
     this._preview();
@@ -423,10 +497,12 @@ export class Game {
     const p = this.player;
     if (p && p.alive && intent) {
       if (intent.sniff) this.sniff();
+      if (intent.view) { this.firstPerson = !this.firstPerson; this.hud.toast(this.firstPerson ? 'First person' : 'Third person'); }
       this._playerAim();
       p.update(dt, intent);
     }
     for (const [a, brain] of this.brains) if (a.alive) a.update(dt, brain.intent(dt));
+    if (this.online && p && !p.alive && this.respawnAt && this.time >= this.respawnAt) this._respawn();
 
     if (this.state === 'drop') {
       this.stateT += dt;
@@ -484,7 +560,7 @@ export class Game {
       const floorish = groundHeight(x, z, top + 0.1);
       if (top > floorish + 1) continue; // landed on something tall: skip this one
       const id = randomFoodId();
-      this.items.drop(id, rollAmmo(), _o.set(x, top + 45 + rand(0, 15), z), _v.set(0, -6, 0));
+      this.items.drop(id, pickupAmmo(id), _o.set(x, top + 45 + rand(0, 15), z), _v.set(0, -6, 0));
     }
     if (this.player) this.hud.toast('Grocery drop inside the circle');
   }
@@ -523,6 +599,18 @@ export class Game {
       const t = this.time * 0.06;
       cam.position.set(Math.cos(t) * 92, 30 + Math.sin(t * 0.7) * 6, Math.sin(t) * 64);
       cam.lookAt(0, -2, 0);
+    } else if (p.alive && this.firstPerson) {
+      // First person: the camera is the Titan's eyes; your arm and food are the viewmodel.
+      const zoom = p.charging && p.selected()?.id === 'carrot' ? clamp(p.chargeT, 0, 1) : 0;
+      fov = lerp(78, 30, zoom) + (p.dashT > 0 ? 8 : 0);
+      this.camDist = 0.4;
+      this.input.zoomSens = lerp(1, 0.4, zoom);
+      this.camPivotY = damp(this.camPivotY, p.pos.y, 20, dt);
+      const speed = Math.hypot(p.vel.x, p.vel.z);
+      const bob = p.onGround && speed > 0.5 ? Math.abs(Math.sin(p.walkPhase)) * 0.06 * Math.min(1.5, speed / 6) : 0;
+      const eyeY = p.isTripped() ? 0.5 : 1.62;
+      cam.position.set(p.pos.x, this.camPivotY + eyeY + bob, p.pos.z);
+      cam.rotation.set(this.input.pitch, this.input.yaw, p.dashT > 0 ? -0.03 : 0, 'YXZ');
     } else if (p.alive) {
       const zoom = p.charging && p.selected()?.id === 'carrot' ? clamp(p.chargeT, 0, 1) : 0;
       fov = lerp(70, 30, zoom);
@@ -560,6 +648,9 @@ export class Game {
       const s = this.fx.shakeAmt * 0.25;
       cam.position.x += rand(-s, s); cam.position.y += rand(-s, s); cam.position.z += rand(-s, s);
     }
+    const fp = !!(p && p.alive && this.firstPerson && this.state !== 'menu');
+    if (p) { if (p.alive) p.root.visible = !fp; p.fpCam = fp ? cam : null; if (fp) p.glint.visible = false; }
+    this.viewModel.update(dt, p || this.actors[0], fp);
     if (Math.abs(cam.fov - fov) > 0.05) { cam.fov = damp(cam.fov, fov, 12, dt); cam.updateProjectionMatrix(); }
     rightOf(this.input.yaw, _r);
     this.sfx.setListener(cam.position, p ? _r : _r.set(1, 0, 0));

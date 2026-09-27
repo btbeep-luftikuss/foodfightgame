@@ -90,6 +90,7 @@ const PALETTE = {
   dust: [C('#d9c7a8'), C('#c9b490')],
   crumb: [C('#d4a15a'), C('#b98240'), C('#3b2112')],
   grape: [C('#6b2a86'), C('#8e3fae'), C('#c9a4e0')],
+  berry: [C('#3b4ea8'), C('#5a3f9e'), C('#c7cff5')],
   melon: [C('#f25a6a'), C('#ff8a94'), C('#2f7a30'), C('#1d1616')],
   pine: [C('#f2c230'), C('#d99a1e'), C('#4f9a3a')],
   jelly: [C('#5fd35a'), C('#9cf09a'), C('#3fae3a')],
@@ -199,6 +200,9 @@ export class FX {
       case 'fire':
         this.spray('blobs', pos, 20, { speed: 5, up: 6, colors: P.fire, size: 0.14, life: 0.6, grav: -0.2 });
         this.spray('puffs', pos, 6, { speed: 2, up: 3, colors: [P.fire[1]], size: 0.6, life: 0.4, grav: -0.1, grow: 1.4 });
+        break;
+      case 'berry':
+        this.spray('blobs', pos, 8 * power, { speed: 5, up: 3, colors: P.berry, size: 0.09, life: 0.45 });
         break;
       case 'leaf':
         this.spray('chunks', pos, 3, { speed: 3, up: 3, colors: [C('#4f9a3a'), C('#6fbf4a')], size: 0.14, life: 0.5 });
@@ -323,6 +327,10 @@ export class Sfx {
       case 'slip':
         this._tone(o, t, 0.25, { type: 'sine', f0: 500, f1: 1400, vol: 0.35 });
         this._tone(o, t + 0.25, 0.35, { type: 'sine', f0: 1400, f1: 300, vol: 0.35 });
+        break;
+      case 'berry':
+        this._noise(o, t, 0.05, { type: 'bandpass', f0: 1800, f1: 900, q: 2, vol: 0.5 });
+        this._tone(o, t, 0.05, { type: 'sine', f0: 420, f1: 260, vol: 0.2 });
         break;
       case 'sniff':
         this._noise(o, t, 0.18, { type: 'bandpass', f0: 900, f1: 2200, q: 3, vol: 0.5 });

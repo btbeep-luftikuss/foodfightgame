@@ -122,6 +122,17 @@ button { font: inherit; color: inherit; }
 .floater.crit { color: var(--butter); font-size: 30px; }
 .floater.immune { color: var(--glaze); font-size: 16px; }
 .floater.slip { color: var(--butter); font-size: 18px; }
+.hudbtn { position: absolute; right: 16px; top: calc(12px + env(safe-area-inset-top, 0px)); pointer-events: auto; display: none; border: 0; border-radius: 999px; padding: 6px 12px; font-weight: 800; font-size: 12px; background: var(--ink-glass); color: var(--paper); }
+@media (pointer: coarse) { .hudbtn { display: block; } .feed { top: calc(48px + env(safe-area-inset-top, 0px)); } }
+.scores { position: absolute; top: calc(78px + env(safe-area-inset-top, 0px)); left: 16px; margin: 0; padding: 8px 10px; list-style: none; background: var(--ink-glass); border-radius: var(--r); display: grid; gap: 3px; min-width: 150px; font-size: 13px; }
+.scores li { display: flex; justify-content: space-between; gap: 14px; }
+.scores span { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+.scores b { font-variant-numeric: tabular-nums; color: var(--butter); }
+.online { display: grid; gap: 10px; background: var(--ink-2); border-radius: var(--r); padding: 14px; }
+.online label { display: grid; gap: 4px; font-size: 12px; color: var(--paper-dim); font-weight: 700; letter-spacing: 0.04em; }
+.online input { font: inherit; font-size: 16px; color: var(--paper); background: var(--ink); border: 2px solid var(--paper-dim); border-radius: 10px; padding: 8px 10px; }
+.online p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--paper-dim); }
+.online p.err { color: #ffb3a6; }
 .radar { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
 .noise { position: absolute; left: 0; top: 0; width: 0; height: 0; transition: opacity 0.2s; }
 .noise i { position: absolute; left: -12px; top: -150px; width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 20px solid var(--butter); filter: drop-shadow(0 1px 2px var(--ink)); }
@@ -227,10 +238,11 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 
 <div id="hud" hidden>
   <div class="tl">
-    <div class="tag"><b id="alive">8</b><small>Titans left</small></div>
+    <div class="tag"><b id="alive">12</b><small id="alive-label">Titans left</small></div>
     <div class="tag"><b id="kills">0</b><small>Your splats</small></div>
   </div>
   <div id="tide" class="tide-banner">Soap Tide</div>
+  <ol id="scores" class="scores" hidden></ol>
   <ol id="feed" class="feed" aria-live="polite"></ol>
   <div id="crosshair" class="crosshair" data-profile="lob">
     <svg viewBox="0 0 64 64" aria-hidden="true"><circle class="track" cx="32" cy="32" r="28"></circle><circle id="chargeRing" cx="32" cy="32" r="28"></circle></svg>
@@ -254,6 +266,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
   <div id="toast" class="toast"></div>
   <div id="banner" class="banner"></div>
   <div id="fps" class="fps"></div>
+  <button id="hud-menu" class="hudbtn" type="button">Menu</button>
 </div>
 
 <div id="touch" class="touch" hidden>
@@ -269,9 +282,10 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
   <div class="menu-panel">
     <p class="eyebrow">Prototype 0.2 · The Grand Kitchen</p>
     <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
-    <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Drop in with 11 bots, 200 health and a double jump, and be the last Titan standing when the Soap Tide closes in.</p>
+    <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Play in first person against 11 bots until the Soap Tide closes in, or online against your friends. Blueberries fire like a machine gun.</p>
     <div class="row">
-      <button id="play" class="btn" type="button">Play</button>
+      <button id="play" class="btn" type="button">Play vs bots</button>
+      <button id="online-open" class="btn ghost" type="button">Play online</button>
       <label class="field" for="quality">Graphics
         <select id="quality">
           <option value="low">Low</option>
@@ -281,6 +295,12 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       </label>
     </div>
     <p id="menu-error" hidden></p>
+    <form id="online" class="online" hidden>
+      <label for="nick">Your name<input id="nick" maxlength="16" autocomplete="nickname" value=""></label>
+      <label for="roomcode">Room code (friends type the same one)<input id="roomcode" maxlength="40" value="kitchen" autocapitalize="off" spellcheck="false"></label>
+      <div class="row"><button id="online-join" class="btn" type="submit">Join room</button></div>
+      <p id="online-status">Everyone who opens this game and types the same room code plays together. To invite friends, share this page with them from the Share menu; they need to be signed in to Claude.</p>
+    </form>
     <h2>Controls</h2>
     <dl class="keys desk-only">
       <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move · <kbd>Shift</kbd> sprint</dd>
@@ -290,6 +310,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <dt><kbd>C</kbd></dt><dd>Dash (short cooldown, once in the air)</dd>
       <dt><kbd>1</kbd>–<kbd>5</kbd> <kbd>Wheel</kbd></dt><dd>Pick food</dd>
       <dt><kbd>B</kbd></dt><dd>Sniff: point at Titans making noise (10 s cooldown)</dd>
+      <dt><kbd>V</kbd></dt><dd>Switch first / third person</dd>
       <dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd>Pause</dd>
     </dl>
     <dl class="keys touch-only">
@@ -302,7 +323,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     </dl>
     <h2>On the menu today</h2>
     <ul id="legend" class="legend"></ul>
-    <p class="foot">Hazards: the three burners cycle on (don't stand on them), the sink and spilled water make you Wet (cleanses sticky and fire, but freezes last longer), honey pools refill your Glaze shield, and the red spatula pads on the floor fling you up onto the counters and the table. Food grows on bushes: stand in one to scoop up its food one piece at a time, and hide in one to stay out of sight. Smash the giant tomato for extra ammo.</p>
+    <p class="foot">Hazards: the three burners cycle on (don't stand on them), the sink and spilled water make you Wet (cleanses sticky and fire, but freezes last longer), honey pools refill your Glaze shield, and the red spatula pads on the floor fling you up onto the counters and the table. Smash the giant tomato for extra ammo.</p>
     <p class="foot">Prototype of the Tiny Titans design document: 12 of 30 foods, the whole kitchen, 12 Titans, bots only.</p>
   </div>
   <p class="live">Bots are fighting live behind this menu</p>
@@ -312,7 +333,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
   <div class="card">
     <h3>Paused</h3>
     <p>The food will wait for you.</p>
-    <div class="row"><button id="resume" class="btn" type="button">Resume</button></div>
+    <div class="row"><button id="resume" class="btn" type="button">Resume</button><button id="leave" class="btn ghost" type="button">Main menu</button></div>
   </div>
 </section>
 

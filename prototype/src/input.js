@@ -11,7 +11,7 @@ export class Input {
     this.yaw = 0; this.pitch = -0.12;
     this.sens = 0.0024;
     this.lmb = false; this.rmbPressed = false;
-    this.pressed = { jump: false, dodge: false, alt: false, sniff: false };
+    this.pressed = { jump: false, dodge: false, alt: false, sniff: false, view: false };
     this.slot = -1; this.cycle = 0;
     this.locked = false;
     this.enabled = false;
@@ -27,6 +27,7 @@ export class Input {
       if (e.code === 'KeyC' || e.code === 'KeyV') this.pressed.dodge = true;
       if (e.code === 'KeyQ' || e.code === 'KeyF') this.pressed.alt = true;
       if (e.code === 'KeyB' || e.code === 'KeyE') this.pressed.sniff = true;
+      if (e.code === 'KeyV') this.pressed.view = true;
       if (/^Digit[1-5]$/.test(e.code)) this.slot = Number(e.code.slice(5)) - 1;
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -138,10 +139,10 @@ export class Input {
     if (l > 1) { mx /= l; mz /= l; }
     const it = {
       moveX: mx, moveZ: mz, sprint,
-      jump: this.pressed.jump, dodge: this.pressed.dodge, alt: this.pressed.alt, sniff: this.pressed.sniff,
+      jump: this.pressed.jump, dodge: this.pressed.dodge, alt: this.pressed.alt, sniff: this.pressed.sniff, view: this.pressed.view,
       primary: this.lmb || this.touch.fire, slot: this.slot, cycle: this.cycle,
     };
-    this.pressed.jump = this.pressed.dodge = this.pressed.alt = this.pressed.sniff = false;
+    this.pressed.jump = this.pressed.dodge = this.pressed.alt = this.pressed.sniff = this.pressed.view = false;
     this.slot = -1; this.cycle = 0;
     return it;
   }

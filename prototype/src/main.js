@@ -7,6 +7,7 @@ import { Input } from './input.js';
 import { Sfx } from './fx.js';
 import { FOODS, FOOD_IDS, makeFoodMesh, setFoodShadows } from './foods.js';
 import { TITANS } from './game.js';
+import { Net, roomAvailable, cleanRoom } from './net.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -92,7 +93,8 @@ function boot() {
   }
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 1400);
+  const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 1400);
+  scene.add(camera); // the first-person viewmodel hangs off the camera
   const input = new Input(canvas);
   const sfx = new Sfx();
   const icons = renderIcons();
@@ -110,9 +112,7 @@ function boot() {
   const menu = $('menu'), pause = $('pause'), end = $('end'), touch = $('touch');
   let playing = false;
 
-  function start() {
-    sfx.unlock();
-    game.newMatch(true);
+  function enterPlay() {
     game.paused = false;
     playing = true;
     input.enabled = true;
@@ -121,12 +121,52 @@ function boot() {
     touch.hidden = !input.isTouch;
     if (!input.isTouch) input.requestLock();
   }
-  $('play').addEventListener('click', start);
-  $('again').addEventListener('click', start);
-  $('end-menu').addEventListener('click', () => {
-    playing = false; input.enabled = false; end.hidden = true; hud.show(false); touch.hidden = true;
+  function start() {
+    sfx.unlock();
+    game.newMatch(true);
+    enterPlay();
+  }
+  async function toMenu() {
+    if (game.online) await game.stopOnline();
+    playing = false; input.enabled = false; end.hidden = true; pause.hidden = true; hud.show(false); touch.hidden = true;
     menu.hidden = false; input.exitLock();
     game.newMatch(false);
+  }
+  $('play').addEventListener('click', start);
+  $('again').addEventListener('click', start);
+  $('end-menu').addEventListener('click', toMenu);
+  $('leave').addEventListener('click', toMenu);
+  $('hud-menu').addEventListener('click', toMenu);
+
+  // Online: join a room code; everyone with the same code plays together.
+  const status = $('online-status');
+  try { $('nick').value = localStorage.getItem('tt-nick') || ''; } catch { /* storage blocked */ }
+  $('online-open').addEventListener('click', () => { $('online').hidden = !$('online').hidden; if (!$('online').hidden) $('nick').focus(); });
+  $('online').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    sfx.unlock();
+    const btn = $('online-join');
+    btn.disabled = true;
+    status.className = ''; status.textContent = 'Connecting…';
+    const lobby = await roomAvailable();
+    if (!lobby) {
+      status.className = 'err';
+      status.textContent = "Online play isn't available here. It works on the published game page on claude.ai when you're signed in; people you share the page with can join the same room code.";
+      btn.disabled = false;
+      return;
+    }
+    try {
+      const net = new Net(game);
+      const nick = $('nick').value || 'Titan';
+      await net.connect(lobby, cleanRoom($('roomcode').value), nick);
+      try { localStorage.setItem('tt-nick', nick); } catch { /* storage blocked */ }
+      game.startOnline(net);
+      status.textContent = '';
+      enterPlay();
+    } catch (err) {
+      status.className = 'err';
+      status.textContent = `Couldn't join that room (${(err && (err.code || err.message)) || 'unknown error'}). Check the room code and try again.`;
+    } finally { btn.disabled = false; }
   });
   $('spectate').addEventListener('click', () => { end.hidden = true; });
   $('resume').addEventListener('click', () => { pause.hidden = true; game.paused = false; input.requestLock(); });
@@ -139,10 +179,10 @@ function boot() {
 
   input.onLockChange = (locked) => {
     if (!playing || input.isTouch) return;
-    if (!locked && game.state !== 'over' && game.player?.alive && end.hidden) { game.paused = true; pause.hidden = false; }
+    if (!locked && game.state !== 'over' && game.player?.alive && end.hidden) { game.paused = !game.online; pause.hidden = false; } // online games keep running
   };
   addEventListener('keydown', (e) => {
-    if (e.code === 'KeyP' && playing && !input.isTouch) { game.paused = !game.paused; pause.hidden = !game.paused; }
+    if (e.code === 'KeyP' && playing && !input.isTouch && !game.online) { game.paused = !game.paused; pause.hidden = !game.paused; }
   });
 
   game.onMatchEvent = (type, data) => {

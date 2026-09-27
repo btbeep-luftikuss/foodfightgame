@@ -25,6 +25,18 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
   - Quiet Titans, and anyone hiding in a bush, never show up; their nameplates stay hidden too, and bots can't see them either.
 - **More optimization:** see the Performance section.
 
+**Version 0.6:**
+
+- **Online multiplayer ("Play online"):** pick a name and a room code; everyone on the published page who types the same code plays together in a free-for-all food fight with respawns, a scoreboard and a shared kill feed. It runs on the claude.ai artifact `room` capability (`src/net.js`):
+  - Each player's game shares its Titan through room presence about 30 times a second, with throws, peel traps, trampolines and knockouts as a short rolling event log.
+  - Every game simulates every projectile; a hit is decided by the game of the Titan that got hit, and the thrower is credited when that player announces the knockout.
+  - Incoming data is untrusted: it's clamped, checked against the food table, shown as plain text and rate-limited.
+  - Pickups are per player online, and online matches have no Soap Tide (players join at different times).
+  - Tested with two browser tabs through a stand-in room (`window.__useMockRoom`): joining, seeing each other, a thrown carrot knocking the other player out, kill credit, the kill feed, respawning and leaving.
+- **First person:** the camera is your Titan's eyes, with your arm and food as a viewmodel. **V** switches to third person.
+- **Blueberries (13th food):** rapid fire, about 12 berries a second at 5 damage each, with spray that grows while you hold the trigger. Pickups hold a handful (24–90 berries) and stack to 240.
+- **Food system reverted:** bushes are gone; food floats at its spawn points again.
+
 ## What's in it
 
 | Area | Included |

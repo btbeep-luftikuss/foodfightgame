@@ -49,6 +49,8 @@ export class Projectiles {
     };
     p.mesh.position.copy(p.pos);
     this.list.push(p);
+    const net = this.game.net;
+    if (net && o.owner === this.game.player && !o.remote && !o.local) net.sendThrow(o);
     return p;
   }
 
