@@ -145,6 +145,11 @@ button { font: inherit; color: inherit; }
 .locker-grid button b { font-size: 12.5px; line-height: 1.15; text-align: center; }
 .locker-grid button small { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--rar); }
 .locker-grid button[aria-pressed="true"] { border-color: var(--butter); box-shadow: 0 0 0 2px var(--butter); }
+.gfx { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.gfx .field { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: var(--paper-dim); }
+.gfx .field select { width: 100%; }
+.gfx .gfx-note { grid-column: 1 / -1; margin: 0; font-size: 12px; line-height: 1.4; color: var(--paper-dim); }
+@media (max-width: 420px) { .gfx { grid-template-columns: 1fr; } }
 .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .mode { display: grid; gap: 4px; align-content: start; text-align: left; padding: 12px; border-radius: 14px; border: 2px solid var(--paper-dim); background: var(--ink); color: var(--paper); font: inherit; cursor: pointer; }
 .mode b { font-size: 17px; color: var(--butter); }
@@ -323,21 +328,16 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 
 <section id="menu" class="menu" aria-label="Main menu">
   <div class="menu-panel">
-    <p class="eyebrow">Prototype 0.11 · The Grand Kitchen</p>
+    <p class="eyebrow">Prototype 0.12 · The Grand Kitchen</p>
     <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
     <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Play in first person against 11 bots until the Soap Tide closes in, or online against your friends. Blueberries fire like a machine gun.</p>
     <div class="row">
       <button id="play" class="btn" type="button">Play vs bots</button>
       <button id="online-open" class="btn ghost" type="button">Play online</button>
       <button id="locker-open" class="btn ghost" type="button">Locker</button>
-      <label class="field" for="quality">Graphics
-        <select id="quality">
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-        </select>
-      </label>
+      <button id="gfx-open" class="btn ghost" type="button">Graphics</button>
     </div>
+    <div id="gfx-menu" class="online gfx" hidden></div>
     <p id="menu-error" hidden></p>
     <div id="locker" class="online" hidden>
       <p id="locker-now"></p>
@@ -394,7 +394,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     <h3>Paused</h3>
     <p>The food will wait for you.</p>
     <div class="row"><button id="resume" class="btn" type="button">Resume</button><button id="leave" class="btn ghost" type="button">Main menu</button></div>
-    <label class="field" for="quality2">Graphics <select id="quality2"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+    <div id="gfx-pause" class="gfx"></div>
   </div>
 </section>
 

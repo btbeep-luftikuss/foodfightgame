@@ -116,7 +116,7 @@ export class FX {
   clear() { this.blobs.clear(); this.chunks.clear(); this.puffs.clear(); }
   shake(a) { this.shakeAmt = Math.min(1.2, this.shakeAmt + a); }
 
-  n(count) { return Math.max(1, Math.round(count * this.scale)); }
+  n(count) { return this.scale <= 0 ? 0 : Math.max(1, Math.round(count * this.scale)); } // Off: no particles at all
 
   spray(pool, pos, count, { speed = 8, up = 4, spread = 1, life = 0.8, size = 0.15, colors, grav = 1, drag = 0.4, grow = 0, dir = null }) {
     const P = this[pool];

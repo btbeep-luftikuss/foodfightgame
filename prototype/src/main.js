@@ -14,6 +14,23 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SSRPass } from 'three/addons/postprocessing/SSRPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAPass } from 'three/addons/postprocessing/FXAAPass.js';
+
+// Screen-space passes can leave a stray NaN pixel (e.g. right at the camera); bloom would smear it across
+// the whole screen, so it is replaced before bloom runs.
+const SanitizeShader = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      if (any(isnan(c)) || any(isinf(c))) c = vec4(0.0, 0.0, 0.0, 1.0);
+      gl_FragColor = vec4(min(c.rgb, vec3(32.0)), 1.0);
+    }`,
+};
 
 const $ = (id) => document.getElementById(id);
 
@@ -83,9 +100,8 @@ function renderIcons() {
 }
 
 function boot() {
-  const qKey = readQuality();
+  let qKey = readQuality();
   const quality = { ...QUALITY[qKey] }; // one live object shared by the whole game; the setting switches it in place
-  $('quality').value = qKey;
   const canvas = $('game');
   let renderer;
   try {
@@ -339,20 +355,58 @@ function boot() {
     if (phase === 'end') stick.classList.remove('on');
   };
 
-  // Bloom on High: emissive burners, honey, sunlight and the carrot glint glow.
+  // Graphics settings on top of the preset: ray tracing, resolution and particles ('auto' follows the preset).
+  const RT_LABEL = { off: 'Off', reflections: 'Reflections', full: 'Reflections + ambient occlusion' };
+  const RES = { auto: 0, 50: 0.5, 75: 0.75, 100: 1, 125: 1.25 };
+  const PARTICLES = { off: 0, low: 0.35, medium: 0.7, high: 1, ultra: 1.6 };
+  let gfx = { rt: 'off', res: 'auto', particles: 'auto' };
+  try { gfx = { ...gfx, ...JSON.parse(localStorage.getItem('tt-gfx') || '{}') }; } catch { /* storage blocked */ }
+  if (!RT_LABEL[gfx.rt]) gfx.rt = 'off';
+  if (!(gfx.res in RES)) gfx.res = 'auto';
+  if (gfx.particles !== 'auto' && !(gfx.particles in PARTICLES)) gfx.particles = 'auto';
+
+  // Post-processing. Bloom on High: burners, honey, sunlight and the carrot glint glow.
+  // Ray tracing (screen-space, the kind browsers can run): rays are marched through the depth buffer.
+  //  - Reflections (SSR): shiny floors, tiles, steel and glazed pots reflect Titans and food.
+  //  - Ambient occlusion (GTAO): soft contact shadows in corners, under counters and around props.
   let composer = null;
+  const shinyMeshes = () => scene.children.filter((o) => o.isMesh && (o.userData.merged || o.userData.world) && !o.material.transparent
+    && (o.material.roughness ?? 1) <= 0.35);
+  const disposeComposer = () => {
+    if (!composer) return;
+    for (const p of composer.passes) p.dispose?.();
+    composer.dispose?.();
+    composer = null;
+  };
   const makeComposer = () => {
-    const c = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
-    c.addPass(new RenderPass(scene, camera));
-    c.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.32, 0.45, 0.88));
+    disposeComposer();
+    const rt = gfx.rt !== 'off';
+    if (!quality.bloom && !rt) return null;
+    // screen-space passes read depth/normals from their own targets, so MSAA is only used without them
+    const c = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: rt ? 0 : 4 }));
+    if (rt) {
+      const ssr = new SSRPass({ renderer, scene, camera, width: innerWidth, height: innerHeight, selects: shinyMeshes() });
+      ssr.opacity = 0.5; ssr.maxDistance = 40; ssr.thickness = 0.35;
+      ssr.fresnel = true; ssr.distanceAttenuation = true; ssr.infiniteThick = false;
+      c.addPass(ssr);
+    } else c.addPass(new RenderPass(scene, camera));
+    if (gfx.rt === 'full') {
+      const ao = new GTAOPass(scene, camera, innerWidth, innerHeight);
+      ao.updateGtaoMaterial({ radius: 1.6, distanceExponent: 1, thickness: 1.5, scale: 1, samples: 12 });
+      ao.blendIntensity = 0.9;
+      c.addPass(ao);
+    }
+    if (rt) c.addPass(new ShaderPass(SanitizeShader));
+    if (quality.bloom) c.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.35, 0.3, 1.9));
     c.addPass(new OutputPass());
-    c.setPixelRatio(quality.pixelRatio);
+    if (rt) c.addPass(new FXAAPass()); // no MSAA with the screen-space passes, so smooth edges afterwards
+    c.setPixelRatio(quality.pixelRatio * resScale);
     c.setSize(innerWidth, innerHeight);
     return c;
   };
-  if (quality.bloom) composer = makeComposer();
 
   // Dynamic resolution: drop render scale when the frame rate sags, restore it when there's headroom.
+  // A fixed Resolution setting turns this off.
   let resScale = 1, fpsEma = 60, adjustT = 0;
   const applyScale = () => {
     renderer.setPixelRatio(quality.pixelRatio * resScale);
@@ -377,17 +431,46 @@ function boot() {
       a.root.traverse((o) => { if (o.isMesh) o.castShadow = !!quality.dynamicShadows && o !== a.iceBlock; });
     }
     scene.traverse((o) => { const m = o.material; if (m) (Array.isArray(m) ? m : [m]).forEach((x) => { x.needsUpdate = true; }); });
-    game.fx.scale = quality.particles;
+    game.fx.scale = gfx.particles === 'auto' ? quality.particles : PARTICLES[gfx.particles];
     game.world.setAtmosphere(quality.name !== 'Low');
     camera.far = quality.far; camera.updateProjectionMatrix();
     scene.fog.near = quality.fog[0]; scene.fog.far = quality.fog[1];
-    if (quality.bloom && !composer) composer = makeComposer();
-    resScale = 1; applyScale();
-    for (const id of ['quality', 'quality2']) { const el = $(id); if (el) el.value = key; }
+    resScale = RES[gfx.res] || 1;
+    composer = makeComposer();
+    applyScale();
+    for (const el of document.querySelectorAll('[data-gfx="preset"]')) el.value = key;
+    qKey = key;
     try { localStorage.setItem('tt-quality', key); } catch { /* storage blocked */ }
   }
+  // One settings panel is rendered into the menu and into the pause card; every copy stays in sync.
+  const gfxPanel = (presetId) => `
+    <label class="field" for="${presetId}">Preset <select id="${presetId}" data-gfx="preset"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+    <label class="field">Ray tracing <select data-gfx="rt">${Object.entries(RT_LABEL).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
+    <label class="field">Resolution <select data-gfx="res"><option value="auto">Auto (keeps it smooth)</option><option value="50">50%</option><option value="75">75%</option><option value="100">100%</option><option value="125">125% (sharpest)</option></select></label>
+    <label class="field">Particle effects <select data-gfx="particles"><option value="auto">Preset</option><option value="off">Off</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="ultra">Ultra</option></select></label>
+    <p class="gfx-note">Ray tracing is heavy: it traces reflections and soft shadows on screen every frame. Best on a strong computer; on phones, try Reflections with Resolution at 75%.</p>`;
+  $('gfx-menu').innerHTML = gfxPanel('quality');
+  $('gfx-pause').innerHTML = gfxPanel('quality2');
+  const syncGfx = () => {
+    for (const el of document.querySelectorAll('[data-gfx]')) el.value = el.dataset.gfx === 'preset' ? qKey : gfx[el.dataset.gfx];
+  };
+  document.addEventListener('change', (e) => {
+    const k = e.target.dataset?.gfx;
+    if (!k) return;
+    if (k === 'preset') applyQuality(e.target.value);
+    else {
+      gfx[k] = e.target.value;
+      try { localStorage.setItem('tt-gfx', JSON.stringify(gfx)); } catch { /* storage blocked */ }
+      applyQuality(qKey); // rebuilds passes, resolution and particle density
+    }
+    syncGfx();
+  });
+  $('gfx-open').addEventListener('click', () => {
+    $('gfx-menu').hidden = !$('gfx-menu').hidden;
+    if (!$('gfx-menu').hidden) requestAnimationFrame(() => $('gfx-menu').scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+  });
   applyQuality(qKey);
-  for (const id of ['quality', 'quality2']) $(id)?.addEventListener('change', (e) => applyQuality(e.target.value));
+  syncGfx();
   game.perf = { get scale() { return resScale; }, get fps() { return fpsEma; } };
 
   addEventListener('resize', () => {
@@ -416,14 +499,14 @@ function boot() {
     if (game.world.shadowDirty && quality.shadows && !quality.dynamicShadows) { renderer.shadowMap.needsUpdate = true; game.world.shadowDirty = false; }
     // High: moving shadows refresh at 30 Hz instead of every frame (half the shadow cost).
     if (quality.dynamicShadows) renderer.shadowMap.needsUpdate = (frameNo++ & 1) === 0;
-    if (composer && quality.bloom) composer.render(dt); else renderer.render(scene, camera);
+    if (composer) composer.render(dt); else renderer.render(scene, camera);
     game.lastDrawCalls = renderer.info.render.calls;
 
     if (dt > 0) fpsEma += (1 / dt - fpsEma) * 0.05;
     adjustT += dt;
     if (adjustT > 1.2) {
       adjustT = 0;
-      if (fpsEma < 50 && resScale > quality.minScale) { resScale = Math.max(quality.minScale, resScale - 0.1); applyScale(); }
+      if (gfx.res !== 'auto') { /* fixed resolution chosen in settings */ } else if (fpsEma < 50 && resScale > quality.minScale) { resScale = Math.max(quality.minScale, resScale - 0.1); applyScale(); }
       else if (fpsEma > 58 && resScale < 1) { resScale = Math.min(1, resScale + 0.05); applyScale(); }
     }
   });

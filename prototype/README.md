@@ -63,6 +63,15 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.12:**
+
+- **Graphics settings** (menu → Graphics, and in the pause card; saved on the device):
+  - **Preset:** Low / Medium / High, as before.
+  - **Ray tracing:** Off / Reflections / Reflections + ambient occlusion. Browsers can't use RTX-style hardware ray tracing, so this is screen-space ray tracing: rays are marched through the depth buffer each frame. Reflections (SSRPass) show on shiny scenery (floor tiles, walls, steel, glazed pots); ambient occlusion (GTAOPass) adds soft contact shadows in corners and under props. With either on, MSAA is replaced by FXAA and a sanitize pass stops stray NaN pixels from being smeared by bloom. Heavy: it renders the scene extra times.
+  - **Resolution:** Auto (dynamic, as before) or fixed 50 / 75 / 100 / 125 %.
+  - **Particle effects:** Preset / Off / Low / Medium / High / Ultra (0 / 0.35 / 0.7 / 1 / 1.6 × particles).
+- **High preset bloom** no longer washes out bright floors: threshold 0.88 → 1.9, so only burners, glints and highlights glow.
+
 **Version 0.11:**
 
 - **Titans are people now:** a head with eyes, eyebrows, nose, ears and a smile; hair; a neck; a shirt; jeans; arms with hands; legs with shoes. Each Titan gets its own skin tone (8), hair colour (8) and hairstyle (short, spiky, long, bun, buzz, curly). Legs stride when walking and a knee lifts in the air. Skins set the shirt and trousers, and every costume piece was refitted onto the human head and torso (helmets and hoods hide the hair). Your first-person arm shows your own skin tone, hand and sleeve. Face hits now use the smaller human head (0.3 m hit sphere at 1.7 m, was 0.43 m at 1.55 m).
