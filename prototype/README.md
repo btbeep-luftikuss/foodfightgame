@@ -65,7 +65,8 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 **Version 0.9:**
 
-- **Chef's Choice mode** (vs bots): pick 3 foods on the menu. They never run out (the hotbar shows ∞), but no food spawns anywhere: no floating pickups, grocery drops, Giant Tomato piles or loot from splatted Titans. Bots bring 3 random foods each. Eating (banana, grapes) has an 8 s cooldown in this mode so healing isn't endless. Your pick is remembered.
+- **Mode menu:** Play vs bots opens a choice between **Classic** and **Chef's Choice**; Chef's Choice then shows the food picker.
+- **Chef's Choice mode** (vs bots): pick 3 foods. They never run out (the hotbar shows ∞), but no food spawns anywhere: no floating pickups, grocery drops, Giant Tomato piles or loot from splatted Titans. Bots bring 3 random foods each. Food never heals in this mode (bananas and grapes can't be eaten); instead green heal crosses float on every third spawn point (21 on the map) and give +60 HP, returning 20 s after being taken. Hurt bots go for them. Your pick is remembered.
 - **More common staples:** spawn weights raised for tomato (26 → 42), carrot (14 → 28) and blueberries (12 → 26), so about half of all food pickups are one of the three.
 
 **Version 0.8:**

@@ -4,12 +4,17 @@
 // Performance: every pickup is drawn with InstancedMesh, one draw call per food part for the
 // whole map, instead of one mesh per pickup.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G, groundHeight, resolveHorizontal, rand } from './core.js';
+import { MAX_HP } from './actors.js';
 import { FOODS, FOOD_IDS, makeFoodMesh, foodParts, randomFoodId, pickupAmmo } from './foods.js';
 
 const CAP = 200;         // instances per food part
 const RESPAWN = 14;      // seconds before a picked-up spawner refills
 const INST_IDS = [...FOOD_IDS, 'peel']; // everything that can lie on the ground as loot
+const DRAW_IDS = [...INST_IDS, 'heal'];
+// Chef's Choice: food never heals there, so green heal crosses float on every third spawner instead.
+const HEAL_HP = 60, HEAL_RESPAWN = 20;
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _e = new THREE.Euler();
 
 export class Items {
@@ -31,6 +36,16 @@ export class Items {
         return im;
       });
     }
+    { // heal cross: two rounded bars, glowing green so it reads at a distance
+      const bar = (w, h) => new THREE.BoxGeometry(w, h, 0.32);
+      const geo = mergeGeometries([bar(0.42, 1.25), bar(1.25, 0.42)]);
+      const mat = new THREE.MeshStandardMaterial({ color: '#3ddc6a', emissive: '#1faa45', emissiveIntensity: 0.9, roughness: 0.35 });
+      const im = new THREE.InstancedMesh(geo, mat, CAP);
+      im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      im.frustumCulled = false; im.count = 0;
+      scene.add(im);
+      this.inst.heal = [im];
+    }
     this.rings = new THREE.InstancedMesh(new THREE.RingGeometry(0.9, 1.15, 32).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({ color: '#ffd447', transparent: true, opacity: 0.85, depthWrite: false }), 200);
     this.rings.frustumCulled = false; this.rings.count = 0;
@@ -40,7 +55,7 @@ export class Items {
 
   // Loose food, e.g. a banana that hit a wall or a splatted Titan's inventory.
   drop(id, count, pos, vel = null, spawner = null) {
-    if (this.game.mode === 'chef') return null; // Chef's Choice: no food anywhere on the map
+    if (this.game.mode === 'chef' && id !== 'heal') return null; // Chef's Choice: no food anywhere on the map
     const p = pos.clone();
     if (!vel) p.y = groundHeight(p.x, p.z, p.y + 0.5);
     const it = { id, count, pos: p, vel: vel ? vel.clone() : null, born: this.game.time, phase: rand(0, 6), visible: true, spawner };
@@ -52,9 +67,12 @@ export class Items {
   pickables() { return this.list.filter((it) => !it.vel); }
 
   fillSpawners(now) {
-    if (this.game.mode === 'chef') return;
-    for (const s of this.spawners) {
+    const chef = this.game.mode === 'chef';
+    for (let i = 0; i < this.spawners.length; i++) {
+      const s = this.spawners[i];
+      if (chef && i % 3) continue;
       if (!s.item && now >= s.respawnAt) {
+        if (chef) { s.item = this.drop('heal', 1, s.pos, null, s); continue; }
         const id = randomFoodId();
         s.item = this.drop(id, pickupAmmo(id), s.pos, null, s);
       }
@@ -118,6 +136,17 @@ export class Items {
         if (!a.alive || a.isRemote) continue; // pickups are per player online
         const dx = a.pos.x - it.pos.x, dz = a.pos.z - it.pos.z, dy = a.pos.y - it.pos.y;
         if (dx * dx + dz * dz > 2.3 * 2.3 || Math.abs(dy) > 2.2) continue;
+        if (it.id === 'heal') {
+          if (a.hp >= MAX_HP) continue;
+          a.heal(HEAL_HP);
+          game.sfx.play('eat', it.pos, a === game.player ? 1 : 0.4);
+          game.fx.burst('bubbles', it.pos);
+          game.floatText(a, `+${HEAL_HP} HP`, 'heal');
+          if (a === game.player) game.hud.toast(`Healed +${HEAL_HP}`);
+          if (it.spawner) { it.spawner.item = null; it.spawner.respawnAt = now + HEAL_RESPAWN; }
+          this.list.splice(i, 1);
+          break;
+        }
         const got = a.give(it.id, it.count);
         if (!got) continue;
         it.count -= got;
@@ -173,7 +202,7 @@ export class Items {
   // Write every visible food into its instanced meshes.
   _draw(now, cam) {
     const fill = this.fill;
-    for (const id of INST_IDS) fill[id] = 0;
+    for (const id of DRAW_IDS) fill[id] = 0;
     const put = (id, x, y, z, s, ry) => {
       const n = fill[id];
       if (n >= CAP) return;
@@ -188,7 +217,7 @@ export class Items {
       put(it.id, it.pos.x, it.pos.y + 1 + Math.sin(now * 3 + it.phase) * 0.18, it.pos.z, it.id === 'cheese' ? 1 : 1.35, now * 1.6 + it.phase);
       if (!it.vel && rings < 200) { _m.makeTranslation(it.pos.x, it.pos.y + 0.06, it.pos.z); this.rings.setMatrixAt(rings++, _m); }
     }
-    for (const id of INST_IDS) {
+    for (const id of DRAW_IDS) {
       for (const im of this.inst[id]) { im.count = fill[id]; if (fill[id]) im.instanceMatrix.needsUpdate = true; }
     }
     this.rings.count = rings;

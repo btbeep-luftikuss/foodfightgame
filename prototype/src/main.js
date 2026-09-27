@@ -131,16 +131,28 @@ function boot() {
     if (game.online) await game.stopOnline();
     playing = false; input.enabled = false; end.hidden = true; pause.hidden = true; hud.show(false); touch.hidden = true;
     menu.hidden = false; input.exitLock();
+    $('modes').hidden = true; $('chef').hidden = true; $('mode-chef').setAttribute('aria-expanded', 'false');
     game.newMatch(false);
   }
-  $('play').addEventListener('click', () => start({}));
+  // Play opens the mode chooser: Classic starts right away, Chef's Choice opens the food picker.
+  const reveal = (el) => requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+  $('play').addEventListener('click', () => {
+    $('modes').hidden = false; $('online').hidden = true;
+    reveal($('modes'));
+  });
+  $('mode-classic').addEventListener('click', () => start({}));
+  $('mode-chef').addEventListener('click', () => {
+    const open = $('chef').hidden;
+    $('chef').hidden = !open; $('mode-chef').setAttribute('aria-expanded', String(open));
+    if (open) reveal($('chef'));
+  });
   $('again').addEventListener('click', () => start());
 
   // Chef's Choice: pick 3 foods that never run out; nothing spawns on the map.
   let chefPick = [];
   try { chefPick = JSON.parse(localStorage.getItem('tt-chef') || '[]').filter((id) => FOOD_IDS.includes(id)).slice(0, 3); } catch { /* storage blocked */ }
   const chefGrid = $('chef-grid');
-  chefGrid.innerHTML = FOOD_IDS.map((id) => `<button type="button" data-id="${id}" aria-pressed="false"><img src="${icons[id] || ''}" alt=""><span>${FOODS[id].name}</span><small>${FOODS[id].role}</small></button>`).join('');
+  chefGrid.innerHTML = FOOD_IDS.map((id) => `<button type="button" data-id="${id}" aria-pressed="false"><img src="${icons[id] || ''}" alt=""><span>${FOODS[id].name}</span><small>${FOODS[id].role.replace(/ · (heal|snack)$/, '')}</small></button>`).join('');
   function renderChef() {
     for (const b of chefGrid.children) {
       const i = chefPick.indexOf(b.dataset.id);
@@ -161,7 +173,6 @@ function boot() {
     renderChef();
   });
   renderChef();
-  $('chef-open').addEventListener('click', () => { $('chef').hidden = !$('chef').hidden; $('online').hidden = true; });
   $('chef-play').addEventListener('click', () => { if (chefPick.length === 3) start({ mode: 'chef', loadout: [...chefPick] }); });
   $('end-menu').addEventListener('click', toMenu);
   $('leave').addEventListener('click', toMenu);
@@ -170,7 +181,7 @@ function boot() {
   // Online: join a room code; everyone with the same code plays together.
   const status = $('online-status');
   try { $('nick').value = localStorage.getItem('tt-nick') || ''; } catch { /* storage blocked */ }
-  $('online-open').addEventListener('click', () => { $('online').hidden = !$('online').hidden; $('chef').hidden = true; if (!$('online').hidden) $('nick').focus(); });
+  $('online-open').addEventListener('click', () => { $('online').hidden = !$('online').hidden; $('modes').hidden = true; if (!$('online').hidden) $('nick').focus(); });
   $('online').addEventListener('submit', async (e) => {
     e.preventDefault();
     sfx.unlock();

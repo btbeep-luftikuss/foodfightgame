@@ -62,6 +62,8 @@ export class BotBrain {
       if (it) { this.goal = it.pos; this.goalKind = 'item'; }
       else if (allHigh) this._goPad(new THREE.Vector3(tide.x, zoneY, tide.z));
       else { this.goal = new THREE.Vector3(tide.x, a.pos.y, tide.z); this.goalKind = 'tide'; } // may mean jumping off a counter
+    } else if (g.mode === 'chef' && a.hp < MAX_HP * 0.6 && (!this.target || bestD > 14) && this._nearestItem(90)) {
+      this.goal = this._nearestItem(90).pos; this.goalKind = 'item'; // hurt: go get a heal cross
     } else if (!a.inv.some(Boolean) || (!this.target && a.inv.filter(Boolean).length < 3)) {
       const it = this._nearestItem(this.target ? 25 : 80);
       if (it) { this.goal = it.pos; this.goalKind = 'item'; }
@@ -86,7 +88,7 @@ export class BotBrain {
 
     // heal with a banana when hurt and not under pressure
     const bananaSlot = a.inv.findIndex((s) => s && (s.id === 'banana' || s.id === 'grapes'));
-    if (a.hp < MAX_HP * 0.6 && bananaSlot >= 0 && (!this.target || bestD > 14) && !a.eat && now >= (a.snackReadyAt || 0)) {
+    if (a.hp < MAX_HP * 0.6 && bananaSlot >= 0 && (!this.target || bestD > 14) && !a.eat && g.mode !== 'chef') {
       a.select(bananaSlot);
       this.pendingAlt = true;
       this.foodLockUntil = now + 1.4;
@@ -136,7 +138,8 @@ export class BotBrain {
       if (Math.abs(it.pos.y - a.pos.y) > 3) continue;
       if (insideTide && Math.hypot(it.pos.x - insideTide.x, it.pos.z - insideTide.z) > insideTide.r) continue;
       const d = it.pos.distanceTo(a.pos);
-      if (d < bd && a.inv.some((s) => !s || (s.id === it.id && s.count < FOODS[it.id].maxStack))) { bd = d; best = it; }
+      const wants = it.id === 'heal' ? a.hp < MAX_HP : a.inv.some((s) => !s || (s.id === it.id && s.count < FOODS[it.id].maxStack));
+      if (d < bd && wants) { bd = d; best = it; }
     }
     return best;
   }

@@ -94,7 +94,7 @@ export class Actor {
     this.lastHitBy = null; this.lastHitFood = null; this.lastHitAt = -99;
     this.envAcc = 0; this.burnAcc = 0; this.tideAcc = 0; this.nextDrip = 0; this.honeySfxAt = 0;
     this.fallTop = 0; this.armT = 0; this.squash = 0; this.walkPhase = 0; this.hitFlash = 0;
-    this.placement = 0; this.snackReadyAt = 0;
+    this.placement = 0;
     this.root.visible = true;
     this._refreshHeld();
   }
@@ -344,7 +344,7 @@ export class Actor {
     if (prev && next && prev.id !== next.id) this.swapLockUntil = this.game.time + 0.35; // GDD swap lockout
     this._refreshHeld();
   }
-  // Chef's Choice: a bottomless stack of food to eat would mean endless healing, so snacks share an 8 s cooldown.
+  // Chef's Choice: bottomless slots; food never heals there (green heal crosses on the map do).
   giveLoadout(ids) {
     this.inv = [null, null, null, null, null];
     ids.forEach((id, i) => { this.inv[i] = { id, count: FOODS[id].maxStack, inf: true }; if (id === 'cheese') this.inv[i].hp = 300; });
@@ -352,12 +352,9 @@ export class Actor {
     this._refreshHeld();
   }
   startEat(dur, done) {
-    if (this.inv[this.sel]?.inf) {
-      if (this.game.time < (this.snackReadyAt || 0)) {
-        if (!this.isBot) this.game.hud.toast(`Still full: snack again in ${Math.ceil(this.snackReadyAt - this.game.time)} s`);
-        return;
-      }
-      this.snackReadyAt = this.game.time + 8;
+    if (this.game.mode === 'chef') {
+      if (!this.isBot) this.game.hud.toast("No snacking in Chef's Choice: grab a green heal cross");
+      return;
     }
     this.eat = { end: this.game.time + dur, done, dmg: 0 };
   }

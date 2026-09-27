@@ -125,6 +125,7 @@ button { font: inherit; color: inherit; }
 .floater.crit { color: var(--butter); font-size: 30px; }
 .floater.immune { color: var(--glaze); font-size: 16px; }
 .floater.slip { color: var(--butter); font-size: 18px; }
+.floater.heal { color: #5dff8a; font-size: 22px; }
 .hudbtn { position: absolute; right: 16px; top: calc(12px + env(safe-area-inset-top, 0px)); pointer-events: auto; display: none; border: 0; border-radius: 999px; padding: 6px 12px; font-weight: 800; font-size: 12px; background: var(--ink-glass); color: var(--paper); }
 @media (pointer: coarse) { .hudbtn { display: block; } .feed { top: calc(48px + env(safe-area-inset-top, 0px)); } }
 .scores { position: absolute; top: calc(58px + env(safe-area-inset-top, 0px)); left: 16px; margin: 0; padding: 8px 10px; list-style: none; background: var(--ink-glass); border-radius: var(--r); display: grid; gap: 3px; min-width: 150px; font-size: 13px; }
@@ -136,6 +137,13 @@ button { font: inherit; color: inherit; }
 .online input { font: inherit; font-size: 16px; color: var(--paper); background: var(--ink); border: 2px solid var(--paper-dim); border-radius: 10px; padding: 8px 10px; }
 .online p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--paper-dim); }
 .online p.err { color: #ffb3a6; }
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mode { display: grid; gap: 4px; align-content: start; text-align: left; padding: 12px; border-radius: 14px; border: 2px solid var(--paper-dim); background: var(--ink); color: var(--paper); font: inherit; cursor: pointer; }
+.mode b { font-size: 17px; color: var(--butter); }
+.mode span { font-size: 12.5px; line-height: 1.35; color: var(--paper-dim); }
+.mode:hover, .mode[aria-expanded="true"] { border-color: var(--butter); box-shadow: 0 0 0 2px var(--butter); }
+.chef { display: grid; gap: 10px; }
+@media (max-width: 360px) { .modes { grid-template-columns: 1fr; } }
 .chef-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
 .chef-grid button { display: grid; justify-items: center; gap: 2px; padding: 8px 4px; border-radius: 12px; border: 2px solid var(--paper-dim); background: var(--ink); color: var(--paper); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; position: relative; }
 .chef-grid button img { width: 38px; height: 38px; border-radius: 50%; background: radial-gradient(circle, #fffaf2 0 60%, #e9dccb 61%); }
@@ -312,7 +320,6 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Play in first person against 11 bots until the Soap Tide closes in, or online against your friends. Blueberries fire like a machine gun.</p>
     <div class="row">
       <button id="play" class="btn" type="button">Play vs bots</button>
-      <button id="chef-open" class="btn ghost" type="button">Chef's Choice</button>
       <button id="online-open" class="btn ghost" type="button">Play online</button>
       <label class="field" for="quality">Graphics
         <select id="quality">
@@ -323,10 +330,17 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       </label>
     </div>
     <p id="menu-error" hidden></p>
-    <div id="chef" class="online chef" hidden>
-      <p><b>Chef's Choice</b> (vs bots): pick 3 foods. They never run out, but no food spawns anywhere on the map. Bots bring 3 random foods each.</p>
-      <div id="chef-grid" class="chef-grid" role="group" aria-label="Pick 3 foods"></div>
-      <div class="row"><button id="chef-play" class="btn" type="button" disabled>Pick 3 foods</button></div>
+    <div id="modes" class="online" hidden>
+      <p><b>Choose a mode</b></p>
+      <div class="modes">
+        <button id="mode-classic" class="mode" type="button"><b>Classic</b><span>Grab food as you go. Food floats all over the kitchen and bananas and grapes heal.</span></button>
+        <button id="mode-chef" class="mode" type="button" aria-expanded="false"><b>Chef's Choice</b><span>Pick 3 foods that never run out. No food spawns and food doesn't heal: grab green heal crosses instead.</span></button>
+      </div>
+      <div id="chef" class="chef" hidden>
+        <p>Pick 3 foods. Bots bring 3 random foods each.</p>
+        <div id="chef-grid" class="chef-grid" role="group" aria-label="Pick 3 foods"></div>
+        <div class="row"><button id="chef-play" class="btn" type="button" disabled>Pick 3 foods</button></div>
+      </div>
     </div>
     <form id="online" class="online" hidden>
       <label for="nick">Your name<input id="nick" maxlength="16" autocomplete="nickname" value=""></label>

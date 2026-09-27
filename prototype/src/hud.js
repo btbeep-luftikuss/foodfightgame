@@ -72,7 +72,7 @@ export class HUD {
       tideEl.className = 'tide-banner';
       $('alive-label').textContent = 'Players';
       this._scoreboard(game);
-    } else if (game.state === 'drop') { tideEl.textContent = 'Glide down and grab food'; tideEl.className = 'tide-banner'; }
+    } else if (game.state === 'drop') { tideEl.textContent = game.mode === 'chef' ? 'Glide down and get ready' : 'Glide down and grab food'; tideEl.className = 'tide-banner'; }
     else if (T.phase >= T.phases.length) { tideEl.textContent = 'Final circle'; tideEl.className = 'tide-banner urgent'; }
     else if (T.mode === 'wait') {
       const s = Math.ceil(T.t);

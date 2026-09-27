@@ -272,7 +272,7 @@ export class Game {
     this.state = 'drop'; this.stateT = 0;
     this.spectate = null; this.endAt = 0; this.winner = null;
     this.onMatchEvent?.('start');
-    if (withPlayer) this.hud.banner(chef ? "Chef's Choice" : 'Drop in!', chef ? 'Your 3 foods never run out. Nothing spawns, so aim well' : 'Steer your napkin glider onto the counter');
+    if (withPlayer) this.hud.banner(chef ? "Chef's Choice" : 'Drop in!', chef ? 'Your 3 foods never run out. Food doesn\'t heal: grab the green crosses' : 'Steer your napkin glider onto the counter');
   }
 
   // ------------------------------------------------------------------ combat API used by foods
