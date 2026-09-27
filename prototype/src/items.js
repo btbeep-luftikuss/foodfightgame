@@ -10,7 +10,7 @@ const _v = new THREE.Vector3();
 export class Items {
   constructor(game) {
     this.game = game;
-    this.list = []; this.traps = []; this.decor = [];
+    this.list = []; this.traps = []; this.decor = []; this.tramps = [];
     this.spawners = game.world.spawnPoints.map((p) => ({ pos: p, item: null, respawnAt: 0 }));
   }
 
@@ -58,6 +58,21 @@ export class Items {
   _removeTrap(t) {
     this.game.scene.remove(t.mesh);
     this.traps.splice(this.traps.indexOf(t), 1);
+  }
+
+  // Jelly trampolines (GDD Jelly Cube alt): 30 s, max 2 per player, launch anyone 12 m up.
+  addTrampoline(owner, pos) {
+    const mine = this.tramps.filter((t) => t.owner === owner);
+    if (mine.length >= 2) this._removeTramp(mine[0]);
+    const mesh = makeFoodMesh('jelly');
+    mesh.scale.set(5, 1.3, 5);
+    mesh.position.copy(pos).setY(pos.y + 0.35);
+    this.game.scene.add(mesh);
+    this.tramps.push({ owner, pos: pos.clone(), mesh, until: this.game.time + 30, squish: 0 });
+  }
+  _removeTramp(t) {
+    this.game.scene.remove(t.mesh);
+    this.tramps.splice(this.tramps.indexOf(t), 1);
   }
 
   stickDecor(p, seconds) {
@@ -109,6 +124,24 @@ export class Items {
         }
       }
     }
+    for (let i = this.tramps.length - 1; i >= 0; i--) {
+      const t = this.tramps[i];
+      if (now > t.until) { this._removeTramp(t); continue; }
+      t.squish = Math.max(0, t.squish - dt * 4);
+      t.mesh.scale.set(5 + t.squish, 1.3 * (1 - t.squish * 0.5) + Math.sin(now * 6) * 0.04, 5 + t.squish);
+      for (const a of game.actors) {
+        if (!a.alive || a.vel.y > 0.5) continue;
+        const dy = a.pos.y - t.pos.y;
+        if (dy < -0.2 || dy > 1.4 || Math.hypot(a.pos.x - t.pos.x, a.pos.z - t.pos.z) > 2.4) continue;
+        a.vel.y = 22; a.onGround = false; a.gliding = false;
+        t.squish = 1;
+        game.sfx.play('boing', t.pos, 1);
+        game.fx.burst('jelly', t.pos);
+      }
+    }
+    // hide far-away pickups (cheap distance culling on top of frustum culling)
+    const cam = game.camera.position;
+    for (const it of this.list) it.mesh.visible = it.pos.distanceToSquared(cam) < 130 * 130;
     for (let i = this.decor.length - 1; i >= 0; i--) {
       const d = this.decor[i];
       if (now > d.until) { game.projectiles.releaseMesh(d.food, d.mesh); this.decor.splice(i, 1); }
@@ -126,7 +159,8 @@ export class Items {
     for (const it of this.list) this.game.scene.remove(it.mesh);
     for (const t of this.traps) this.game.scene.remove(t.mesh);
     for (const d of this.decor) this.game.projectiles.releaseMesh(d.food, d.mesh);
-    this.list.length = 0; this.traps.length = 0; this.decor.length = 0;
+    for (const t of this.tramps) this.game.scene.remove(t.mesh);
+    this.list.length = 0; this.traps.length = 0; this.decor.length = 0; this.tramps.length = 0;
     for (const s of this.spawners) { s.item = null; s.respawnAt = 0; }
   }
 }

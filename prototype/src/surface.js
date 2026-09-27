@@ -10,6 +10,7 @@ const ZONE_LOOKS = {
   ice: { color: '#d9f3ff', opacity: 0.82, roughness: 0.04, clearcoat: 1, emissive: '#0b2a3a' },
   soda: { color: '#5b2810', opacity: 0.78, roughness: 0.08, clearcoat: 1, emissive: '#000000' },
   melt: { color: '#ffc632', opacity: 0.9, roughness: 0.25, clearcoat: 0.6, emissive: '#3a2400' },
+  crumbs: { color: '#c98b45', opacity: 0.85, roughness: 0.9, clearcoat: 0, emissive: '#000000' },
 };
 
 export class Surface {

@@ -25,10 +25,12 @@ export class Projectiles {
       m.add(inner);
       m.userData.inner = inner;
       if (food === 'cheese') { inner.rotation.z = Math.PI / 2; }
+      if (food === 'watermelon') { inner.rotation.y = Math.PI / 2; }
       this.game.scene.add(m);
     }
     m.visible = true;
     m.rotation.set(0, 0, 0);
+    m.scale.setScalar(1);
     m.userData.inner.rotation.x = 0;
     return m;
   }
@@ -41,6 +43,8 @@ export class Projectiles {
       gravity: o.gravity ?? 1, radius: o.radius ?? food.radius ?? 0.35, life: 0, maxLife: o.life ?? 6,
       spin: o.spin ?? 0, charge: o.charge ?? 1, orient: !!o.orient, roll: !!o.roll, curve: o.curve ?? 0,
       phase: 'out', hitSet: new Set(), done: false, keepMesh: false, rollAngle: 0, bruise: o.bruise ?? 0,
+      bounces: o.bounces ?? 0, seek: o.seek ?? null, turn: o.turn ?? 0, retarget: o.retarget ?? 0, shootable: !!o.shootable,
+      fuse: o.fuse ?? 0, attached: null, stuck: false, stuckAt: 0, speed: o.vel.length(),
       mesh: this.getMesh(o.food),
     };
     p.mesh.position.copy(p.pos);
@@ -69,6 +73,8 @@ export class Projectiles {
       return this._end(p);
     }
     if (p.food === 'banana' && this._bananaSteer(p, dt)) return;
+    if (p.attached || p.stuck) return this._fuseStep(p, food, dt);
+    if (p.seek !== null || p.retarget) this._seekSteer(p, dt);
 
     const dist = p.vel.length() * dt;
     const n = clamp(Math.ceil(dist / 0.45), 1, 16);
@@ -79,6 +85,7 @@ export class Projectiles {
       p.pos.addScaledVector(p.vel, sdt);
       if (p.roll) this._rollPhysics(p, sdt);
       if (this._collide(p, food)) return this._end(p);
+      if (p.attached || p.stuck) break;
     }
 
     // visuals
@@ -88,7 +95,7 @@ export class Projectiles {
       m.lookAt(_t.copy(p.pos).sub(p.vel)); // carrot tip (-z) leads
     } else if (p.roll) {
       m.rotation.y = Math.atan2(p.vel.x, p.vel.z);
-      p.rollAngle += Math.hypot(p.vel.x, p.vel.z) * dt / 0.75;
+      p.rollAngle += Math.hypot(p.vel.x, p.vel.z) * dt / p.radius;
       m.userData.inner.rotation.x = p.rollAngle;
     } else {
       m.rotation.x += p.spin * dt; m.rotation.y += p.spin * 0.7 * dt;
@@ -97,6 +104,46 @@ export class Projectiles {
       if (food.expire) food.expire(p, game);
       this._end(p);
     }
+  }
+
+  // Homing (Chili, Cookie): turn toward the target at a limited rate, so a sharp dodge beats it.
+  _seekSteer(p, dt) {
+    let t = p.seek;
+    if ((!t || !t.alive) && p.retarget) { t = p.seek = this.game.nearestEnemy(p.owner, p.retarget, p.pos); }
+    if (!t || !t.alive) return;
+    t.center(_c);
+    _t.subVectors(_c, p.pos);
+    const dist = _t.length();
+    _t.divideScalar(dist || 1);
+    const cur = _f.copy(p.vel).normalize();
+    const ang = Math.acos(Math.max(-1, Math.min(1, cur.dot(_t))));
+    // Turn harder up close so seekers close in instead of orbiting their target.
+    const turn = p.turn * (1 + 4 * Math.max(0, 1 - dist / 20));
+    if (ang > 1e-4) cur.lerp(_t, Math.min(1, (turn * dt) / ang)).normalize();
+    p.vel.copy(cur).multiplyScalar(p.speed);
+  }
+
+  // Sticky bombs (Pineapple): ride along on a Titan or sit on a surface until the fuse ends.
+  _fuseStep(p, food, dt) {
+    const game = this.game;
+    if (!p.stuckAt) p.stuckAt = game.time;
+    const a = p.attached;
+    if (a) {
+      // Duck & Roll, getting Wet or being splatted shakes it off (GDD: sticky bombs are always removable)
+      if (!a.alive || a.lastDodgeAt > p.stuckAt || a.isWet()) {
+        p.attached = null; p.stuck = true;
+        p.pos.y = groundHeight(p.pos.x, p.pos.z, p.pos.y + 0.5) + 0.4;
+      } else {
+        forwardOf(a.yaw, _f);
+        p.pos.copy(a.pos).addScaledVector(_f, -0.45).setY(a.pos.y + 1.1);
+      }
+    }
+    p.fuse -= dt;
+    const m = p.mesh;
+    m.position.copy(p.pos);
+    const s = 1 + Math.max(0, 0.6 - p.fuse) * 0.6 + Math.sin(game.time * (30 - p.fuse * 10)) * 0.06;
+    m.scale.setScalar(s);
+    if (p.fuse <= 0) { m.scale.setScalar(1); food.detonate(p, game); this._end(p); }
   }
 
   // Banana: curve outward, then home back to the thrower's hand.
@@ -135,7 +182,7 @@ export class Projectiles {
   }
 
   _rollPhysics(p, sdt) {
-    const r = 0.75;
+    const r = p.radius;
     const gy = groundHeight(p.pos.x, p.pos.z, p.pos.y - r + 0.6, 0.6, 0);
     if (p.pos.y - r <= gy) {
       if (p.vel.y < -8) this.game.sfx.play('thud', p.pos, 0.7);
@@ -145,10 +192,13 @@ export class Projectiles {
       p.vel.x *= k; p.vel.z *= k;
     }
     _c.set(p.pos.x, p.pos.y - r, p.pos.z);
-    const nrm = resolveHorizontal(_c, r, 1.5, 0.6);
+    const nrm = resolveHorizontal(_c, r, r * 2, 0.6);
     if (nrm) {
       const d = p.vel.x * nrm.x + p.vel.z * nrm.z;
-      if (d < 0) { p.vel.x -= 2 * d * nrm.x; p.vel.z -= 2 * d * nrm.z; p.vel.x *= 0.75; p.vel.z *= 0.75; this.game.sfx.play('thud', p.pos, 0.6); }
+      if (d < 0) {
+        if (p.food === 'watermelon' && -d > 9) { FOODS.watermelon.split(p, this.game); p.done = true; return; } // bursts on a hard hit
+        p.vel.x -= 2 * d * nrm.x; p.vel.z -= 2 * d * nrm.z; p.vel.x *= 0.75; p.vel.z *= 0.75; this.game.sfx.play('thud', p.pos, 0.6);
+      }
       p.pos.x = _c.x; p.pos.z = _c.z;
     }
     if (_c.x <= FLOOR_BOUNDS.minX + 0.01 || _c.x >= FLOOR_BOUNDS.maxX - 0.01) p.vel.x *= -0.7;
@@ -161,7 +211,7 @@ export class Projectiles {
     const rad = p.radius;
     // 1) cheese shields block projectiles from the front
     for (const a of game.actors) {
-      if (!a.alive || !a.shieldUp || a === p.owner || p.food === 'cheese') continue;
+      if (!a.alive || !a.shieldUp || a === p.owner || p.roll) continue;
       forwardOf(a.yaw, _f);
       _c.copy(a.pos).addScaledVector(_f, 1.45).setY(a.pos.y + 1.0);
       if (segPointDist2(_prev, p.pos, _c) < (1.5 + rad) ** 2 && (p.vel.x * _f.x + p.vel.z * _f.z) < 0) {
@@ -181,16 +231,30 @@ export class Projectiles {
       p.hitSet.add(a);
       const head = headHit && food.profile === 'line';
       const done = food.impact(p, { point: p.pos.clone(), actor: a, head, world: false }, game);
-      if (done || !food.pierce) return true;
+      if (done) return true;
+      if (p.attached || p.stuck) return false;
+      if (!food.pierce) return true;
     }
     // 3) the landmark tomato
     const L = game.world.landmark;
-    if (L.alive && L.collider.enabled && p.food !== 'cheese') {
+    // 3a) any thrown food knocks enemy cookies out of the air (GDD Cookie counterplay)
+    if (!p.shootable) {
+      for (const q of this.list) {
+        if (!q.shootable || q.done || q.owner === p.owner) continue;
+        if (segPointDist2(_prev, p.pos, q.pos) < (0.5 + rad) ** 2) {
+          q.done = true;
+          game.fx.burst('crumb', q.pos);
+          game.sfx.play('crunch', q.pos, 0.8);
+        }
+      }
+    }
+    if (L.alive && L.collider.enabled && !p.roll) {
       _c.set(L.x, L.y * L.group.scale.y, L.z);
       if (p.pos.distanceTo(_c) < L.r * L.group.scale.x * 0.95 + rad) {
         game.hitLandmark(food.dmg || 20, p.owner, p.pos);
         if (p.food === 'banana') { game.items.drop('banana', 1, p.pos); return true; }
-        return food.impact(p, { point: p.pos.clone(), world: true, top: false }, game) || true;
+        food.impact(p, { point: p.pos.clone(), world: true, top: false }, game);
+        return !(p.stuck || p.attached);
       }
     }
     if (p.roll) return false;

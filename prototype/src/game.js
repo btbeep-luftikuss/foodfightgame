@@ -2,7 +2,7 @@
 // 8 Titans drop in on napkin gliders, loot food, and fight while the Soap Tide closes.
 import * as THREE from 'three';
 import {
-  G, clamp, lerp, rand, damp, forwardOf, rightOf, raycastWorld, hasLineOfSight, solidAt, FLOOR_Y, bus,
+  G, clamp, lerp, rand, damp, forwardOf, rightOf, raycastWorld, hasLineOfSight, solidAt, groundHeight, FLOOR_Y, bus,
 } from './core.js';
 import { World } from './world.js';
 import { Surface } from './surface.js';
@@ -11,16 +11,18 @@ import { Actor } from './actors.js';
 import { Projectiles } from './projectiles.js';
 import { Items } from './items.js';
 import { BotBrain, BOT_NAMES } from './bots.js';
-import { FOODS, FEED_VERB, lobSpeed, lobDir } from './foods.js';
+import { FOODS, FEED_VERB, lobSpeed, lobDir, randomFoodId } from './foods.js';
 
 const PLAYER_COLOR = '#ff9a1f';
-const BOT_COLORS = ['#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#f2f2f2', '#ffcf3a'];
+const BOT_COLORS = ['#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#f2f2f2', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5'];
+export const TITANS = 12;
 const TIDE_PHASES = [
-  { wait: 35, r: 50, shrink: 22, dps: 3 },
-  { wait: 26, r: 32, shrink: 18, dps: 5 },
-  { wait: 22, r: 18, shrink: 16, dps: 8 },
-  { wait: 18, r: 8, shrink: 16, dps: 12 },
-  { wait: 14, r: 0, shrink: 20, dps: 16 },
+  { wait: 45, r: 175, shrink: 25, dps: 2 },
+  { wait: 35, r: 110, shrink: 22, dps: 4 },
+  { wait: 30, r: 65, shrink: 20, dps: 6 },
+  { wait: 25, r: 36, shrink: 18, dps: 8 },
+  { wait: 20, r: 16, shrink: 16, dps: 11 },
+  { wait: 15, r: 0, shrink: 20, dps: 16 },
 ];
 const ENV = new Set(['burner', 'burning', 'tide']);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -40,12 +42,12 @@ export class Game {
     this.projectiles = new Projectiles(this);
     this.items = new Items(this);
     this.actors = [];
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < TITANS; i++) {
       this.actors.push(new Actor(this, { id: i, name: i === 0 ? 'You' : BOT_NAMES[i], color: i === 0 ? PLAYER_COLOR : BOT_COLORS[i - 1], isBot: i > 0 }));
     }
     this.brains = new Map();
     this.player = null;
-    this.tide = { x: 0, z: 0, r: 112, dps: 2, phase: 0, mode: 'wait', t: 99, phases: TIDE_PHASES };
+    this.tide = { x: 0, z: 0, r: 330, dps: 2, phase: 0, mode: 'wait', t: 99, phases: TIDE_PHASES };
     this.hitStopUntil = 0;
     this.camYaw = 0; this.camPivotY = 0; this.camDist = 5.6;
     this.spectate = null;
@@ -57,6 +59,104 @@ export class Game {
     this.previewDots.count = 0;
     scene.add(this.previewDots);
     this._m = new THREE.Matrix4();
+    this.spikes = [];
+    this.spikeGeo = new THREE.ConeGeometry(0.35, 1.6, 6);
+    this.spikeMat = new THREE.MeshStandardMaterial({ color: '#e8b52a', roughness: 0.5, emissive: '#3a2400', emissiveIntensity: 0.3 });
+    this.lockCandidate = null;
+
+    // Soft blob shadows: cheap contact shadows under Titans and pickups (GDD 11.7).
+    const tex = new THREE.CanvasTexture((() => {
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const x = c.getContext('2d'), g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+      g.addColorStop(0, 'rgba(0,0,0,0.55)'); g.addColorStop(0.6, 'rgba(0,0,0,0.25)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+      return c;
+    })());
+    this.blobs = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 }), 128);
+    this.blobs.frustumCulled = false;
+    this.blobs.renderOrder = 2;
+    this.blobs.count = 0;
+    scene.add(this.blobs);
+  }
+
+  // ------------------------------------------------------------------ targeting helpers
+  nearestEnemy(a, range, from = a.pos) {
+    let best = null, bd = range;
+    for (const o of this.actors) {
+      if (o === a || !o.alive) continue;
+      const d = o.pos.distanceTo(from);
+      if (d < bd && hasLineOfSight(_o.copy(from).setY(from.y + 1), o.center(_c))) { bd = d; best = o; }
+    }
+    return best;
+  }
+  // Chili lock-on: the enemy closest to the crosshair inside a 15 degree cone, within 45 m.
+  lockTarget(a) {
+    if (a.isBot) return a.botTarget;
+    let best = null, bestAng = 0.26;
+    const eye = a.headPos(_o);
+    for (const o of this.actors) {
+      if (o === a || !o.alive) continue;
+      _d.subVectors(o.center(_c), eye);
+      const dist = _d.length();
+      if (dist > 45) continue;
+      const ang = Math.acos(clamp(_d.dot(a.aimDir) / dist, -1, 1));
+      if (ang < bestAng && hasLineOfSight(eye, _c)) { bestAng = ang; best = o; }
+    }
+    return best;
+  }
+
+  // ------------------------------------------------------------------ pineapple spike fields
+  addSpikeField(pos, r, dur, dps, owner) {
+    const group = new THREE.Group();
+    group.position.copy(pos);
+    const n = 22;
+    for (let i = 0; i < n; i++) {
+      const s = new THREE.Mesh(this.spikeGeo, this.spikeMat);
+      const a = i * 2.4, d = Math.sqrt((i + 0.5) / n) * r;
+      s.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
+      s.rotation.set(rand(-0.25, 0.25), 0, rand(-0.25, 0.25));
+      s.userData.h = rand(0.7, 1.3);
+      group.add(s);
+    }
+    this.scene.add(group);
+    this.spikes.push({ pos: pos.clone(), r, until: this.time + dur, born: this.time, dps, owner, group, acc: new Map() });
+  }
+  _spikeStep(dt) {
+    for (let i = this.spikes.length - 1; i >= 0; i--) {
+      const z = this.spikes[i];
+      const age = this.time - z.born, left = z.until - this.time;
+      const k = Math.min(1, age / 0.15) * Math.min(1, left / 0.4);
+      for (const s of z.group.children) { s.scale.set(1, Math.max(0.01, k * s.userData.h), 1); s.position.y = 0.8 * k * s.userData.h; }
+      if (left <= 0) { this.scene.remove(z.group); this.spikes.splice(i, 1); continue; }
+      for (const a of this.actors) {
+        if (!a.alive || Math.abs(a.pos.y - z.pos.y) > 1.5 || Math.hypot(a.pos.x - z.pos.x, a.pos.z - z.pos.z) > z.r) continue;
+        const acc = (z.acc.get(a) || 0) + z.dps * dt;
+        if (acc >= 4) { this.damage(a, acc, z.owner === a ? null : z.owner, 'pineapple'); z.acc.set(a, 0); } else z.acc.set(a, acc);
+        a.sticky.push({ amt: 0.15, until: this.time + 0.3 });
+      }
+    }
+  }
+
+  _blobShadows() {
+    let n = 0;
+    const dyn = this.quality.dynamicShadows;
+    const place = (x, y, z, s) => {
+      if (n >= 128) return;
+      this._m.makeScale(s, 1, s).setPosition(x, y + 0.04, z);
+      this.blobs.setMatrixAt(n++, this._m);
+    };
+    if (!dyn) {
+      for (const a of this.actors) {
+        if (!a.alive) continue;
+        const gy = groundHeight(a.pos.x, a.pos.z, a.pos.y + 0.3);
+        const h = a.pos.y - gy;
+        if (h < 40) place(a.pos.x, gy, a.pos.z, 1.5 * clamp(1 - h / 30, 0.35, 1));
+      }
+    }
+    const cam = this.camera.position;
+    for (const it of this.items.list) if (!it.vel && it.mesh.visible && it.pos.distanceToSquared(cam) < 70 * 70) place(it.pos.x, it.pos.y, it.pos.z, 1.3);
+    this.blobs.count = n;
+    this.blobs.instanceMatrix.needsUpdate = true;
   }
 
   aliveCount() { return this.actors.filter((a) => a.alive).length; }
@@ -74,11 +174,11 @@ export class Game {
       a.name = withPlayer && i === 0 ? 'You' : names[i];
       let p;
       for (let k = 0; k < 30; k++) {
-        p = this.world.randomOpenSpot(8);
-        if (spots.every((s) => s.distanceTo(p) > 14)) break;
+        p = this.world.randomOpenSpot(withPlayer && i === 0 ? 'island' : null, 6);
+        if (spots.every((s) => s.distanceTo(p) > 22)) break;
       }
       spots.push(p);
-      a.pos.set(p.x, 30 + rand(0, 7), p.z);
+      a.pos.set(p.x, p.y + 30 + rand(0, 7), p.z);
       a.yaw = Math.atan2(p.x, p.z); // face roughly toward the centre
       a.gliding = true; a.onGround = false;
       a.give('tomato', 2);
@@ -89,8 +189,10 @@ export class Game {
       this.input.yaw = this.player.yaw; this.input.pitch = -0.25;
       this.camPivotY = this.player.pos.y;
     }
-    Object.assign(this.tide, { x: 0, z: 0, r: 112, dps: 2, phase: 0, mode: 'wait', t: TIDE_PHASES[0].wait });
-    this.world.setTide(0, 0, 112);
+    Object.assign(this.tide, { x: 0, z: 0, r: 330, dps: 2, phase: 0, mode: 'wait', t: TIDE_PHASES[0].wait });
+    this.world.setTide(0, 0, 330);
+    for (const z of this.spikes) this.scene.remove(z.group);
+    this.spikes.length = 0;
     this.items.fillSpawners(this.time);
     this.state = 'drop'; this.stateT = 0;
     this.spectate = null; this.endAt = 0; this.winner = null;
@@ -191,6 +293,7 @@ export class Game {
     if (L.hp > 0) return;
     // burst: harvest the giant tomato (GDD 2.3 landmark foods)
     L.alive = false; L.group.visible = false; L.collider.enabled = false; L.regrowAt = this.time + 40;
+    this.world.shadowDirty = true;
     const c = _c.set(L.x, L.y, L.z);
     for (let i = 0; i < 3; i++) this.fx.burst('tomato', _o.copy(c).add(_v.set(rand(-3, 3), rand(-2, 3), rand(-3, 3))), 2);
     for (let i = 0; i < 9; i++) this.world.paintSplat(L.x + rand(-8, 8), 0, L.z + rand(-8, 8), rand(2, 4), 'tomato');
@@ -283,6 +386,9 @@ export class Game {
     for (const a of this.actors) a.updateVisual(realDt, this.camera);
     this._camera(realDt);
     this._preview();
+    this._blobShadows();
+    const held = this.player?.alive ? this.player.selected()?.id : null;
+    this.lockCandidate = held === 'chili' ? this.lockTarget(this.player) : null;
     this.hud.update(this, realDt);
   }
 
@@ -307,6 +413,7 @@ export class Game {
     this.projectiles.update(dt);
     this.items.update(dt);
     this.surface.update(dt, this.time);
+    this._spikeStep(dt);
     this.world.update(dt, this.time, this.fx, this.sfx);
     this.fx.update(dt);
     if (this.state === 'play' && Math.random() < dt * 30) this._tideBubbles();
@@ -323,9 +430,10 @@ export class Game {
         T.from = { x: T.x, z: T.z, r: T.r };
         const slack = Math.max(0, T.r - P.r);
         const a = rand(0, Math.PI * 2), d = rand(0, slack * 0.8);
-        T.to = { x: clamp(T.x + Math.cos(a) * d, -40, 40), z: clamp(T.z + Math.sin(a) * d, -18, 18), r: P.r };
+        T.to = { x: clamp(T.x + Math.cos(a) * d, -170, 170), z: clamp(T.z + Math.sin(a) * d, -110, 130), r: P.r };
         T.dps = P.dps;
         this.sfx.play('tide', null, 0.7);
+        this._groceryDrop(T.to);
         if (this.player) this.hud.banner('The Soap Tide is rising', 'Get inside the circle', 2);
       }
     } else {
@@ -339,12 +447,27 @@ export class Game {
     this.world.setTide(T.x, T.z, T.r);
   }
 
+  // Grocery drops (GDD 3.2): fresh food falls from the ceiling inside the next safe zone.
+  _groceryDrop(zone) {
+    const n = 7;
+    for (let i = 0; i < n; i++) {
+      const ang = rand(0, Math.PI * 2), d = Math.sqrt(Math.random()) * Math.max(4, zone.r * 0.85);
+      const x = zone.x + Math.cos(ang) * d, z = zone.z + Math.sin(ang) * d;
+      const top = groundHeight(x, z, 500, 0, 1);
+      const floorish = groundHeight(x, z, top + 0.1);
+      if (top > floorish + 1) continue; // landed on something tall: skip this one
+      const id = randomFoodId();
+      this.items.drop(id, FOODS[id].give, _o.set(x, top + 45 + rand(0, 15), z), _v.set(0, -6, 0));
+    }
+    if (this.player) this.hud.toast('Grocery drop inside the circle');
+  }
+
   _tideBubbles() {
     const T = this.tide;
     if (T.r < 1) return;
     const a = rand(0, Math.PI * 2);
     const p = _o.set(T.x + Math.cos(a) * T.r, 0, T.z + Math.sin(a) * T.r);
-    if (Math.abs(p.x) > 60 || Math.abs(p.z) > 32) p.y = FLOOR_Y;
+    p.y = groundHeight(p.x, p.z, 50);
     this.fx.burst('bubbles', p);
   }
 

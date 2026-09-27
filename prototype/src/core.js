@@ -5,7 +5,7 @@ import * as THREE from 'three';
 export const G = 20; // gravity, tuned slightly above Earth for snappier jumps
 export const COUNTER = { minX: -60, maxX: 60, minZ: -32, maxZ: 32, top: 0 };
 export const FLOOR_Y = -36; // the kitchen floor, one counter-height below
-export const FLOOR_BOUNDS = { minX: -118, maxX: 118, minZ: -84, maxZ: 84 };
+export const FLOOR_BOUNDS = { minX: -240, maxX: 240, minZ: -176, maxZ: 166 };
 export const STEP = 0.6;
 
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);

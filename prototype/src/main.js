@@ -5,14 +5,22 @@ import { Game } from './game.js';
 import { HUD } from './hud.js';
 import { Input } from './input.js';
 import { Sfx } from './fx.js';
-import { FOODS, FOOD_IDS, makeFoodMesh } from './foods.js';
+import { FOODS, FOOD_IDS, makeFoodMesh, setFoodShadows } from './foods.js';
+import { TITANS } from './game.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const $ = (id) => document.getElementById(id);
 
+// Low: no shadow map, blob shadows. Medium: shadows baked once (static scenery) plus blob
+// shadows. High: shadows every frame for everything, plus bloom. All tiers scale resolution
+// automatically to hold the frame rate (GDD 11.5-11.7).
 const QUALITY = {
-  low: { name: 'Low', pixelRatio: 0.75, shadows: 0, particles: 0.4, splatRes: 1024, antialias: false },
-  medium: { name: 'Medium', pixelRatio: 1, shadows: 1024, particles: 0.7, splatRes: 1536, antialias: true },
-  high: { name: 'High', pixelRatio: Math.min(devicePixelRatio || 1, 2), shadows: 2048, particles: 1, splatRes: 2048, antialias: true },
+  low: { name: 'Low', pixelRatio: Math.min(devicePixelRatio || 1, 1.25) * 0.75, shadows: 0, dynamicShadows: false, bloom: false, particles: 0.4, splatRes: 1024, antialias: false },
+  medium: { name: 'Medium', pixelRatio: Math.min(devicePixelRatio || 1, 1.5), shadows: 2048, dynamicShadows: false, bloom: false, particles: 0.7, splatRes: 1536, antialias: true },
+  high: { name: 'High', pixelRatio: Math.min(devicePixelRatio || 1, 2), shadows: 4096, dynamicShadows: true, bloom: true, particles: 1, splatRes: 2048, antialias: true },
 };
 
 function readQuality() {
@@ -77,13 +85,18 @@ function boot() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
-  if (quality.shadows) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; }
+  if (quality.shadows) {
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.shadowMap.autoUpdate = quality.dynamicShadows; // Medium bakes the static scenery once
+  }
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 1400);
   const input = new Input(canvas);
   const sfx = new Sfx();
   const icons = renderIcons();
+  setFoodShadows(quality.dynamicShadows);
   const hud = new HUD(icons, input);
   const game = new Game({ renderer, scene, camera, quality, hud, input, sfx });
   window.__game = game; // handy for debugging in the console
@@ -140,7 +153,7 @@ function boot() {
     if (type === 'playerDown') {
       const k = data.killer ? `${data.killer.name} got you` : 'The kitchen got you';
       $('end-title').textContent = 'Splatted!';
-      $('end-sub').textContent = `${k}. You placed #${data.placement} of 8.`;
+      $('end-sub').textContent = `${k}. You placed #${data.placement} of ${TITANS}.`;
       $('end-kills').textContent = game.player.kills;
       $('end-place').textContent = `#${data.placement}`;
       $('spectate').hidden = false;
@@ -176,19 +189,50 @@ function boot() {
     if (phase === 'end') stick.classList.remove('on');
   };
 
-  addEventListener('resize', () => {
+  // Bloom on High: emissive burners, honey, sunlight and the carrot glint glow.
+  let composer = null;
+  if (quality.bloom) {
+    composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
+    composer.addPass(new RenderPass(scene, camera));
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.32, 0.45, 0.88));
+    composer.addPass(new OutputPass());
+    composer.setPixelRatio(quality.pixelRatio);
+    composer.setSize(innerWidth, innerHeight);
+  }
+
+  // Dynamic resolution: drop render scale when the frame rate sags, restore it when there's headroom.
+  let resScale = 1, fpsEma = 60, adjustT = 0;
+  const applyScale = () => {
+    renderer.setPixelRatio(quality.pixelRatio * resScale);
     renderer.setSize(innerWidth, innerHeight, false);
+    if (composer) { composer.setPixelRatio(quality.pixelRatio * resScale); composer.setSize(innerWidth, innerHeight); }
+  };
+  game.perf = { get scale() { return resScale; }, get fps() { return fpsEma; } };
+
+  addEventListener('resize', () => {
+    applyScale();
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
   });
 
   game.newMatch(false); // bots fight behind the menu
   let last = performance.now();
+  renderer.info.autoReset = false; // count draw calls across all passes for the perf readout
   renderer.setAnimationLoop((now) => {
+    renderer.info.reset();
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000)); // rAF time can precede `last`
     last = now;
     game.update(dt);
-    renderer.render(scene, camera);
+    if (game.world.shadowDirty && quality.shadows && !quality.dynamicShadows) { renderer.shadowMap.needsUpdate = true; game.world.shadowDirty = false; }
+    if (composer) composer.render(dt); else renderer.render(scene, camera);
+
+    if (dt > 0) fpsEma += (1 / dt - fpsEma) * 0.05;
+    adjustT += dt;
+    if (adjustT > 1.2) {
+      adjustT = 0;
+      if (fpsEma < 50 && resScale > 0.55) { resScale = Math.max(0.55, resScale - 0.1); applyScale(); }
+      else if (fpsEma > 58 && resScale < 1) { resScale = Math.min(1, resScale + 0.05); applyScale(); }
+    }
   });
 }
 

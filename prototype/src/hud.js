@@ -55,7 +55,11 @@ export class HUD {
     const cam = game.camera;
     // FPS
     this.fpsAcc += dt; this.fpsN++;
-    if (this.fpsAcc > 0.5) { $('fps').textContent = `${Math.round(this.fpsN / this.fpsAcc)} fps`; this.fpsAcc = 0; this.fpsN = 0; }
+    if (this.fpsAcc > 0.5) {
+      const info = game.renderer.info.render, scale = game.perf ? game.perf.scale : 1;
+      $('fps').textContent = `${Math.round(this.fpsN / this.fpsAcc)} fps · ${info.calls} draw calls · ${Math.round(scale * 100)}% resolution`;
+      this.fpsAcc = 0; this.fpsN = 0;
+    }
 
     $('alive').textContent = game.aliveCount();
     const T = game.tide;
@@ -149,6 +153,7 @@ export class HUD {
       el.querySelector('.h').style.width = `${Math.max(0, a.hp)}%`;
       el.querySelector('.g').style.width = `${Math.max(0, a.glaze)}%`;
       el.style.setProperty('--c', a.color);
+      el.classList.toggle('locked', a === game.lockCandidate);
     }
   }
 

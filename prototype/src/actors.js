@@ -1,6 +1,7 @@
 // Tiny Titans: shared by the player and bots. Movement kit, statuses and inventory follow
 // GDD sections 4-5 (hard-CC diminishing returns, 50% slow cap, Wet cleansing, Glaze shield).
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   G, FLOOR_Y, clamp, rand, damp, angleLerp, forwardOf, rightOf,
   groundHeight, resolveHorizontal,
@@ -26,6 +27,42 @@ function glintTexture() {
 }
 let GLINT_TEX = null;
 
+// Merged, shared Titan body geometry (one BufferGeometry per material).
+let TITAN_GEO = null;
+function titanGeometry() {
+  if (TITAN_GEO) return TITAN_GEO;
+  const M = (x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => new THREE.Matrix4().compose(
+    new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(sx, sy, sz));
+  const hat = M(0, 1.88, 0, 0, 0, -0.12);
+  const put = (g, m) => g.applyMatrix4(m);
+  const eyeG = () => new THREE.SphereGeometry(0.12, 12, 10), pupG = () => new THREE.SphereGeometry(0.06, 10, 8);
+  const puffs = [[-0.14, 0], [0.14, 0], [0, 0.13], [0, -0.13], [0, 0]].map(([x, z]) => put(new THREE.SphereGeometry(0.2, 12, 10), hat.clone().multiply(M(x, 0.42, z))));
+  TITAN_GEO = {
+    skin: mergeGeometries([put(new THREE.CapsuleGeometry(0.42, 0.45, 6, 16), M(0, 0.72, 0)), put(new THREE.SphereGeometry(0.43, 24, 18), M(0, 1.52, 0))]),
+    belly: put(new THREE.SphereGeometry(0.34, 16, 12), M(0, 0.66, 0.2, 0, 0, 0, 1, 1.1, 0.55)),
+    white: mergeGeometries([
+      put(eyeG(), M(-0.16, 1.58, 0.36)), put(eyeG(), M(0.16, 1.58, 0.36)),
+      put(new THREE.CylinderGeometry(0.28, 0.26, 0.3, 20), hat.clone().multiply(M(0, 0.2, 0))), ...puffs,
+    ]),
+    black: mergeGeometries([
+      put(pupG(), M(-0.16, 1.58, 0.46)), put(pupG(), M(0.16, 1.58, 0.46)),
+      put(new THREE.TorusGeometry(0.08, 0.025, 6, 12, Math.PI), M(0, 1.4, 0.4, 0, 0, Math.PI)),
+    ]),
+    band: put(new THREE.CylinderGeometry(0.3, 0.3, 0.14, 20), hat.clone()),
+  };
+  return TITAN_GEO;
+}
+
+// A soft rim light keeps Titans readable against busy food splats (GDD 11.1).
+function addRimLight(mat) {
+  mat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      float rimF = 1.0 - clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0);
+      totalEmissiveRadiance += vec3(1.0, 0.9, 0.75) * 0.45 * pow(rimF, 2.6);`);
+  };
+  mat.customProgramCacheKey = () => 'titan-rim';
+}
+
 export class Actor {
   constructor(game, { id, name, color, isBot }) {
     this.game = game;
@@ -41,7 +78,7 @@ export class Actor {
     this.vel.set(0, 0, 0); this.yaw = 0; this.onGround = false; this.gliding = false;
     this.inv = [null, null, null, null, null]; this.sel = 0;
     this.sticky = []; this.surfaceSlow = 0; this.surfaceSlowUntil = 0;
-    this.frozenUntil = 0; this.trippedUntil = 0; this.wetUntil = 0; this.burnUntil = 0; this.juicedUntil = 0;
+    this.frozenUntil = 0; this.trippedUntil = 0; this.rootedUntil = 0; this.lastDodgeAt = -99; this.botTarget = null; this.wetUntil = 0; this.burnUntil = 0; this.juicedUntil = 0;
     this.knockUntil = 0; this.stunUntil = 0; this.ccLog = [];
     this.dodgeReadyAt = 0; this.recoverUntil = 0; this.swapLockUntil = 0;
     this.charging = false; this.chargeT = 0; this.primaryPrev = false;
@@ -65,37 +102,12 @@ export class Actor {
     const black = new THREE.MeshStandardMaterial({ color: '#1d1620', roughness: 0.3 });
     this.skinMat = skin;
 
-    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.45, 6, 16), skin);
-    torso.position.y = 0.72;
-    const tummy = new THREE.Mesh(new THREE.SphereGeometry(0.34, 16, 12), belly);
-    tummy.scale.set(1, 1.1, 0.55); tummy.position.set(0, 0.66, 0.2);
-    const head = new THREE.Group();
-    head.position.y = 1.52;
-    const skull = new THREE.Mesh(new THREE.SphereGeometry(0.43, 24, 18), skin);
-    const eyeG = new THREE.SphereGeometry(0.12, 12, 10), pupG = new THREE.SphereGeometry(0.06, 10, 8);
-    for (const s of [-1, 1]) {
-      const eye = new THREE.Mesh(eyeG, white);
-      eye.position.set(s * 0.16, 0.06, 0.36);
-      const pup = new THREE.Mesh(pupG, black);
-      pup.position.set(s * 0.16, 0.06, 0.46);
-      head.add(eye, pup);
+    // Static body parts are merged per material (5 draw calls instead of ~20) and shared by all Titans.
+    const G = titanGeometry();
+    for (const [g, m] of [[G.skin, skin], [G.belly, belly], [G.white, white], [G.black, black], [G.band, new THREE.MeshStandardMaterial({ color: this.color, roughness: 0.5 })]]) {
+      body.add(new THREE.Mesh(g, m));
     }
-    const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.025, 6, 12, Math.PI), black);
-    mouth.position.set(0, -0.12, 0.4); mouth.rotation.z = Math.PI;
-    // chef hat with a coloured band
-    const hat = new THREE.Group();
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.14, 20), new THREE.MeshStandardMaterial({ color: this.color, roughness: 0.5 }));
-    const puffG = new THREE.SphereGeometry(0.2, 12, 10);
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.26, 0.3, 20), white);
-    tube.position.y = 0.2;
-    hat.add(band, tube);
-    for (const [x, z] of [[-0.14, 0], [0.14, 0], [0, 0.13], [0, -0.13], [0, 0]]) {
-      const puff = new THREE.Mesh(puffG, white);
-      puff.position.set(x, 0.42, z);
-      hat.add(puff);
-    }
-    hat.position.y = 0.36; hat.rotation.z = -0.12;
-    head.add(skull, mouth, hat);
+    addRimLight(skin);
 
     const armG = new THREE.CapsuleGeometry(0.1, 0.35, 4, 8);
     const mkArm = (s) => {
@@ -119,8 +131,6 @@ export class Actor {
       body.add(f);
       return f;
     });
-    body.add(torso, tummy, head);
-    this.head = head;
 
     // napkin glider
     const napkinTex = (() => {
@@ -155,7 +165,7 @@ export class Actor {
     this.glint.renderOrder = 10;
     this.game.scene.add(this.glint);
 
-    root.traverse((o) => { if (o.isMesh) { o.castShadow = !!this.game.quality.shadows; } });
+    root.traverse((o) => { if (o.isMesh) { o.castShadow = !!this.game.quality.dynamicShadows; } });
     this.iceBlock.castShadow = false;
     this.root = root; this.body = body;
     this.heldMesh = null; this.heldId = null;
@@ -197,7 +207,8 @@ export class Actor {
   canControl() { const t = this.game.time; return this.alive && t >= this.frozenUntil && t >= this.trippedUntil && t >= this.stunUntil; }
   selected() { return this.inv[this.sel]; }
   selectedFood() { const s = this.inv[this.sel]; return s ? FOODS[s.id] : null; }
-  heavy() { return this.shieldUp; }
+  heavy() { return this.shieldUp || this.inv[this.sel]?.id === 'watermelon'; }
+  isRooted() { return this.game.time < this.rootedUntil; }
   slowAmount() {
     const t = this.game.time;
     let s = 0;
@@ -209,6 +220,7 @@ export class Actor {
     const t = this.game.time, out = [];
     if (this.isFrozen()) out.push(['frozen', 'Frozen']);
     if (this.isTripped()) out.push(['tripped', 'Slipped']);
+    if (this.isRooted()) out.push(['rooted', 'Rooted']);
     if (t < this.juicedUntil) out.push(['juiced', 'Juiced']);
     const slow = this.slowAmount();
     if (slow > 0.01) out.push(['sticky', `Sticky -${Math.round(slow * 100)}%`]);
@@ -260,6 +272,7 @@ export class Actor {
     this.ccLog.push({ t, dur });
     if (kind === 'frozen') this.frozenUntil = t + dur;
     if (kind === 'tripped') this.trippedUntil = t + dur;
+    if (kind === 'rooted') { this.rootedUntil = t + dur; return true; } // rooted Titans can still throw
     this.charging = false; this.eat = null;
     return true;
   }
@@ -319,7 +332,7 @@ export class Actor {
     this.sticky = this.sticky.filter((e) => e.until > now);
 
     // environment
-    if (this.onGround && W.inSpill(this.pos)) this.setWet(4);
+    if (this.onGround && W.inWater(this.pos)) this.setWet(4);
     if (this.onGround && W.onBurner(this.pos)) {
       this.envAcc += 20 * dt; this.burn(3);
       if (this.envAcc >= 5) { g.damage(this, this.envAcc, null, 'burner'); this.envAcc = 0; }
@@ -329,9 +342,10 @@ export class Actor {
       if (this.burnAcc >= 2) { g.damage(this, this.burnAcc, null, 'burning'); this.burnAcc = 0; }
       if (Math.random() < dt * 12) g.fx.burst('ember', this.center(_v));
     }
-    if (this.onGround && W.inHoney(this.pos) && this.glaze < 100 && W.honey.cap > 0) {
-      const gain = Math.min(30 * dt, 100 - this.glaze, W.honey.cap);
-      this.glaze += gain; W.honey.cap -= gain;
+    const honey = this.onGround && this.glaze < 100 ? W.inHoney(this.pos) : null;
+    if (honey && honey.cap > 0) {
+      const gain = Math.min(30 * dt, 100 - this.glaze, honey.cap);
+      this.glaze += gain; honey.cap -= gain;
       if (now > this.honeySfxAt) { g.sfx.play('glaze', this.pos, 0.6); this.honeySfxAt = now + 0.4; g.fx.burst('honey', this.center(_v)); }
     }
     const tide = g.tide;
@@ -347,10 +361,11 @@ export class Actor {
     this.onSlick = !!cell && (cell.state === 'ice' || cell.state === 'slick');
     if (cell && cell.state === 'sticky' && !this.isWet()) { this.surfaceSlow = cell.slow; this.surfaceSlowUntil = now + 0.5; }
 
-    const control = this.canControl();
+    const control = this.canControl() && !this.isRooted();
     const slow = this.slowAmount();
     let speed = (it.sprint && !this.heavy() ? 7.2 : 4.6) * (1 - slow);
     if (this.shieldUp) speed *= 0.75;
+    else if (this.heavy()) speed *= 0.85; // lugging a watermelon
     if (this.eat) speed *= 0.5;
     if (this.charging && this.selected()?.id === 'carrot') speed *= 0.6;
     let accel = this.onGround ? 55 : 10;
@@ -374,7 +389,7 @@ export class Actor {
       d.normalize();
       this.vel.x = d.x * 15; this.vel.z = d.z * 15;
       if (this.onGround) this.vel.y = 3;
-      this.dodgeReadyAt = now + 1.5; this.knockUntil = now + 0.25; this.rollT = 0.4;
+      this.dodgeReadyAt = now + 1.5; this.knockUntil = now + 0.25; this.rollT = 0.4; this.lastDodgeAt = now;
       for (const e of this.sticky) e.until -= 1; // Duck & Roll sheds 1 s of sticky
       g.sfx.play('dodge', this.pos);
     }
@@ -512,11 +527,12 @@ export class Actor {
     this.armL.pivot.rotation.x = damp(this.armL.pivot.rotation.x, lx, 20, dt);
     this.feet[0].position.z = 0.05 + (moving ? Math.sin(this.walkPhase) * 0.18 : 0);
     this.feet[1].position.z = 0.05 - (moving ? Math.sin(this.walkPhase) * 0.18 : 0);
-    this.head.rotation.x = this.eat ? Math.sin(t * 20) * 0.15 : 0;
 
     this.napkin.visible = this.gliding;
     if (this.gliding) this.napkin.rotation.z = Math.sin(t * 3) * 0.08;
-    this.iceBlock.visible = this.isFrozen();
+    const rooted = this.isRooted();
+    this.iceBlock.visible = this.isFrozen() || rooted;
+    if (this.iceBlock.visible) this.iceBlock.material.color.set(rooted && !this.isFrozen() ? '#7be07a' : '#d4f1ff');
     if (this.heldMesh) this.heldMesh.visible = !this.shieldUp;
     this.shieldMesh.visible = this.shieldUp;
 

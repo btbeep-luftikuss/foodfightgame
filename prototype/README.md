@@ -2,23 +2,25 @@
 
 This is the Phase 0 "Food Feel" prototype from the [Game Design Document](../docs/GDD.md) (§18.3, §18.5). It exists to test one question: **is throwing food at each other fun?**
 
-You play one Tiny Titan against 7 bots on the kitchen island countertop. You drop in on a napkin glider, grab food, and fight until one Titan is left or the Soap Tide washes everyone away. Matches last about 2–3 minutes.
+You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop in on a napkin glider, grab food, and fight until one Titan is left or the Soap Tide washes everyone away. Matches last about 4–5 minutes.
+
+**Version 0.2** made the map bigger, doubled the food roster to 12, and optimized the graphics (see "Performance" below).
 
 ## What's in it
 
 | Area | Included |
 |---|---|
-| Foods (6 of 30) | Tomato, Banana (+ Peel), Carrot, Ice Cube, Soda Can, Cheese Wheel, with GDD numbers, alt actions and counterplay |
-| Combat | Launch profiles (Lob, Line, Return, Roll, Place), charge-to-throw, face hits, splash falloff, knockback, swap lockout |
-| Statuses | Sticky (50% slow cap), Juiced drip trail, Slick, Frozen and Shatter, Tripped, Burning, Wet (cleanses; freezes last longer), Glaze shield |
+| Foods (12 of 30) | Tomato, Banana (+ Peel), Carrot, Ice Cube, Soda Can, Cheese Wheel, Grapes, Chili Pepper, Cookie, Watermelon, Pineapple, Jelly Cube, with GDD numbers, alt actions and counterplay |
+| Combat | Launch profiles (Lob, Line, Return, Roll, Spray, Seek, Place), charge-to-throw, face hits, splash falloff, knockback, swap lockout, chili lock-on, cookies you can shoot down, sticky pineapples you can roll off |
+| Statuses | Sticky (50% slow cap), Juiced drip trail, Slick, Frozen and Shatter, Tripped, Rooted (can still throw), Burning, Wet (cleanses; freezes last longer), Glaze shield |
 | Fairness rules | Shared hard-CC diminishing returns (2nd = 50%, 3rd = immune, max 2.5 s per 6 s), eating interrupted by 25+ damage, banana bruising |
 | Systems | Surface State Grid (ice rinks, soda puddles, melt pools), splat canvas (stains painted onto the counter), Fire + Ice = steam |
-| Map | Countertop at 1:40 scale with cereal boxes, jam jar, mug, toaster, cutting board, plate, a hot-plate burner, a water spill, a honey pool, a giant tomato you can harvest, and spatula launch pads on the floor |
-| Match | Napkin-glider drop, Soap Tide closing in 5 phases, kill feed, spectating, win screen |
+| Map | The whole kitchen at 1:40 scale (about 480 × 340 m). The island (cereal boxes, jam jar, mug, toaster, hot plate, water spill, honey, giant tomato). A 440 m back counter with sink, stove burners, stock pot, coffee maker and fridge. A dining table with chairs, plates and glasses that you can stand on or hide under. The floor, with crumbs, a fallen cereal box and a wooden spoon. 12 spatula launch pads |
+| Match | 12 Titans, napkin-glider drop, Soap Tide closing in 6 phases, grocery drops inside each new safe zone, kill feed, spectating, win screen |
 | Movement | Walk, sprint, jump, Duck & Roll, momentum skating on slick surfaces, no fall damage |
-| Bots | Pick targets, choose food by range, lead shots with the same ballistic math, dodge, strafe, loot, heal, avoid the burner and edges |
-| Presentation | Procedural textures, synthesized sound, pooled instanced particles, hit markers, damage numbers, hit-stop, screen shake |
-| Platforms | Desktop (mouse and keyboard, pointer lock) and phones (touch joystick and buttons); Low, Medium and High graphics |
+| Bots | Pick targets, choose food by range, lead shots with the same ballistic math, dodge, strafe, loot, heal, hunt, walk around walls, use launch pads to reach the safe zone, avoid burners and ledges |
+| Presentation | Procedural textures, synthesized sound, pooled instanced particles, rim-lit characters, soft contact shadows, sunbeam and dust, bloom (High), hit markers, damage numbers, hit-stop, screen shake |
+| Platforms | Desktop (mouse and keyboard, pointer lock) and phones (touch joystick and buttons); Low, Medium and High graphics with automatic resolution scaling |
 
 ## Run it
 
@@ -63,20 +65,43 @@ npm run dev          # http://localhost:5173
 | `src/game.js` | Match flow, damage and kills, Soap Tide, camera, aim preview |
 | `src/hud.js`, `src/input.js`, `src/fx.js` | HUD, controls, particles, sound |
 
+## Performance
+
+The GDD asks for high fidelity that stays smooth (§11), so 0.2 added the following:
+
+| Technique | Effect |
+|---|---|
+| Static scenery merged by material | 291 scenery meshes become 91 draw calls |
+| Titan bodies merged per material and shared | About 20 meshes per Titan become 5, with one shared geometry for all 12 |
+| Food models merged and shared | A bunch of grapes goes from 17 meshes to 2; every pickup, held item and projectile shares one geometry |
+| Shadows baked once on Medium | The shadow map renders once instead of every frame; soft blob shadows ground the moving objects |
+| Dynamic resolution | Render scale drops (down to 55%) when the frame rate falls below 50 and recovers above 58 |
+| Distance culling for pickups | Food further than 130 m isn't drawn |
+| Bloom only on High | Glowing burners, honey and sunlight cost nothing on Low or Medium |
+
+Measured from the same wide shot of the whole kitchen, old build (small map, 8 Titans) against new build (whole kitchen, 12 Titans), in a software-rendered test browser:
+
+| Quality | Draw calls | Render time per frame |
+|---|---|---|
+| Low | 385 → 258 | 2.8 → 2.5 ms |
+| Medium | 601 → 289 | 4.6 → 2.9 ms |
+| High | 587 → 491 (now with bloom and every-frame shadows) | 4.7 → 3.7 ms |
+
+The game shows its frame rate, draw calls and render scale in the bottom-left corner while you play.
+
 ## Balance check
 
-Balance was checked by fast-forwarding bot-only matches in a headless browser (about 5 matches per run). In the last run:
+Balance was checked by fast-forwarding bot-only matches in a headless browser. With 12 foods, no food deals more than 15% of all damage. Tomato leads as the common staple; Ice Cube, Jelly Cube and Pineapple deal little damage because they are control tools.
 
-- Eliminations came from every food plus the environment.
-- Banana and Tomato each dealt about a quarter of all damage.
-- Carrot, Soda Can and Cheese Wheel dealt 13–15% each.
-- Ice Cube dealt about 2%, as a control tool.
+What the checks caught along the way:
 
-Earlier runs caught a Banana that caused almost half of all eliminations. It was infinite ammo because catching it refunded it. Bruising (three throws, then mush) and a damage cut fixed that.
+- **Banana:** it caused almost half of all eliminations, because catching it refunded it (infinite ammo). Bruising (three throws, then mush) and a damage cut fixed that.
+- **Soap Tide on the big map:** it caused 57% of eliminations. Bots walked into the island's side trying to reach a safe zone on the counter, and ran out of food in the final circle. Wall-following, launch-pad routing, hunting and grocery drops brought it down to roughly 15–40% depending on the run, mostly from the final circle closing.
+- **Cookie:** it orbited its target instead of hitting it, because its turning circle was as wide as the gap. Seekers now turn harder within 20 m.
 
 ## Known limits
 
 - Bots only; there is no online multiplayer yet. That is the next prototype milestone (GDD §18.3, weeks 7–8).
-- Bots navigate in straight lines with simple unsticking, and have no pathfinding.
-- The 1:40 kitchen is only as big as the island plus the floor around it; the rest is scenery.
+- Bots steer with simple wall-following and launch pads rather than real pathfinding.
+- The upper cabinets, window sill and ceiling pot rack are scenery; they aren't reachable yet.
 - Changing graphics quality reloads the page.

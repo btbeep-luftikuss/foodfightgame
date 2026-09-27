@@ -76,6 +76,7 @@ button { font: inherit; color: inherit; }
 .chip.juiced, .chip.burning { border-color: var(--tomato); color: #ffb3a6; }
 .chip.sticky { border-color: #c98a4a; color: #f3c89a; }
 .chip.slick, .chip.tripped { border-color: var(--butter); color: var(--butter); }
+.chip.rooted { border-color: var(--basil); color: #a8ecc8; }
 .chip.shield { border-color: var(--butter); color: var(--butter); }
 .bars { width: 100%; display: grid; gap: 4px; }
 .bar { position: relative; height: 14px; border-radius: 7px; background:
@@ -110,6 +111,8 @@ button { font: inherit; color: inherit; }
 .banner strong { font-family: var(--display); font-weight: 400; font-size: clamp(34px, 7vw, 64px); color: var(--butter); text-shadow: 3px 4px 0 var(--tomato), 0 0 24px rgba(34,20,42,0.6); line-height: 1; }
 .banner span { font-weight: 700; background: var(--ink-glass); padding: 4px 12px; border-radius: 999px; }
 .plate { position: absolute; left: 0; top: 0; display: grid; justify-items: center; gap: 2px; will-change: transform; }
+.plate.locked::before { content: ""; position: absolute; left: 50%; top: 100%; width: 34px; height: 34px; margin: 4px 0 0 -17px; border: 3px solid var(--tomato); border-radius: 8px; transform: rotate(45deg); animation: lock 0.6s ease-in-out infinite alternate; }
+@keyframes lock { to { transform: rotate(45deg) scale(0.8); } }
 .plate .name { font-size: 12px; font-weight: 800; color: var(--paper); text-shadow: 0 1px 2px var(--ink), 0 0 6px var(--ink); }
 .plate .mini { position: relative; width: 44px; height: 6px; background: rgba(34,20,42,0.75); border-radius: 3px; overflow: hidden; display: grid; }
 .plate .mini i { grid-area: 1/1; height: 100%; }
@@ -150,7 +153,7 @@ button { font: inherit; color: inherit; }
 
 /* ------------------------------------------------------------------ menus */
 .menu { position: fixed; inset: 0; display: flex; align-items: stretch; pointer-events: none; }
-.menu-panel { pointer-events: auto; width: min(470px, 100%); box-sizing: border-box; overflow-y: auto; background: var(--ink-glass);
+.menu-panel { pointer-events: auto; width: min(520px, 100%); box-sizing: border-box; overflow-y: auto; background: var(--ink-glass);
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); padding: calc(28px + env(safe-area-inset-top, 0px)) 28px calc(24px + env(safe-area-inset-bottom, 0px));
   display: grid; align-content: start; gap: 18px; -webkit-user-select: text; user-select: text; touch-action: pan-y; }
 .eyebrow { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--glaze); font-weight: 700; margin: 0; }
@@ -171,9 +174,9 @@ h2 { margin: 0; font-size: 11px; letter-spacing: 0.14em; text-transform: upperca
 .keys dt { white-space: nowrap; }
 .keys dd { margin: 0; color: var(--paper-dim); }
 kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: var(--paper); color: var(--ink); border-radius: 5px; padding: 2px 6px; box-shadow: 0 2px 0 var(--paper-dim); }
-.legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.legend li { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: center; }
-.legend img { width: 44px; height: 44px; border-radius: 50%; background: radial-gradient(circle, #fffaf2 0 60%, #e9dccb 61%); }
+.legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px 14px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.legend li { display: grid; grid-template-columns: 40px 1fr; gap: 8px; align-items: start; }
+.legend img { width: 40px; height: 40px; border-radius: 50%; background: radial-gradient(circle, #fffaf2 0 60%, #e9dccb 61%); }
 .legend b { display: block; font-size: 14px; }
 .legend span { font-size: 12.5px; color: var(--paper-dim); line-height: 1.35; }
 .foot { font-size: 11.5px; color: var(--paper-dim); margin: 0; line-height: 1.5; }
@@ -251,9 +254,9 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 
 <section id="menu" class="menu" aria-label="Main menu">
   <div class="menu-panel">
-    <p class="eyebrow">Prototype 0.1 · Chop Block Central</p>
+    <p class="eyebrow">Prototype 0.2 · The Grand Kitchen</p>
     <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
-    <p class="lede">You're frog-sized. The kitchen island is a 120&nbsp;m plateau. <b>Food is the only weapon.</b> Drop in with 7 bots, grab what's lying around, and be the last Titan standing when the Soap Tide closes in.</p>
+    <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Drop in with 11 bots and be the last Titan standing when the Soap Tide closes in.</p>
     <div class="row">
       <button id="play" class="btn" type="button">Play</button>
       <label class="field" for="quality">Graphics
@@ -283,8 +286,8 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     </dl>
     <h2>On the menu today</h2>
     <ul id="legend" class="legend"></ul>
-    <p class="foot">Hazards: the hot plate cycles on (don't stand on it), spilled water makes you Wet (cleanses sticky and fire, but freezes last longer), the honey pool refills your Glaze shield, and the red spatula pads on the floor fling you back up. Smash the giant tomato for extra ammo.</p>
-    <p class="foot">Phase 0 "Food Feel" prototype of the Tiny Titans design document: 6 of 30 foods, one countertop, bots only.</p>
+    <p class="foot">Hazards: the three burners cycle on (don't stand on them), the sink and spilled water make you Wet (cleanses sticky and fire, but freezes last longer), honey pools refill your Glaze shield, and the red spatula pads on the floor fling you up onto the counters and the table. Smash the giant tomato for extra ammo.</p>
+    <p class="foot">Prototype of the Tiny Titans design document: 12 of 30 foods, the whole kitchen, 12 Titans, bots only.</p>
   </div>
   <p class="live">Bots are fighting live behind this menu</p>
 </section>

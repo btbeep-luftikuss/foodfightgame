@@ -1,8 +1,9 @@
-// The arena: the island countertop of the Grand Kitchen (GDD 9.2 "Chop Block Central")
-// at 1:40 scale, plus a decorative giant kitchen around it for scale.
+// The Grand Kitchen at 1:40 scale (GDD 2.2, 9): the island, the back counter with sink,
+// stove and fridge, the dining table and the whole floor are playable.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { G, COUNTER, FLOOR_Y, addBox, addCyl, clearColliders, rand, clamp } from './core.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { G, COUNTER, FLOOR_Y, addBox, addCyl, clearColliders, groundHeight, rand, clamp } from './core.js';
 
 // ---------------------------------------------------------------------------
 // Procedural textures (no image files).
@@ -104,50 +105,102 @@ function cerealLabel(ctx, w, h) {
   ctx.fillText('PART OF A BALANCED BREAKFAST', w / 2, h * 0.96);
 }
 
+function rugTex(ctx, w, h) {
+  ctx.fillStyle = '#b84a3a'; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#f2d7a6'; ctx.lineWidth = w * 0.03;
+  ctx.strokeRect(w * 0.06, h * 0.06, w * 0.88, h * 0.88);
+  ctx.lineWidth = w * 0.012;
+  ctx.strokeRect(w * 0.12, h * 0.12, w * 0.76, h * 0.76);
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) {
+    const x = w * (0.22 + i * 0.112), y = h * (0.26 + j * 0.16);
+    ctx.fillStyle = (i + j) % 2 ? '#f2d7a6' : '#3f5f6b';
+    ctx.beginPath(); ctx.moveTo(x, y - h * 0.05); ctx.lineTo(x + w * 0.035, y); ctx.lineTo(x, y + h * 0.05); ctx.lineTo(x - w * 0.035, y); ctx.fill();
+  }
+  for (let k = 0; k < 4000; k++) { // woven fibres
+    ctx.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,240,210'},0.06)`;
+    ctx.fillRect(Math.random() * w, Math.random() * h, 2, 1);
+  }
+}
+
+function softSpot(ctx, w, h) {
+  const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.5, 'rgba(255,255,255,0.45)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+}
+
+function shaftTex(ctx, w, h) {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, 'rgba(255,240,205,0.9)'); g.addColorStop(1, 'rgba(255,240,205,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  const s = ctx.createLinearGradient(0, 0, w, 0);
+  s.addColorStop(0, 'rgba(0,0,0,1)'); s.addColorStop(0.2, 'rgba(0,0,0,0)'); s.addColorStop(0.8, 'rgba(0,0,0,0)'); s.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = s; ctx.fillRect(0, 0, w, h);
+}
+
+export const SOFT_SPOT = () => canvasTex(64, 64, softSpot, { srgb: false });
+
 // ---------------------------------------------------------------------------
+// The playable Grand Kitchen, all at 1:40 scale (GDD 2.2, 9.1). Walkable levels:
+//   floor (y -36), island counter and back counter (y 0), dining table (y -6).
+const F = FLOOR_Y;
+export const REGIONS = {
+  island: { minX: -58, maxX: 58, minZ: -30, maxZ: 30, top: 0, weight: 0.34 },
+  floor: { minX: -225, maxX: 225, minZ: -125, maxZ: 155, top: F, weight: 0.36 },
+  back: { minX: -190, maxX: 230, minZ: -170, maxZ: -150, top: 0, weight: 0.18 },
+  table: { minX: -56, maxX: 56, minZ: 85, maxZ: 125, top: -6, weight: 0.12 },
+};
+
 export class World {
   constructor(scene, renderer, quality) {
     this.scene = scene;
+    this.renderer = renderer;
     this.quality = quality;
     clearColliders();
     this.mats = {};
+    this.burners = []; this.waters = []; this.honeys = []; this.pads = [];
+    this.shadowDirty = true;
     this._lights(renderer);
     this._materials();
-    this._kitchen();
-    this._counter();
-    this._props();
-    this._hazards();
+    this._room();
+    this._island();
+    this._backCounter();
+    this._dining();
+    this._floorClutter();
     this._pads();
     this._landmark();
     this._tide();
+    this._atmosphere();
     this._spawns();
+    this.drawCallsBefore = this._countMeshes();
+    this._mergeStatic();
   }
 
+  // ------------------------------------------------------------------ lighting and materials
   _lights(renderer) {
     const s = this.scene;
     s.background = new THREE.Color('#e8d6bd');
-    s.fog = new THREE.Fog('#e8d6bd', 170, 560);
+    s.fog = new THREE.Fog('#e8d6bd', 240, 720);
     const pmrem = new THREE.PMREMGenerator(renderer);
     s.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     s.environmentIntensity = 0.55;
     pmrem.dispose();
-
     s.add(new THREE.HemisphereLight('#fff3e0', '#6b4a2e', 0.9));
     const sun = new THREE.DirectionalLight('#ffe0b0', 2.6);
-    sun.position.set(90, 140, -70);
-    sun.target.position.set(0, -10, 0);
+    sun.position.set(-110, 190, -120); // pouring in through the window over the sink
+    sun.target.position.set(0, -20, 0);
     s.add(sun, sun.target);
     if (this.quality.shadows) {
       sun.castShadow = true;
       sun.shadow.mapSize.set(this.quality.shadows, this.quality.shadows);
       const cam = sun.shadow.camera;
-      cam.left = -95; cam.right = 95; cam.top = 80; cam.bottom = -80; cam.near = 20; cam.far = 380;
-      sun.shadow.bias = -0.0006;
-      sun.shadow.normalBias = 0.4;
+      cam.left = -270; cam.right = 270; cam.top = 230; cam.bottom = -230; cam.near = 20; cam.far = 620;
+      sun.shadow.bias = -0.0005;
+      sun.shadow.normalBias = 0.6;
     }
     this.sun = sun;
-    const fill = new THREE.DirectionalLight('#cfe3ff', 0.5);
-    fill.position.set(-80, 60, 90);
+    const fill = new THREE.DirectionalLight('#cfe3ff', 0.55);
+    fill.position.set(120, 80, 140);
     s.add(fill);
   }
 
@@ -156,279 +209,308 @@ export class World {
     m.wood = new THREE.MeshStandardMaterial({ map: canvasTex(1024, 512, butcherBlock), roughness: 0.62 });
     m.cabinet = new THREE.MeshStandardMaterial({ color: '#7fa39a', roughness: 0.55 });
     m.cabinetDark = new THREE.MeshStandardMaterial({ color: '#5f8279', roughness: 0.6 });
-    m.floor = new THREE.MeshStandardMaterial({ map: canvasTex(256, 256, floorTiles, { repeat: [40, 40] }), roughness: 0.35 });
-    m.wall = new THREE.MeshStandardMaterial({ map: canvasTex(256, 256, subwayTiles, { repeat: [14, 5] }), roughness: 0.3 });
+    m.floor = new THREE.MeshStandardMaterial({ map: canvasTex(256, 256, floorTiles, { repeat: [45, 40] }), roughness: 0.32 });
+    m.wall = new THREE.MeshStandardMaterial({ map: canvasTex(256, 256, subwayTiles, { repeat: [16, 5] }), roughness: 0.3 });
     m.steel = new THREE.MeshStandardMaterial({ color: '#d4d8dc', metalness: 0.9, roughness: 0.22 });
     m.chrome = new THREE.MeshStandardMaterial({ color: '#f2f4f6', metalness: 1, roughness: 0.08 });
     m.ceramic = new THREE.MeshPhysicalMaterial({ color: '#f7f5f0', roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.08 });
     m.mug = new THREE.MeshPhysicalMaterial({ color: '#2f6fb0', roughness: 0.2, clearcoat: 1 });
-    m.glass = new THREE.MeshPhysicalMaterial({ color: '#e6f6ff', roughness: 0.05, metalness: 0, transparent: true, opacity: 0.35, clearcoat: 1, depthWrite: false });
+    m.glass = new THREE.MeshPhysicalMaterial({ color: '#e6f6ff', roughness: 0.05, transparent: true, opacity: 0.3, clearcoat: 1, depthWrite: false });
     m.jam = new THREE.MeshPhysicalMaterial({ color: '#8e0f2c', roughness: 0.2, clearcoat: 1, sheen: 0.4 });
-    m.rubber = new THREE.MeshStandardMaterial({ color: '#e8453a', roughness: 0.7 });
     m.dark = new THREE.MeshStandardMaterial({ color: '#2b2a2e', roughness: 0.6 });
     m.ceiling = new THREE.MeshStandardMaterial({ color: '#f4ede2', roughness: 0.9 });
     m.lamp = new THREE.MeshBasicMaterial({ color: '#fff7e0' });
+    m.walnut = new THREE.MeshStandardMaterial({ color: '#7a4a2a', roughness: 0.45 });
+    m.walnutTop = new THREE.MeshPhysicalMaterial({ color: '#8a5530', roughness: 0.3, clearcoat: 0.6, clearcoatRoughness: 0.2 });
+    m.water = new THREE.MeshPhysicalMaterial({ color: '#b9e2ff', roughness: 0.03, transparent: true, opacity: 0.55, clearcoat: 1, depthWrite: false });
+    m.white = new THREE.MeshStandardMaterial({ color: '#fff6e6', roughness: 0.5 });
   }
 
-  _mesh(geo, mat, x, y, z, { cast = true, receive = true } = {}) {
+  // Every scenery mesh goes through here. Static ones are merged later to cut draw calls.
+  _mesh(geo, mat, x, y, z, { cast = true, receive = true, dyn = false } = {}) {
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, y, z);
     mesh.castShadow = cast && !!this.quality.shadows;
     mesh.receiveShadow = receive && !!this.quality.shadows;
+    mesh.userData.world = true;
+    mesh.userData.dyn = dyn;
     this.scene.add(mesh);
     return mesh;
   }
+  _box(minX, maxX, minZ, maxZ, bottom, top, mat, opts) {
+    return this._mesh(new THREE.BoxGeometry(maxX - minX, top - bottom, maxZ - minZ), mat, (minX + maxX) / 2, (bottom + top) / 2, (minZ + maxZ) / 2, opts);
+  }
 
-  // Decorative giant kitchen. Nothing here collides; it exists to sell the 1:40 scale.
-  _kitchen() {
-    const m = this.mats, F = FLOOR_Y;
-    this._mesh(new THREE.PlaneGeometry(900, 900).rotateX(-Math.PI / 2), m.floor, 0, F, 0, { cast: false });
-    // back wall with counters, upper cabinets, fridge, stove, window
-    this._mesh(new THREE.PlaneGeometry(700, 120), m.wall, 0, F + 60, -170, { cast: false });
-    this._mesh(new THREE.BoxGeometry(420, 36, 26), m.cabinet, -20, F + 18, -157, { cast: false });
-    this._mesh(new THREE.BoxGeometry(424, 2, 30), m.wood, -20, 1, -156, { cast: false });
-    for (let x = -220; x < 190; x += 44) {
-      this._mesh(new THREE.BoxGeometry(42, 30, 14), m.cabinetDark, x + 22, 38, -163, { cast: false });
-      this._mesh(new THREE.BoxGeometry(2, 8, 2), m.chrome, x + 38, 28, -155.5, { cast: false });
-    }
-    // fridge tower
-    this._mesh(new THREE.BoxGeometry(46, 76, 34), m.steel, -250, F + 38, -150, { cast: false });
-    this._mesh(new THREE.BoxGeometry(2, 40, 3), m.chrome, -229, F + 44, -132, { cast: false });
-    // stove with burners on back counter
-    this._mesh(new THREE.BoxGeometry(60, 1, 24), m.dark, 90, 2, -157, { cast: false });
-    for (const [bx, bz] of [[75, -163], [105, -163], [75, -151], [105, -151]]) {
-      this._mesh(new THREE.TorusGeometry(6, 0.8, 8, 32).rotateX(Math.PI / 2), m.dark, bx, 3, bz, { cast: false });
-    }
-    this._mesh(new THREE.CylinderGeometry(12, 11, 16, 32), m.steel, 75, 11, -163, { cast: false }); // stock pot
-    this._mesh(new THREE.BoxGeometry(70, 16, 30), m.steel, 90, 46, -160, { cast: false }); // hood
-    // window with daylight
-    const win = this._mesh(new THREE.PlaneGeometry(90, 50), new THREE.MeshBasicMaterial({ color: '#fffaf0' }), -60, 40, -169.5, { cast: false, receive: false });
+  // ------------------------------------------------------------------ the room
+  _room() {
+    const m = this.mats;
+    this._mesh(new THREE.PlaneGeometry(520, 380).rotateX(-Math.PI / 2), m.floor, 0, F, -5, { cast: false });
+    this._mesh(new THREE.PlaneGeometry(520, 120), m.wall, 0, F + 60, -178, { cast: false });
+    this._mesh(new THREE.PlaneGeometry(520, 120).rotateY(Math.PI), m.wall, 0, F + 60, 170, { cast: false });
+    this._mesh(new THREE.PlaneGeometry(360, 120).rotateY(Math.PI / 2), m.wall, -245, F + 60, -4, { cast: false });
+    this._mesh(new THREE.PlaneGeometry(360, 120).rotateY(-Math.PI / 2), m.wall, 245, F + 60, -4, { cast: false });
+    this._mesh(new THREE.PlaneGeometry(520, 380).rotateX(Math.PI / 2), m.ceiling, 0, F + 110, -5, { cast: false });
+    // skirting boards
+    this._box(-245, 245, 167, 170, F, F + 4, m.cabinetDark, { cast: false });
+    this._box(-245, -242, -178, 170, F, F + 4, m.cabinetDark, { cast: false });
+    this._box(242, 245, -178, 170, F, F + 4, m.cabinetDark, { cast: false });
+    // window over the sink, with daylight
+    const win = this._mesh(new THREE.PlaneGeometry(76, 44), new THREE.MeshBasicMaterial({ color: '#fffaf0' }), -100, 34, -177.5, { cast: false, receive: false });
     win.material.fog = false;
-    for (const x of [-60]) this._mesh(new THREE.BoxGeometry(3, 50, 2), m.ceramic, x, 40, -169, { cast: false });
-    // side walls, ceiling, lamps
-    this._mesh(new THREE.PlaneGeometry(500, 120).rotateY(Math.PI / 2), m.wall, -300, F + 60, 0, { cast: false });
-    this._mesh(new THREE.PlaneGeometry(500, 120).rotateY(-Math.PI / 2), m.wall, 300, F + 60, 0, { cast: false });
-    this._mesh(new THREE.PlaneGeometry(700, 600).rotateX(Math.PI / 2), m.ceiling, 0, F + 110, 0, { cast: false });
-    for (const [x, z] of [[-80, -40], [80, -40], [-80, 60], [80, 60]]) {
-      this._mesh(new THREE.CylinderGeometry(7, 7, 1, 24), m.lamp, x, F + 109, z, { cast: false, receive: false });
+    this._box(-101.5, -98.5, -178, -176, 12, 56, m.ceramic, { cast: false });
+    this._box(-140, -60, -178, -174, 10, 12, m.ceramic, { cast: false });
+    for (const [x, z] of [[-150, -60], [0, -60], [150, -60], [-150, 90], [0, 90], [150, 90]]) {
+      this._mesh(new THREE.CylinderGeometry(8, 8, 1, 24), m.lamp, x, F + 109, z, { cast: false, receive: false });
     }
     // pot rack hanging over the island (GDD "Skyhooks")
-    this._mesh(new THREE.BoxGeometry(130, 1.5, 1.5), m.steel, 0, 68, 0, { cast: false });
+    this._box(-65, 65, -0.75, 0.75, 67.25, 68.75, m.steel, { cast: false });
     for (const x of [-55, 55]) this._mesh(new THREE.CylinderGeometry(0.3, 0.3, 6, 6), m.steel, x, 71, 0, { cast: false });
-    const pots = [[-40, 10, 6], [-12, 8, 4], [16, 12, 7], [44, 7, 3]];
-    for (const [x, r, drop] of pots) {
+    for (const [x, r, drop] of [[-40, 10, 6], [-12, 8, 4], [16, 12, 7], [44, 7, 3]]) {
       this._mesh(new THREE.CylinderGeometry(0.2, 0.2, drop, 6), m.steel, x, 68 - drop / 2, 0, { cast: false });
-      const pot = this._mesh(new THREE.CylinderGeometry(r, r * 0.9, r * 0.9, 32, 1, true), m.chrome, x, 68 - drop - r * 0.45, 0, { cast: true });
-      pot.material = m.chrome;
-    }
-    // a few giant crumbs on the floor as cover and texture
-    const crumbMat = new THREE.MeshStandardMaterial({ color: '#d4a15a', roughness: 0.9, flatShading: true });
-    for (let i = 0; i < 16; i++) {
-      const a = rand(0, Math.PI * 2), d = rand(75, 105);
-      const x = Math.cos(a) * d, z = Math.sin(a) * d * 0.72;
-      const r = rand(1.2, 3);
-      const crumb = this._mesh(new THREE.DodecahedronGeometry(r, 0), crumbMat, x, F + r * 0.6, z);
-      crumb.rotation.set(rand(0, 3), rand(0, 3), 0);
-      addCyl(x, z, r * 0.85, F, F + r * 1.2, { surface: 'crumb' });
+      this._mesh(new THREE.CylinderGeometry(r, r * 0.9, r * 0.9, 32, 1, true), m.chrome, x, 68 - drop - r * 0.45, 0);
     }
   }
 
-  _counter() {
+  // ------------------------------------------------------------------ the island (original arena)
+  _island() {
     const { minX, maxX, minZ, maxZ } = COUNTER;
-    const w = maxX - minX, d = maxZ - minZ, h = -FLOOR_Y;
+    const w = maxX - minX, d = maxZ - minZ, h = -F;
     const m = this.mats;
-    // cabinet body, slightly inset, then a thick butcher-block top
-    this._mesh(new THREE.BoxGeometry(w - 4, h - 2, d - 4), m.cabinet, 0, FLOOR_Y + (h - 2) / 2, 0);
-    const top = this._mesh(new THREE.BoxGeometry(w, 2.2, d), [m.wood, m.wood, m.wood, m.wood, m.wood, m.wood], 0, -1.1, 0);
-    top.receiveShadow = true;
-    // cabinet door panels and handles
+    this._mesh(new THREE.BoxGeometry(w - 4, h - 2, d - 4), m.cabinet, 0, F + (h - 2) / 2, 0);
+    this._mesh(new THREE.BoxGeometry(w, 2.2, d), m.wood, 0, -1.1, 0);
     for (let x = minX + 10; x < maxX; x += 20) {
       for (const z of [maxZ - 1.9, minZ + 1.9]) {
-        this._mesh(new THREE.BoxGeometry(17, 26, 0.6), m.cabinetDark, x, FLOOR_Y + 17, z, { cast: false });
-        this._mesh(new THREE.BoxGeometry(1, 7, 1), m.chrome, x + 6, FLOOR_Y + 22, z + Math.sign(z) * 0.6, { cast: false });
+        this._mesh(new THREE.BoxGeometry(17, 26, 0.6), m.cabinetDark, x, F + 17, z, { cast: false });
+        this._mesh(new THREE.BoxGeometry(1, 7, 1), m.chrome, x + 6, F + 22, z + Math.sign(z) * 0.6, { cast: false });
       }
     }
     for (let z = minZ + 12; z < maxZ; z += 20) {
-      for (const x of [maxX - 1.9, minX + 1.9]) {
-        this._mesh(new THREE.BoxGeometry(0.6, 26, 17), m.cabinetDark, x, FLOOR_Y + 17, z, { cast: false });
-      }
+      for (const x of [maxX - 1.9, minX + 1.9]) this._mesh(new THREE.BoxGeometry(0.6, 26, 17), m.cabinetDark, x, F + 17, z, { cast: false });
     }
-    // toe-kick shadow strip
-    this._mesh(new THREE.BoxGeometry(w - 5, 3, d - 5), m.dark, 0, FLOOR_Y + 1.5, 0, { cast: false });
-    addBox(minX, maxX, minZ, maxZ, FLOOR_Y, 0, { surface: 'wood', counter: true });
+    this._mesh(new THREE.BoxGeometry(w - 5, 3, d - 5), m.dark, 0, F + 1.5, 0, { cast: false });
+    addBox(minX, maxX, minZ, maxZ, F, 0, { surface: 'wood', counter: true });
 
-    // splat canvas: persistent food stains painted onto the countertop (GDD 11.4 "splat canvas")
+    // splat canvas: persistent food stains painted onto the countertop (GDD 11.4)
     const res = this.quality.splatRes;
     this.splatCanvas = document.createElement('canvas');
     this.splatCanvas.width = res; this.splatCanvas.height = Math.round(res * d / w);
     this.splatCtx = this.splatCanvas.getContext('2d');
     this.splatTex = new THREE.CanvasTexture(this.splatCanvas);
     this.splatTex.colorSpace = THREE.SRGBColorSpace;
-    const splatMat = new THREE.MeshStandardMaterial({
-      map: this.splatTex, transparent: true, roughness: 0.18, depthWrite: false,
-      polygonOffset: true, polygonOffsetFactor: -2,
-    });
-    const plane = this._mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), splatMat, 0, 0.015, 0, { cast: false });
+    const splatMat = new THREE.MeshStandardMaterial({ map: this.splatTex, transparent: true, roughness: 0.18, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    const plane = this._mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), splatMat, 0, 0.015, 0, { cast: false, dyn: true });
     plane.renderOrder = 1;
     this.splatDirty = false; this.splatT = 0;
-  }
 
-  paintSplat(x, y, z, radius, kind) {
-    const { minX, maxX, minZ, maxZ } = COUNTER;
-    if (y > 0.6 || y < -0.6 || x < minX || x > maxX || z < minZ || z > maxZ) return;
-    const ctx = this.splatCtx, W = this.splatCanvas.width, H = this.splatCanvas.height;
-    const px = ((x - minX) / (maxX - minX)) * W, py = ((z - minZ) / (maxZ - minZ)) * H;
-    const pr = (radius / (maxX - minX)) * W;
-    const looks = {
-      tomato: ['rgba(196,22,14,0.85)', 'rgba(230,50,30,0.7)', 'rgba(150,10,8,0.8)'],
-      drip: ['rgba(200,30,20,0.55)'],
-      soda: ['rgba(80,34,12,0.55)', 'rgba(110,55,20,0.45)'],
-      cheese: ['rgba(255,196,40,0.75)', 'rgba(240,170,20,0.7)'],
-      carrot: ['rgba(255,138,28,0.8)'],
-      banana: ['rgba(250,220,60,0.6)'],
-      scorch: ['rgba(40,20,10,0.35)'],
-      water: ['rgba(40,70,90,0.18)'],
-    }[kind];
-    if (!looks) return;
-    const blobs = kind === 'drip' ? 1 : 7;
-    for (let i = 0; i < blobs; i++) {
-      const a = Math.random() * Math.PI * 2, d = Math.random() * pr * 0.8;
-      const r = pr * (i === 0 ? 0.7 : rand(0.15, 0.45));
-      ctx.fillStyle = looks[i % looks.length];
-      ctx.beginPath();
-      ctx.ellipse(px + Math.cos(a) * d, py + Math.sin(a) * d, r, r * rand(0.7, 1), a, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    if (kind === 'tomato') {
-      ctx.fillStyle = 'rgba(245,225,150,0.9)';
-      for (let i = 0; i < 10; i++) {
-        const a = Math.random() * Math.PI * 2, d = Math.random() * pr;
-        ctx.beginPath(); ctx.ellipse(px + Math.cos(a) * d, py + Math.sin(a) * d, pr * 0.05, pr * 0.03, a, 0, Math.PI * 2); ctx.fill();
-      }
-      // splash streaks
-      ctx.strokeStyle = 'rgba(200,25,15,0.7)';
-      ctx.lineWidth = Math.max(1, pr * 0.08);
-      for (let i = 0; i < 6; i++) {
-        const a = Math.random() * Math.PI * 2;
-        ctx.beginPath(); ctx.moveTo(px, py);
-        ctx.lineTo(px + Math.cos(a) * pr * rand(1.1, 1.8), py + Math.sin(a) * pr * rand(1.1, 1.8)); ctx.stroke();
-      }
-    }
-    this.splatDirty = true;
-  }
-
-  clearSplats() {
-    this.splatCtx.clearRect(0, 0, this.splatCanvas.width, this.splatCanvas.height);
-    this.splatDirty = true;
-  }
-
-  _props() {
-    const m = this.mats;
-    const shadowy = { cast: true, receive: true };
-    // Cereal boxes (cardboard walls, tall cover)
+    // props (same layout as the first prototype)
+    const shadowy = {};
     const labelTex = canvasTex(512, 768, cerealLabel);
     const cardboard = new THREE.MeshStandardMaterial({ color: '#e9a23b', roughness: 0.8 });
     const label = new THREE.MeshStandardMaterial({ map: labelTex, roughness: 0.55 });
-    const boxA = this._mesh(new THREE.BoxGeometry(10, 16, 4), [cardboard, cardboard, cardboard, cardboard, label, label], -29, 8, -22, shadowy);
-    boxA.rotation.y = 0;
+    this.mats.cardboard = cardboard; this.mats.label = label;
+    this._mesh(new THREE.BoxGeometry(10, 16, 4), [cardboard, cardboard, cardboard, cardboard, label, label], -29, 8, -22, shadowy);
     addBox(-34, -24, -24, -20, 0, 16, { surface: 'cardboard' });
     this._mesh(new THREE.BoxGeometry(4, 16, 10), [label, label, cardboard, cardboard, cardboard, cardboard], 42, 8, 15, shadowy);
     addBox(40, 44, 10, 20, 0, 16, { surface: 'cardboard' });
-
-    // Jam jar
     this._mesh(new THREE.CylinderGeometry(3.7, 3.7, 8.4, 40), m.jam, -6, 4.2, 22, shadowy);
     this._mesh(new THREE.CylinderGeometry(4, 4, 10, 40, 1, true), m.glass, -6, 5, 22, { cast: false });
-    this._mesh(new THREE.CylinderGeometry(4.2, 4.2, 1.6, 40), new THREE.MeshStandardMaterial({ color: '#d9c27a', metalness: 0.8, roughness: 0.3 }), -6, 10.4, 22, shadowy);
+    const lid = new THREE.MeshStandardMaterial({ color: '#d9c27a', metalness: 0.8, roughness: 0.3 });
+    this._mesh(new THREE.CylinderGeometry(4.2, 4.2, 1.6, 40), lid, -6, 10.4, 22, shadowy);
     addCyl(-6, 22, 4, 0, 11, { surface: 'glass' });
-
-    // Mug
     this._mesh(new THREE.CylinderGeometry(4.2, 3.9, 9, 40), m.mug, 14, 4.5, -16, shadowy);
-    const handle = this._mesh(new THREE.TorusGeometry(2.4, 0.6, 12, 24), m.mug, 18.5, 4.8, -16, shadowy);
-    handle.rotation.y = Math.PI / 2;
+    this._mesh(new THREE.TorusGeometry(2.4, 0.6, 12, 24).rotateY(Math.PI / 2), m.mug, 18.5, 4.8, -16, shadowy);
     addCyl(14, -16, 4.2, 0, 9, { surface: 'ceramic' });
-
-    // Cutting board: a low platform you jump onto
     const boardMat = new THREE.MeshStandardMaterial({ color: '#c98f55', roughness: 0.55 });
     this._mesh(new THREE.BoxGeometry(24, 1, 14), boardMat, 0, 0.5, -1, shadowy);
-    this._mesh(new THREE.CylinderGeometry(1.2, 1.2, 1.1, 20), m.dark, 10, 0.55, -1, { cast: false }); // hang hole
+    this._mesh(new THREE.CylinderGeometry(1.2, 1.2, 1.1, 20), m.dark, 10, 0.55, -1, { cast: false });
     addBox(-12, 12, -8, 6, 0, 1, { surface: 'wood' });
-
-    // Plate: a walkable ceramic disc
     this._mesh(new THREE.CylinderGeometry(8, 7, 0.55, 48), m.ceramic, 30, 0.275, 0, shadowy);
     addCyl(30, 0, 8, 0, 0.55, { surface: 'ceramic' });
-
-    // Toaster (chrome cover near the edge)
     this._mesh(new THREE.BoxGeometry(12, 9, 8), m.chrome, 32, 4.5, -26, shadowy);
     this._mesh(new THREE.BoxGeometry(8, 0.3, 1.2), m.dark, 32, 9.05, -27.6, { cast: false });
     this._mesh(new THREE.BoxGeometry(8, 0.3, 1.2), m.dark, 32, 9.05, -24.4, { cast: false });
     this._mesh(new THREE.BoxGeometry(1, 2.4, 1.4), m.dark, 38.4, 6, -26, { cast: false });
     addBox(26, 38, -30, -22, 0, 9, { surface: 'steel' });
-
-    // Salt and pepper shakers
     const salt = new THREE.MeshPhysicalMaterial({ color: '#fbfbfb', roughness: 0.2, clearcoat: 1 });
     const pepper = new THREE.MeshPhysicalMaterial({ color: '#3a3533', roughness: 0.25, clearcoat: 1 });
-    this._mesh(new THREE.CylinderGeometry(1.7, 1.9, 6, 24), salt, -50, 3, -18, shadowy);
-    this._mesh(new THREE.SphereGeometry(1.7, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), m.chrome, -50, 6, -18, shadowy);
-    addCyl(-50, -18, 1.9, 0, 7.5, { surface: 'ceramic' });
-    this._mesh(new THREE.CylinderGeometry(1.7, 1.9, 6, 24), pepper, -45, 3, -23, shadowy);
-    this._mesh(new THREE.SphereGeometry(1.7, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), m.chrome, -45, 6, -23, shadowy);
-    addCyl(-45, -23, 1.9, 0, 7.5, { surface: 'ceramic' });
+    for (const [x, z, mat] of [[-50, -18, salt], [-45, -23, pepper]]) {
+      this._mesh(new THREE.CylinderGeometry(1.7, 1.9, 6, 24), mat, x, 3, z, shadowy);
+      this._mesh(new THREE.SphereGeometry(1.7, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), m.chrome, x, 6, z, shadowy);
+      addCyl(x, z, 1.9, 0, 7.5, { surface: 'ceramic' });
+    }
+    this._burner(-44, 0, 14, 7, true);
+    this._water(47, 0, -10, 9, 6.5);
+    this._honey(22, 0, 22, 3.2);
   }
 
-  _hazards() {
+  // ------------------------------------------------------------------ back counter: sink, stove, fridge
+  _backCounter() {
     const m = this.mats;
-    // Hot plate burner: cycles off -> warning -> on (GDD 8.4)
-    const bx = -44, bz = 14;
-    this._mesh(new THREE.CylinderGeometry(8, 8.4, 0.5, 48), m.dark, bx, 0.25, bz, { cast: false });
-    this.coilMat = new THREE.MeshStandardMaterial({ color: '#3a3332', roughness: 0.4, metalness: 0.6, emissive: '#ff2a00', emissiveIntensity: 0 });
-    for (const r of [2, 4, 6]) {
-      this._mesh(new THREE.TorusGeometry(r, 0.45, 8, 48).rotateX(Math.PI / 2), this.coilMat, bx, 0.6, bz, { cast: false });
+    const minX = -200, maxX = 240, minZ = -178, maxZ = -146;
+    this._box(minX, maxX, minZ + 2, maxZ - 2, F, -2, m.cabinet);
+    this._mesh(new THREE.BoxGeometry(maxX - minX, 2, maxZ - minZ), m.wood, (minX + maxX) / 2, -1, (minZ + maxZ) / 2);
+    for (let x = minX + 11; x < maxX - 5; x += 22) {
+      this._box(x - 9.5, x + 9.5, maxZ - 2, maxZ - 1.4, F + 4, F + 30, m.cabinetDark, { cast: false });
+      this._box(x + 5, x + 6, maxZ - 1.4, maxZ - 0.8, F + 20, F + 27, m.chrome, { cast: false });
     }
-    this.burnerLight = new THREE.PointLight('#ff4a10', 0, 30, 1.6);
-    this.burnerLight.position.set(bx, 3, bz);
-    this.scene.add(this.burnerLight);
-    this.burner = { x: bx, z: bz, r: 7, state: 'off', t: 6, hot: false };
+    this._box(minX, maxX, minZ + 4, maxZ - 5, F, F + 3, m.dark, { cast: false });
+    addBox(minX, maxX, minZ, maxZ, F, 0, { surface: 'wood', counter: true });
+    // backsplash and upper cabinets (overhead, out of reach)
+    for (let x = minX + 20; x < maxX; x += 40) {
+      if (x > -130 && x < -70) continue; // leave the window clear
+      this._box(x - 19, x + 19, -178, -164, 22, 54, m.cabinetDark, { cast: false });
+      this._box(x + 13, x + 15, -164, -163, 25, 33, m.chrome, { cast: false });
+    }
+    // fridge tower
+    this._box(-242, -200, -178, -138, F, F + 78, m.steel);
+    this._box(-203, -201, -140, -137, F + 34, F + 70, m.chrome, { cast: false });
+    this._box(-241, -201, -137.5, -137, F + 44, F + 45, m.dark, { cast: false });
+    addBox(-242, -200, -178, -138, F, F + 78, { surface: 'steel' });
+    // sink with a faucet (the basin is filled with water: makes you Wet)
+    this._box(-120, -80, -172, -150, -0.2, 0.3, m.steel, { cast: false });
+    this._water(-100, 0.35, -161, 17, 9);
+    this._mesh(new THREE.CylinderGeometry(1.6, 2, 16, 16), m.chrome, -100, 8, -174);
+    this._mesh(new THREE.TorusGeometry(5, 1.1, 10, 20, Math.PI).rotateY(Math.PI / 2), m.chrome, -100, 16, -169);
+    addCyl(-100, -174, 2, 0, 18, { surface: 'steel' });
+    // stove: two burners that cycle, a big stock pot and a range hood
+    this._box(58, 132, -176, -148, 0, 0.6, m.dark, { cast: false });
+    this._burner(78, 0.6, -162, 7, false);
+    this._burner(112, 0.6, -162, 7, false);
+    this._box(60, 130, -178, -150, 40, 52, m.steel, { cast: false });
+    this._mesh(new THREE.CylinderGeometry(12, 11, 16, 36), m.steel, 170, 8, -162);
+    this._mesh(new THREE.TorusGeometry(12, 0.8, 8, 36).rotateX(Math.PI / 2), m.chrome, 170, 16, -162, { cast: false });
+    addCyl(170, -162, 12, 0, 16, { surface: 'steel' });
+    // coffee maker (tall cover)
+    this._box(-178, -152, -176, -160, 0, 26, m.dark);
+    this._mesh(new THREE.CylinderGeometry(6, 6.5, 10, 24), m.glass, -165, 6, -158, { cast: false });
+    addBox(-178, -152, -176, -156, 0, 26, { surface: 'steel' });
+    this._honey(20, 0, -160, 3.2);
+  }
 
-    // Spilled water: makes you Wet (cleanses sticky and fire; freezes last longer)
-    const water = new THREE.MeshPhysicalMaterial({ color: '#b9e2ff', roughness: 0.03, transparent: true, opacity: 0.55, clearcoat: 1, depthWrite: false });
-    const spill = this._mesh(new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2), water, 47, 0.03, -10, { cast: false });
-    spill.scale.set(9, 1, 6.5);
-    this.spill = { x: 47, z: -10, rx: 9, rz: 6.5 };
+  // ------------------------------------------------------------------ dining area
+  _dining() {
+    const m = this.mats;
+    const tTop = -6, tBot = -8.5;
+    // rug under the table
+    this._mesh(new THREE.PlaneGeometry(190, 110).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: canvasTex(512, 300, rugTex), roughness: 0.95 }), 0, F + 0.06, 105, { cast: false });
+    this._box(-62, 62, 80, 130, tBot, tTop, m.walnutTop);
+    addBox(-62, 62, 80, 130, tBot, tTop, { surface: 'wood' });
+    for (const [x, z] of [[-56, 85], [56, 85], [-56, 125], [56, 125]]) {
+      this._mesh(new THREE.CylinderGeometry(2, 2.6, tBot - F, 16), m.walnut, x, (F + tBot) / 2, z);
+      addCyl(x, z, 2.6, F, tBot, { surface: 'wood' });
+    }
+    // chairs: you can walk under them and use the seats as cover
+    for (const [x, z, s] of [[-32, 70, -1], [32, 70, -1], [-32, 140, 1], [32, 140, 1]]) {
+      const seatTop = F + 17.5;
+      this._box(x - 9, x + 9, z - 8, z + 8, seatTop - 2, seatTop, m.walnut);
+      addBox(x - 9, x + 9, z - 8, z + 8, seatTop - 2, seatTop, { surface: 'wood' });
+      for (const [lx, lz] of [[-7.5, -6.5], [7.5, -6.5], [-7.5, 6.5], [7.5, 6.5]]) {
+        this._mesh(new THREE.CylinderGeometry(0.9, 1, 17.5, 10), m.walnut, x + lx, F + 8.75, z + lz);
+        addCyl(x + lx, z + lz, 1, F, seatTop - 2, { surface: 'wood' });
+      }
+      const bz = z + s * 7.5;
+      this._box(x - 9, x + 9, bz - 1, bz + 1, seatTop, seatTop + 20, m.walnut);
+      addBox(x - 9, x + 9, bz - 1, bz + 1, seatTop, seatTop + 20, { surface: 'wood' });
+    }
+    // on the table: plates, glasses, a fruit bowl
+    for (const [x, z] of [[-32, 94], [32, 94], [-32, 118], [32, 118]]) {
+      this._mesh(new THREE.CylinderGeometry(7, 6.2, 0.5, 40), m.ceramic, x, tTop + 0.25, z);
+      addCyl(x, z, 7, tTop, tTop + 0.5, { surface: 'ceramic' });
+    }
+    for (const [x, z] of [[-14, 90], [16, 124]]) {
+      this._mesh(new THREE.CylinderGeometry(2.8, 2.4, 11, 24, 1, true), m.glass, x, tTop + 5.5, z, { cast: false });
+      this._mesh(new THREE.CylinderGeometry(2.3, 2.3, 5, 24), new THREE.MeshPhysicalMaterial({ color: '#ff9a3c', roughness: 0.1, transmission: 0, clearcoat: 1 }), x, tTop + 2.6, z);
+      addCyl(x, z, 2.8, tTop, tTop + 11, { surface: 'glass' });
+    }
+    this._mesh(new THREE.SphereGeometry(8, 32, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), m.ceramic, 0, tTop + 5, 106);
+    addCyl(0, 106, 7.5, tTop, tTop + 5, { surface: 'ceramic' });
+    this._honey(46, tTop, 106, 3);
+  }
 
-    // Honey pool: grants Glaze shield, drains and refills
-    this.honeyMat = new THREE.MeshPhysicalMaterial({ color: '#f5a300', roughness: 0.1, clearcoat: 1, emissive: '#5a2a00', emissiveIntensity: 0.4, transparent: true, opacity: 0.92 });
-    this.honeyMesh = this._mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), this.honeyMat, 22, 0.05, 22, { cast: false });
-    this.honey = { x: 22, z: 22, r: 3.2, cap: 150, max: 150 };
+  // ------------------------------------------------------------------ floor cover
+  _floorClutter() {
+    const m = this.mats;
+    const crumbMat = new THREE.MeshStandardMaterial({ color: '#d4a15a', roughness: 0.9, flatShading: true });
+    const spots = [];
+    for (let i = 0; i < 30; i++) {
+      let x, z;
+      for (let k = 0; k < 40; k++) {
+        x = rand(-215, 215); z = rand(-120, 150);
+        const inIsland = Math.abs(x) < 72 && Math.abs(z) < 44;
+        const nearTable = Math.abs(x) < 80 && z > 55 && z < 155;
+        if (!inIsland && !nearTable && spots.every(([a, b]) => Math.hypot(a - x, b - z) > 18)) break;
+      }
+      spots.push([x, z]);
+      const r = rand(1.4, 3.4);
+      const crumb = this._mesh(new THREE.DodecahedronGeometry(r, 0), crumbMat, x, F + r * 0.6, z);
+      crumb.rotation.set(rand(0, 3), rand(0, 3), 0);
+      addCyl(x, z, r * 0.85, F, F + r * 1.2, { surface: 'crumb' });
+    }
+    this.crumbSpots = spots;
+    // a fallen cereal box and a dropped wooden spoon
+    this._mesh(new THREE.BoxGeometry(32, 10, 16), [this.mats.cardboard, this.mats.cardboard, this.mats.label, this.mats.label, this.mats.cardboard, this.mats.cardboard], 136, F + 5, 36);
+    addBox(120, 152, 28, 44, F, F + 10, { surface: 'cardboard' });
+    const spoonMat = new THREE.MeshStandardMaterial({ color: '#d9a766', roughness: 0.6 });
+    this._box(-175, -115, 40, 44, F, F + 2, spoonMat);
+    this._mesh(new THREE.SphereGeometry(8, 24, 10).scale(1, 0.3, 0.7), spoonMat, -107, F + 1.5, 42);
+    addBox(-175, -115, 40, 44, F, F + 2, { surface: 'wood' });
+    addCyl(-107, 42, 7, F, F + 2.4, { surface: 'wood' });
+  }
+
+  // ------------------------------------------------------------------ hazards
+  _burner(x, y, z, r, withLight) {
+    const m = this.mats;
+    this._mesh(new THREE.CylinderGeometry(r + 1, r + 1.4, 0.5, 48), m.dark, x, y + 0.25, z, { cast: false });
+    const coilMat = new THREE.MeshStandardMaterial({ color: '#3a3332', roughness: 0.4, metalness: 0.6, emissive: '#ff2a00', emissiveIntensity: 0 });
+    for (const rr of [r * 0.28, r * 0.57, r * 0.86]) {
+      this._mesh(new THREE.TorusGeometry(rr, 0.45, 8, 48).rotateX(Math.PI / 2), coilMat, x, y + 0.6, z, { cast: false });
+    }
+    let light = null;
+    if (withLight) {
+      light = new THREE.PointLight('#ff4a10', 0, 34, 1.6);
+      light.position.set(x, y + 3, z);
+      this.scene.add(light);
+    }
+    this.burners.push({ x, y, z, r, coilMat, light, state: 'off', t: rand(4, 12) });
+  }
+  _water(x, y, z, rx, rz) {
+    const w = this._mesh(new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2), this.mats.water, x, y + 0.03, z, { cast: false, dyn: true });
+    w.scale.set(rx, 1, rz);
+    this.waters.push({ x, y, z, rx, rz });
+  }
+  _honey(x, y, z, r) {
+    const mat = new THREE.MeshPhysicalMaterial({ color: '#f5a300', roughness: 0.1, clearcoat: 1, emissive: '#5a2a00', emissiveIntensity: 0.4, transparent: true, opacity: 0.92 });
+    const mesh = this._mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), mat, x, y + 0.05, z, { cast: false, dyn: true });
+    this.honeys.push({ x, y, z, r, cap: 150, max: 150, mesh });
   }
 
   _pads() {
-    // Spatula launch pads on the floor: they fling you back up onto the counter.
+    // Spatula launch pads on the floor fling you up onto the counters and the table.
     const pads = [
-      [0, 46, 0, 18], [0, -46, 0, -16], [-76, 0, -48, -4], [76, 0, 50, 4],
-      [-52, 44, -30, 16], [52, -46, 18, -22],
+      [0, 46, 0, 0, 18], [0, -46, 0, 0, -16], [-76, 0, -48, 0, -4], [76, 0, 50, 0, 4], [-52, 44, -30, 0, 16], [52, -46, 18, 0, -22],
+      [-150, -124, -140, 0, -158], [-40, -124, -40, 0, -158], [140, -124, 150, 0, -156],
+      [0, 64, 0, -6, 98], [-92, 104, -40, -6, 104], [92, 104, 40, -6, 104],
     ];
-    this.pads = [];
     const padMat = new THREE.MeshStandardMaterial({ color: '#e8453a', roughness: 0.5 });
     const ringMat = new THREE.MeshBasicMaterial({ color: '#ffd447', transparent: true, opacity: 0.8 });
-    for (const [x, z, tx, tz] of pads) {
-      const base = this._mesh(new THREE.CylinderGeometry(3.2, 3.6, 0.8, 32), padMat, x, FLOOR_Y + 0.4, z);
-      const ring = this._mesh(new THREE.TorusGeometry(3.6, 0.25, 8, 40).rotateX(Math.PI / 2), ringMat, x, FLOOR_Y + 0.9, z, { cast: false, receive: false });
-      const arrow = this._mesh(new THREE.ConeGeometry(1.2, 2.2, 3), m_white(), x, FLOOR_Y + 1.6, z, { cast: false });
-      this.pads.push({ x, z, target: new THREE.Vector3(tx, 0, tz), base, ring, arrow, pulse: 0 });
+    const arrowMat = new THREE.MeshStandardMaterial({ color: '#fff6e6', roughness: 0.5 });
+    const baseG = new THREE.CylinderGeometry(3.2, 3.6, 0.8, 32), ringG = new THREE.TorusGeometry(3.6, 0.25, 8, 40).rotateX(Math.PI / 2), arrowG = new THREE.ConeGeometry(1.2, 2.2, 3);
+    for (const [x, z, tx, ty, tz] of pads) {
+      const base = this._mesh(baseG, padMat, x, F + 0.4, z, { dyn: true });
+      const ring = this._mesh(ringG, ringMat, x, F + 0.9, z, { cast: false, receive: false, dyn: true });
+      const arrow = this._mesh(arrowG, arrowMat, x, F + 1.6, z, { cast: false, dyn: true });
+      this.pads.push({ x, z, target: new THREE.Vector3(tx, ty, tz), base, ring, arrow, pulse: 0 });
     }
-    function m_white() { return new THREE.MeshStandardMaterial({ color: '#fff6e6', roughness: 0.5 }); }
   }
 
   launchVelocity(pad, from) {
-    const apex = 14;
+    const apex = Math.max(pad.target.y, from.y) + 14;
     const vy = Math.sqrt(2 * G * (apex - from.y));
-    const tUp = vy / G, tDown = Math.sqrt((2 * apex) / G);
-    const T = tUp + tDown;
+    const T = vy / G + Math.sqrt((2 * (apex - pad.target.y)) / G);
     return new THREE.Vector3((pad.target.x - from.x) / T, vy, (pad.target.z - from.z) / T);
   }
 
   _landmark() {
-    // A true-scale "landmark food" (GDD 2.3): damage it to harvest tomatoes.
     const x = -18, z = 20, r = 6;
     const group = new THREE.Group();
     const body = new THREE.Mesh(new THREE.SphereGeometry(r, 48, 32), new THREE.MeshPhysicalMaterial({
@@ -451,17 +533,15 @@ export class World {
     group.position.set(x, r * 0.88, z);
     this.scene.add(group);
     const collider = addCyl(x, z, r * 0.9, 0, r * 1.7, { surface: 'tomato' });
-    this.landmark = { x, z, r, y: r * 0.88, group, body, collider, hp: 120, maxHp: 120, alive: true, regrowAt: 0, flash: 0 };
+    this.landmark = { x, z, r, y: r * 0.88, group, body, collider, hp: 120, maxHp: 120, alive: true, regrowAt: 0, flash: 0, growT: 1 };
   }
 
   _tide() {
-    const geo = new THREE.CylinderGeometry(1, 1, 1, 128, 1, true);
+    const geo = new THREE.CylinderGeometry(1, 1, 1, 160, 1, true);
     const mat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, side: THREE.DoubleSide,
       uniforms: { uTime: { value: 0 }, uRadius: { value: 100 } },
-      vertexShader: `
-        varying vec2 vUv; varying vec3 vPos;
-        void main(){ vUv = uv; vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+      vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
       fragmentShader: `
         uniform float uTime; uniform float uRadius; varying vec2 vUv;
         float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
@@ -478,8 +558,8 @@ export class World {
           vec3 col = mix(vec3(0.78, 0.9, 1.0), vec3(1.0), ring * 0.8 + shine);
           col += vec3(0.25, 0.1, 0.35) * ring * 0.35 * sin(d * 30.0 + uTime);
           float a = base + ring * 0.28 + shine * 0.45;
-          a *= smoothstep(1.0, 0.45, h);            // foam thins out as it rises
-          a += smoothstep(0.62, 0.58, h) * 0.08;    // denser band at counter height
+          a *= smoothstep(1.0, 0.45, h);
+          a += smoothstep(0.62, 0.58, h) * 0.08;
           gl_FragColor = vec4(col, a);
         }`,
     });
@@ -487,121 +567,239 @@ export class World {
     this.tideMesh.renderOrder = 5;
     this.tideMesh.frustumCulled = false;
     this.scene.add(this.tideMesh);
-    this.setTide(0, 0, 130);
+    this.setTide(0, 0, 330);
   }
 
   setTide(x, z, r) {
-    this.tideMesh.position.set(x, FLOOR_Y + 30, z);
+    this.tideMesh.position.set(x, F + 30, z);
     this.tideMesh.scale.set(Math.max(r, 0.1), 60, Math.max(r, 0.1));
     this.tideMesh.material.uniforms.uRadius.value = r;
+    this.tideMesh.visible = r < 300;
   }
 
+  // Sunbeam through the window and floating dust (Medium and High only).
+  _atmosphere() {
+    if (this.quality.name === 'Low') return;
+    const shaft = new THREE.Mesh(new THREE.PlaneGeometry(70, 190), new THREE.MeshBasicMaterial({
+      map: canvasTex(64, 256, shaftTex), transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false,
+    }));
+    shaft.position.set(-80, -2, -105);
+    shaft.rotation.set(-0.95, 0.12, 0);
+    shaft.renderOrder = 6;
+    this.scene.add(shaft);
+    const n = 420, pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      pos[i * 3] = rand(-140, -40); pos[i * 3 + 1] = rand(F + 2, 50); pos[i * 3 + 2] = rand(-170, -30);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    this.motes = new THREE.Points(g, new THREE.PointsMaterial({
+      size: 0.35, map: SOFT_SPOT(), transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending, color: '#fff2d0',
+    }));
+    this.motes.frustumCulled = false;
+    this.scene.add(this.motes);
+  }
+
+  // ------------------------------------------------------------------ spawning
   _spawns() {
-    // Food spawn spots on the countertop and floor (hand-placed around the props).
-    this.spawnPoints = [
+    const pts = [
       [-52, -4], [-40, -8], [-34, 26], [-54, 26], [-28, -10], [-20, 4], [-20, -26], [-8, -20],
       [0, 12], [2, -1], [8, 26], [22, 8], [24, -10], [40, 24], [52, 18], [54, -24],
       [16, -28], [-2, -28], [36, -12], [-14, 28],
     ].map(([x, z]) => new THREE.Vector3(x, 0, z));
-    // a few rewards down on the floor
-    for (const [x, z] of [[0, 60], [0, -60], [-92, 20], [92, -20]]) this.spawnPoints.push(new THREE.Vector3(x, FLOOR_Y, z));
+    for (const x of [-185, -140, -60, -30, 0, 45, 95, 140, 200, 225]) pts.push(new THREE.Vector3(x, 0, -152));
+    for (const [x, z] of [[-48, 100], [-16, 112], [16, 98], [48, 120], [-48, 124], [0, 88]]) pts.push(new THREE.Vector3(x, -6, z));
+    for (let i = 0; i < 26; i++) pts.push(this.randomOpenSpot('floor', 4));
+    this.spawnPoints = pts;
   }
 
-  randomOpenSpot(margin = 6) {
-    const { minX, maxX, minZ, maxZ } = COUNTER;
-    for (let i = 0; i < 80; i++) {
-      const x = rand(minX + margin, maxX - margin), z = rand(minZ + margin, maxZ - margin);
-      if (this.isBlocked(x, z)) continue;
-      if (Math.hypot(x - this.burner.x, z - this.burner.z) < 10) continue;
-      return new THREE.Vector3(x, 0, z);
+  // Random standing spot on a walkable level, clear of tall props and hazards.
+  randomOpenSpot(regionName = null, margin = 5) {
+    let name = regionName;
+    if (!name) {
+      let r = Math.random();
+      for (const [k, v] of Object.entries(REGIONS)) { r -= v.weight; if (r <= 0) { name = k; break; } }
+      name ||= 'floor';
+    }
+    const R = REGIONS[name];
+    for (let i = 0; i < 120; i++) {
+      const x = rand(R.minX + margin, R.maxX - margin), z = rand(R.minZ + margin, R.maxZ - margin);
+      const h = groundHeight(x, z, R.top + 0.5, 0.6, 1.2);
+      if (Math.abs(h - R.top) > 0.7) continue;                       // not on this level
+      if (groundHeight(x, z, 500, 0, 1.5) > R.top + 0.7) continue;    // under or next to something tall
+      if (this.burners.some((b) => Math.hypot(x - b.x, z - b.z) < b.r + 3)) continue;
+      return new THREE.Vector3(x, h, z);
     }
     return new THREE.Vector3(0, 0, 0);
   }
 
-  isBlocked(x, z) {
-    // true if (x, z) on the counter is inside a tall prop
-    const checks = [
-      [-34, -24, -24, -20], [40, 44, 10, 20], [26, 38, -30, -22],
-    ];
-    for (const [a, b, c, d] of checks) if (x > a - 2 && x < b + 2 && z > c - 2 && z < d + 2) return true;
-    for (const [cx, cz, r] of [[-6, 22, 4], [14, -16, 4.2], [-50, -18, 2], [-45, -23, 2], [-18, 20, 6]]) {
-      if (Math.hypot(x - cx, z - cz) < r + 2) return true;
+  // ------------------------------------------------------------------ splat canvas (island top)
+  paintSplat(x, y, z, radius, kind) {
+    const { minX, maxX, minZ, maxZ } = COUNTER;
+    if (y > 0.6 || y < -0.6 || x < minX || x > maxX || z < minZ || z > maxZ) return;
+    const ctx = this.splatCtx, W = this.splatCanvas.width, H = this.splatCanvas.height;
+    const px = ((x - minX) / (maxX - minX)) * W, py = ((z - minZ) / (maxZ - minZ)) * H;
+    const pr = (radius / (maxX - minX)) * W;
+    const looks = {
+      tomato: ['rgba(196,22,14,0.85)', 'rgba(230,50,30,0.7)', 'rgba(150,10,8,0.8)'],
+      drip: ['rgba(200,30,20,0.55)'],
+      soda: ['rgba(80,34,12,0.55)', 'rgba(110,55,20,0.45)'],
+      cheese: ['rgba(255,196,40,0.75)', 'rgba(240,170,20,0.7)'],
+      carrot: ['rgba(255,138,28,0.8)'],
+      banana: ['rgba(250,220,60,0.6)'],
+      grape: ['rgba(110,30,120,0.7)', 'rgba(140,50,150,0.55)'],
+      melon: ['rgba(240,70,90,0.8)', 'rgba(255,110,120,0.65)'],
+      jelly: ['rgba(90,200,90,0.5)'],
+      chili: ['rgba(40,20,10,0.35)'],
+    }[kind];
+    if (!looks) return;
+    const blobs = kind === 'drip' ? 1 : 7;
+    for (let i = 0; i < blobs; i++) {
+      const a = Math.random() * Math.PI * 2, d = Math.random() * pr * 0.8;
+      const r = pr * (i === 0 ? 0.7 : rand(0.15, 0.45));
+      ctx.fillStyle = looks[i % looks.length];
+      ctx.beginPath();
+      ctx.ellipse(px + Math.cos(a) * d, py + Math.sin(a) * d, r, r * rand(0.7, 1), a, 0, Math.PI * 2);
+      ctx.fill();
     }
-    return false;
+    if (kind === 'tomato' || kind === 'melon') {
+      ctx.fillStyle = kind === 'melon' ? 'rgba(30,20,20,0.85)' : 'rgba(245,225,150,0.9)';
+      for (let i = 0; i < 10; i++) {
+        const a = Math.random() * Math.PI * 2, d = Math.random() * pr;
+        ctx.beginPath(); ctx.ellipse(px + Math.cos(a) * d, py + Math.sin(a) * d, pr * 0.05, pr * 0.03, a, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.strokeStyle = looks[0];
+      ctx.lineWidth = Math.max(1, pr * 0.08);
+      for (let i = 0; i < 6; i++) {
+        const a = Math.random() * Math.PI * 2;
+        ctx.beginPath(); ctx.moveTo(px, py);
+        ctx.lineTo(px + Math.cos(a) * pr * rand(1.1, 1.8), py + Math.sin(a) * pr * rand(1.1, 1.8)); ctx.stroke();
+      }
+    }
+    this.splatDirty = true;
+  }
+  clearSplats() {
+    this.splatCtx.clearRect(0, 0, this.splatCanvas.width, this.splatCanvas.height);
+    this.splatDirty = true;
   }
 
+  // ------------------------------------------------------------------ optimisation: merge static scenery
+  _countMeshes() { let n = 0; this.scene.traverse((o) => { if (o.isMesh) n++; }); return n; }
+
+  // Scenery never moves, so meshes that share a material are merged into one draw call
+  // (GDD 11.7). Transparent and multi-material meshes are left alone.
+  _mergeStatic() {
+    this.scene.updateMatrixWorld(true);
+    const groups = new Map();
+    for (const o of [...this.scene.children]) {
+      if (!o.isMesh || !o.userData.world || o.userData.dyn || Array.isArray(o.material) || o.material.transparent) continue;
+      const key = `${o.material.uuid}|${o.castShadow}|${o.receiveShadow}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(o);
+    }
+    for (const list of groups.values()) {
+      if (list.length < 2) continue;
+      const geos = list.map((o) => {
+        const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone());
+        for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+        if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+        g.morphAttributes = {};
+        g.clearGroups();
+        return g.applyMatrix4(o.matrixWorld);
+      });
+      const merged = mergeGeometries(geos, false);
+      if (!merged) continue;
+      const mesh = new THREE.Mesh(merged, list[0].material);
+      mesh.castShadow = list[0].castShadow; mesh.receiveShadow = list[0].receiveShadow;
+      this.scene.add(mesh);
+      for (const o of list) this.scene.remove(o);
+      geos.forEach((g) => g.dispose());
+    }
+    this.drawCallsAfter = this._countMeshes();
+  }
+
+  // ------------------------------------------------------------------ per-frame
   update(dt, now, fx, sfx) {
-    // burner cycle: off 11 s, warning 2 s, on 8 s
-    const b = this.burner;
-    b.t -= dt;
-    if (b.t <= 0) {
-      if (b.state === 'off') { b.state = 'warn'; b.t = 2; }
-      else if (b.state === 'warn') { b.state = 'on'; b.t = 8; sfx.play('sizzle', new THREE.Vector3(b.x, 1, b.z), 1.4); }
-      else { b.state = 'off'; b.t = 11; }
+    for (const b of this.burners) {
+      b.t -= dt;
+      if (b.t <= 0) {
+        if (b.state === 'off') { b.state = 'warn'; b.t = 2; }
+        else if (b.state === 'warn') { b.state = 'on'; b.t = 8; sfx.play('sizzle', new THREE.Vector3(b.x, b.y + 1, b.z), 1.4); }
+        else { b.state = 'off'; b.t = rand(9, 13); }
+      }
+      b.hot = b.state === 'on';
+      const target = b.state === 'on' ? 2.6 : b.state === 'warn' ? 0.6 + 0.6 * Math.sin(now * 16) : 0;
+      b.coilMat.emissiveIntensity += (target - b.coilMat.emissiveIntensity) * Math.min(1, dt * 6);
+      if (b.light) b.light.intensity = b.coilMat.emissiveIntensity * 60;
+      if (b.hot && Math.random() < dt * 20) {
+        const a = rand(0, 6.28), d = rand(0, b.r * 0.9);
+        fx.burst('ember', new THREE.Vector3(b.x + Math.cos(a) * d, b.y + 0.8, b.z + Math.sin(a) * d));
+      }
     }
-    b.hot = b.state === 'on';
-    const target = b.state === 'on' ? 2.6 : b.state === 'warn' ? 0.6 + 0.6 * Math.sin(now * 16) : 0;
-    this.coilMat.emissiveIntensity += (target - this.coilMat.emissiveIntensity) * Math.min(1, dt * 6);
-    this.burnerLight.intensity = this.coilMat.emissiveIntensity * 60;
-    if (b.hot && Math.random() < dt * 20) {
-      const a = rand(0, 6.28), d = rand(0, 6.5);
-      fx.burst('ember', new THREE.Vector3(b.x + Math.cos(a) * d, 0.8, b.z + Math.sin(a) * d));
+    for (const h of this.honeys) {
+      h.cap = Math.min(h.max, h.cap + dt * 4);
+      const hs = h.r * (0.4 + 0.6 * (h.cap / h.max));
+      h.mesh.scale.set(hs, 1, hs);
+      if (Math.random() < dt * 1.5) fx.burst('honey', new THREE.Vector3(h.x + rand(-1, 1), h.y + 0.3, h.z + rand(-1, 1)));
     }
-
-    // honey refills slowly
-    const h = this.honey;
-    h.cap = Math.min(h.max, h.cap + dt * 4);
-    const hs = 0.4 + 0.6 * (h.cap / h.max);
-    this.honeyMesh.scale.set(h.r * hs, 1, h.r * hs);
-    if (Math.random() < dt * 2) fx.burst('honey', new THREE.Vector3(h.x + rand(-1, 1), 0.3, h.z + rand(-1, 1)));
-
-    // pads pulse
     for (const p of this.pads) {
       p.pulse = Math.max(0, p.pulse - dt * 3);
       p.ring.scale.setScalar(1 + 0.08 * Math.sin(now * 4) + p.pulse * 0.4);
       p.base.scale.y = 1 - p.pulse * 0.5;
-      p.arrow.position.y = FLOOR_Y + 1.8 + Math.sin(now * 3 + p.x) * 0.3;
+      p.arrow.position.y = F + 1.8 + Math.sin(now * 3 + p.x) * 0.3;
       p.arrow.rotation.y += dt;
     }
-
-    // landmark tomato regrowth and hit flash
     const L = this.landmark;
-    if (!L.alive && now >= L.regrowAt) {
-      L.alive = true; L.hp = L.maxHp; L.group.visible = true; L.growT = 0;
-    }
-    if (L.alive && L.growT !== undefined && L.growT < 1) {
+    if (!L.alive && now >= L.regrowAt) { L.alive = true; L.hp = L.maxHp; L.group.visible = true; L.growT = 0; }
+    if (L.alive && L.growT < 1) {
       L.growT = Math.min(1, L.growT + dt / 3);
       L.group.scale.setScalar(0.1 + 0.9 * L.growT);
       L.collider.enabled = L.growT > 0.6;
+      if (L.growT >= 1) this.shadowDirty = true;
     }
     L.flash = Math.max(0, L.flash - dt * 4);
     L.body.material.emissive.setRGB(L.flash * 0.6, L.flash * 0.1, 0);
-
     this.tideMesh.material.uniforms.uTime.value = now;
-
+    if (this.motes) { this.motes.rotation.y = Math.sin(now * 0.05) * 0.02; this.motes.position.y = Math.sin(now * 0.3) * 0.8; }
     this.splatT += dt;
-    if (this.splatDirty && this.splatT > 0.08) {
-      this.splatTex.needsUpdate = true; this.splatDirty = false; this.splatT = 0;
-    }
+    if (this.splatDirty && this.splatT > 0.08) { this.splatTex.needsUpdate = true; this.splatDirty = false; this.splatT = 0; }
   }
 
   resetRound() {
     this.clearSplats();
     const L = this.landmark;
-    L.alive = true; L.hp = L.maxHp; L.group.visible = true; L.group.scale.setScalar(1); L.collider.enabled = true; L.growT = 1;
-    this.honey.cap = this.honey.max;
-    this.burner.state = 'off'; this.burner.t = 8;
+    Object.assign(L, { alive: true, hp: L.maxHp, growT: 1 });
+    L.group.visible = true; L.group.scale.setScalar(1); L.collider.enabled = true;
+    for (const h of this.honeys) h.cap = h.max;
+    for (const b of this.burners) { b.state = 'off'; b.t = rand(4, 12); }
+    this.shadowDirty = true;
   }
 
-  inSpill(p) {
-    if (Math.abs(p.y) > 1.2) return false;
-    const dx = (p.x - this.spill.x) / this.spill.rx, dz = (p.z - this.spill.z) / this.spill.rz;
-    return dx * dx + dz * dz < 1;
+  inWater(p) {
+    for (const w of this.waters) {
+      if (Math.abs(p.y - w.y) > 1.2) continue;
+      const dx = (p.x - w.x) / w.rx, dz = (p.z - w.z) / w.rz;
+      if (dx * dx + dz * dz < 1) return true;
+    }
+    return false;
   }
   onBurner(p) {
-    return this.burner.hot && Math.abs(p.y - 0.5) < 1.2 && Math.hypot(p.x - this.burner.x, p.z - this.burner.z) < this.burner.r;
+    for (const b of this.burners) if (b.hot && Math.abs(p.y - b.y - 0.5) < 1.2 && Math.hypot(p.x - b.x, p.z - b.z) < b.r) return true;
+    return false;
   }
   inHoney(p) {
-    return Math.abs(p.y) < 1.2 && Math.hypot(p.x - this.honey.x, p.z - this.honey.z) < this.honey.r * clamp(0.4 + 0.6 * this.honey.cap / this.honey.max, 0.4, 1);
+    for (const h of this.honeys) {
+      if (Math.abs(p.y - h.y) < 1.2 && Math.hypot(p.x - h.x, p.z - h.z) < h.r * clamp(0.4 + 0.6 * h.cap / h.max, 0.4, 1)) return h;
+    }
+    return null;
+  }
+  nearestHoney(p) {
+    let best = null, bd = Infinity;
+    for (const h of this.honeys) {
+      if (Math.abs(p.y - h.y) > 3) continue;
+      const d = Math.hypot(p.x - h.x, p.z - h.z);
+      if (d < bd) { bd = d; best = h; }
+    }
+    return best ? { h: best, d: bd } : null;
   }
 }

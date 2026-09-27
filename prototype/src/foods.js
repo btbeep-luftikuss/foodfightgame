@@ -1,6 +1,7 @@
 // The six prototype foods (GDD section 6.2): Tomato, Banana (+ Peel), Carrot, Ice Cube,
 // Soda Can and Cheese Wheel. Values follow the GDD's Fresh-tier numbers.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G, groundHeight, rand, forwardOf } from './core.js';
 
 // ---------------------------------------------------------------------------
@@ -135,6 +136,108 @@ const MAKERS = {
     const m = new THREE.Mesh(once(geo, 'cheese', () => new THREE.CylinderGeometry(0.75, 0.75, 0.46, 32)), [side, face, face]);
     return m;
   },
+  grapes() {
+    const g = new THREE.Group();
+    const gm = once(mat, 'grape', () => new THREE.MeshPhysicalMaterial({ color: '#6b2a86', roughness: 0.3, clearcoat: 0.8, sheen: 0.6, sheenColor: new THREE.Color('#c9a4e0') }));
+    const gg = once(geo, 'grape', () => new THREE.SphereGeometry(0.16, 12, 10));
+    const rows = [[0.35, 1], [0.2, 3], [0.03, 4], [-0.14, 3], [-0.3, 2], [-0.44, 1]];
+    for (const [y, n] of rows) {
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + y * 3, r = n > 1 ? 0.07 + n * 0.035 : 0;
+        const s = new THREE.Mesh(gg, gm);
+        s.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+        g.add(s);
+      }
+    }
+    const stem = new THREE.Mesh(once(geo, 'stem', () => new THREE.CylinderGeometry(0.025, 0.035, 0.25, 6)), once(mat, 'stem', () => new THREE.MeshStandardMaterial({ color: '#5a4a1a', roughness: 0.8 })));
+    stem.position.y = 0.55;
+    g.add(stem);
+    return g;
+  },
+  grape() {
+    return new THREE.Mesh(once(geo, 'grape', () => new THREE.SphereGeometry(0.16, 12, 10)),
+      once(mat, 'grape', () => new THREE.MeshPhysicalMaterial({ color: '#6b2a86', roughness: 0.3, clearcoat: 0.8, sheen: 0.6, sheenColor: new THREE.Color('#c9a4e0') })));
+  },
+  chili() {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(once(geo, 'chili', () => {
+      const c = new THREE.ConeGeometry(0.15, 0.85, 14, 6).rotateX(-Math.PI / 2);
+      const p = c.attributes.position;
+      for (let i = 0; i < p.count; i++) { const z = p.getZ(i); p.setY(i, p.getY(i) - 0.25 * (z + 0.42) ** 2); } // curl the tip
+      c.computeVertexNormals();
+      return c;
+    }), once(mat, 'chili', () => new THREE.MeshPhysicalMaterial({ color: '#d4140e', roughness: 0.22, clearcoat: 1 })));
+    const cap = new THREE.Mesh(once(geo, 'chiliCap', () => new THREE.CylinderGeometry(0.1, 0.16, 0.12, 8).rotateX(Math.PI / 2)), once(mat, 'leaf', () => new THREE.MeshStandardMaterial({ color: '#3f8f2f', roughness: 0.6 })));
+    cap.position.z = 0.45;
+    g.add(body, cap);
+    return g;
+  },
+  cookie() {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(once(geo, 'cookie', () => new THREE.CylinderGeometry(0.45, 0.42, 0.14, 24)), once(mat, 'cookie', () => new THREE.MeshStandardMaterial({ color: '#c98b45', roughness: 0.85 })));
+    g.add(body);
+    const chipG = once(geo, 'chip', () => new THREE.SphereGeometry(0.06, 6, 5)), chipM = once(mat, 'chip', () => new THREE.MeshStandardMaterial({ color: '#3b2112', roughness: 0.5 }));
+    for (let i = 0; i < 7; i++) {
+      const a = i * 2.4, r = 0.1 + (i % 3) * 0.1;
+      const c = new THREE.Mesh(chipG, chipM);
+      c.position.set(Math.cos(a) * r, 0.07, Math.sin(a) * r);
+      g.add(c);
+    }
+    return g;
+  },
+  watermelon() {
+    return new THREE.Mesh(once(geo, 'melon', () => new THREE.SphereGeometry(0.8, 32, 20).scale(1, 0.88, 1.12)), once(mat, 'melon', () => {
+      const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+      const x = c.getContext('2d');
+      x.fillStyle = '#3f8f3a'; x.fillRect(0, 0, 256, 128);
+      x.fillStyle = '#1f5a24';
+      for (let i = 0; i < 12; i++) { x.beginPath(); for (let y = 0; y <= 128; y += 8) x.lineTo(i * 21.3 + Math.sin(y * 0.2 + i) * 4, y); x.lineTo(i * 21.3 + 9, 128); x.lineTo(i * 21.3 + 9, 0); x.fill(); }
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+      return new THREE.MeshPhysicalMaterial({ map: t, roughness: 0.35, clearcoat: 0.7 });
+    }));
+  },
+  melonchunk() {
+    const g = new THREE.Group();
+    const flesh = new THREE.Mesh(once(geo, 'chunk', () => new THREE.CylinderGeometry(0.45, 0.45, 0.22, 12, 1, false, 0, Math.PI * 0.7)), [
+      once(mat, 'rind', () => new THREE.MeshStandardMaterial({ color: '#2f7a30', roughness: 0.5 })),
+      once(mat, 'pinkflesh', () => new THREE.MeshStandardMaterial({ color: '#f25a6a', roughness: 0.4 })),
+      once(mat, 'pinkflesh', () => new THREE.MeshStandardMaterial({ color: '#f25a6a', roughness: 0.4 })),
+    ]);
+    g.add(flesh);
+    return g;
+  },
+  pineapple() {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(once(geo, 'pine', () => new THREE.SphereGeometry(0.38, 16, 12).scale(1, 1.35, 1)), once(mat, 'pine', () => {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const x = c.getContext('2d');
+      x.fillStyle = '#d99a1e'; x.fillRect(0, 0, 128, 128);
+      x.strokeStyle = '#8a5a10'; x.lineWidth = 3;
+      for (let i = -128; i < 256; i += 16) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + 128, 128); x.stroke(); x.beginPath(); x.moveTo(i, 128); x.lineTo(i + 128, 0); x.stroke(); }
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 2);
+      return new THREE.MeshStandardMaterial({ map: t, roughness: 0.6 });
+    }));
+    g.add(body);
+    const leafM = once(mat, 'pineleaf', () => new THREE.MeshStandardMaterial({ color: '#4f9a3a', roughness: 0.6 }));
+    const leafG = once(geo, 'pineleaf', () => new THREE.ConeGeometry(0.07, 0.5, 4));
+    for (let i = 0; i < 7; i++) {
+      const l = new THREE.Mesh(leafG, leafM);
+      const a = (i / 7) * Math.PI * 2;
+      l.position.set(Math.cos(a) * 0.06, 0.62, Math.sin(a) * 0.06);
+      l.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5);
+      g.add(l);
+    }
+    return g;
+  },
+  jelly() {
+    return new THREE.Mesh(once(geo, 'jelly', () => {
+      const b = new THREE.BoxGeometry(0.62, 0.62, 0.62, 3, 3, 3);
+      const p = b.attributes.position, v = new THREE.Vector3();
+      for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); v.lerp(v.clone().normalize().multiplyScalar(0.44), 0.4); p.setXYZ(i, v.x, v.y, v.z); }
+      b.computeVertexNormals();
+      return b;
+    }), once(mat, 'jelly', () => new THREE.MeshPhysicalMaterial({ color: '#5fd35a', roughness: 0.08, transparent: true, opacity: 0.8, clearcoat: 1, emissive: '#1d5a18', emissiveIntensity: 0.35 })));
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -144,7 +247,7 @@ const _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
 // Launch speed for a charge fraction c (0..1). Shared with the aim-preview arc.
 export function lobSpeed(id, c) {
   const f = FOODS[id];
-  return id === 'soda' ? f.speed * (0.75 + 0.25 * c) : f.speed * (0.6 + 0.4 * c);
+  return id === 'soda' ? f.speed * (0.75 + 0.25 * c) : f.speed * (0.6 + 0.4 * c); // tomato, ice, jelly, pineapple
 }
 
 export function lobDir(actor, out = new THREE.Vector3()) {
@@ -387,14 +490,237 @@ export const FOODS = {
       game.sfx.play('shield', a.pos, 0.6);
     },
   },
+  // ---------------------------------------------------------------- added in prototype 0.2
+  grapes: {
+    name: 'Grapes', role: 'Scatter shot · snack', maxStack: 2, give: 1, weight: 10,
+    profile: 'spray', charge: 0, speed: 45, gravity: 0.6, recovery: 0.8, radius: 0.16, dmg: 7, verb: 'grape-shot',
+    altLabel: 'Eat the bunch: +20 HP',
+    hint: 'Fires 8 bouncing grapes in a cone. Deadly up close.',
+    release(a, c, game) {
+      const from = a.handPos();
+      const base = a.isBot ? a.aimDir.clone() : _v.subVectors(a.aimPoint, from).normalize().clone();
+      for (let i = 0; i < 8; i++) {
+        const d = base.clone();
+        d.x += rand(-0.1, 0.1); d.y += rand(-0.07, 0.07); d.z += rand(-0.1, 0.1);
+        d.normalize().multiplyScalar(this.speed * rand(0.9, 1.05));
+        game.projectiles.launch({ food: 'grape', owner: a, pos: from, vel: d, gravity: 0.6, radius: 0.16, life: 2, bounces: 1, spin: 6 });
+      }
+      a.consume(1);
+      game.sfx.play('throw', a.pos, 1.1);
+    },
+    alt(a, game) {
+      a.startEat(1.0, () => { a.heal(20); a.consume(1); game.sfx.play('eat', a.pos); });
+    },
+  },
+  grape: { // a single grape pellet (not a pickup)
+    name: 'Grape', hidden: true, profile: 'spray', radius: 0.16, dmg: 7, verb: 'grape-shot',
+    impact(p, hit, game) {
+      if (hit.actor) {
+        game.damage(hit.actor, 7, p.owner, 'grapes');
+        if (hit.actor.slowAmount() < 0.3) hit.actor.addSticky(0.1, 1.5); // grape splats stack to 30%
+        game.fx.burst('grape', hit.point, 0.4);
+        game.sfx.play('hit', hit.point, 0.3);
+        return true;
+      }
+      if (hit.world && hit.top && p.bounces > 0) {
+        p.bounces--;
+        p.pos.y = hit.point.y + 0.2;
+        p.vel.y = Math.abs(p.vel.y) * 0.5 + 2; p.vel.x *= 0.7; p.vel.z *= 0.7;
+        return false;
+      }
+      game.world.paintSplat(hit.point.x, hit.point.y, hit.point.z, 0.6, 'grape');
+      game.fx.burst('grape', hit.point, 0.3);
+      return true;
+    },
+  },
+
+  chili: {
+    name: 'Chili Pepper', role: 'Homing · burn', maxStack: 3, give: 2, weight: 9,
+    profile: 'seek', charge: 0, speed: 32, recovery: 0.7, radius: 0.25, dmg: 15, verb: 'torched',
+    hint: 'Locks onto the Titan nearest your crosshair and sets them on fire. Water puts it out.',
+    release(a, c, game) {
+      const target = a.isBot ? a.botTarget : game.lockTarget(a);
+      const dir = a.isBot ? a.aimDir.clone() : _v.subVectors(a.aimPoint, a.handPos()).normalize().clone();
+      game.projectiles.launch({ food: 'chili', owner: a, pos: a.handPos(), vel: dir.multiplyScalar(this.speed), gravity: 0, life: 3, orient: true, seek: target || null, turn: 1.5 });
+      a.consume(1);
+      game.sfx.play('whirr', a.pos);
+    },
+    impact(p, hit, game) {
+      if (hit.actor) {
+        game.damage(hit.actor, 15, p.owner, 'chili');
+        hit.actor.burn(4);
+        game.sfx.play('sizzle', hit.point);
+      }
+      game.fx.burst('fire', hit.point);
+      game.world.paintSplat(hit.point.x, hit.point.y, hit.point.z, 1.2, 'chili');
+      return true;
+    },
+  },
+
+  cookie: {
+    name: 'Cookie', role: 'Auto-seeker', maxStack: 3, give: 2, weight: 9,
+    profile: 'seek', charge: 0, speed: 18, recovery: 0.6, radius: 0.4, dmg: 18, verb: 'cookied',
+    hint: 'Hunts the nearest enemy on its own. Any food thrown at it knocks it out of the air.',
+    release(a, c, game) {
+      const mine = game.projectiles.list.filter((p) => p.food === 'cookie' && p.owner === a && !p.done);
+      if (mine.length >= 2) { mine[0].done = true; game.fx.burst('crumb', mine[0].pos); } // max 2 cookies in the air
+      const dir = a.aimDir.clone(); dir.y = Math.max(dir.y, 0.15); dir.normalize();
+      game.projectiles.launch({ food: 'cookie', owner: a, pos: a.handPos(), vel: dir.multiplyScalar(this.speed), gravity: 0, life: 12, spin: 5, seek: game.nearestEnemy(a, 30), turn: 1.6, retarget: 30, shootable: true });
+      a.consume(1);
+      game.sfx.play('throw', a.pos);
+    },
+    impact(p, hit, game) {
+      if (hit.actor) game.damage(hit.actor, 18, p.owner, 'cookie');
+      stampAtGround(game, hit.point, 3, 'sticky', 4, { slow: 0.2, visual: 'crumbs' });
+      game.fx.burst('crumb', hit.point);
+      game.sfx.play('crunch', hit.point);
+      return true;
+    },
+  },
+
+  watermelon: {
+    name: 'Watermelon', role: 'Heavy rolling bomb', maxStack: 1, give: 1, weight: 6, heavy: true,
+    profile: 'roll', charge: 0, speed: 19, recovery: 1.0, radius: 0.8, pierce: true, dmg: 50, verb: 'flattened',
+    hint: 'Heavy to carry. Roll it at Titans: it crushes them and bursts into bouncing chunks.',
+    release(a, c, game) {
+      const d = a.aimDir.clone().setY(0);
+      if (d.lengthSq() < 1e-4) forwardOf(a.yaw, d);
+      d.normalize();
+      const pos = a.pos.clone().addScaledVector(d, 1.6); pos.y += 0.9;
+      game.projectiles.launch({ food: 'watermelon', owner: a, pos, vel: d.multiplyScalar(this.speed).setY(1), gravity: 1, radius: 0.8, life: 7, roll: true });
+      a.consume(1);
+      game.sfx.play('thud', a.pos, 1.3);
+    },
+    impact(p, hit, game) {
+      if (!hit.actor) return false;
+      const sp = Math.hypot(p.vel.x, p.vel.z);
+      game.damage(hit.actor, sp > 6 ? 50 : 25, p.owner, 'watermelon');
+      hit.actor.knock(_v2.copy(p.vel).setY(0).normalize().multiplyScalar(16).setY(7));
+      this.split(p, game);
+      return true;
+    },
+    expire(p, game) { this.split(p, game); },
+    split(p, game) {
+      game.fx.burst('melon', p.pos, 1.4);
+      game.world.paintSplat(p.pos.x, p.pos.y - 0.8, p.pos.z, 3.5, 'melon');
+      stampAtGround(game, p.pos, 3, 'slick', 5);
+      game.sfx.play('splat', p.pos, 1.5); game.sfx.play('thud', p.pos, 1.2);
+      for (let i = 0; i < 4; i++) {
+        const ang = (i / 4) * Math.PI * 2 + rand(-0.4, 0.4);
+        game.projectiles.launch({ food: 'melonchunk', owner: p.owner, pos: p.pos.clone().setY(p.pos.y + 0.3), vel: new THREE.Vector3(Math.cos(ang) * 9, 8, Math.sin(ang) * 9), gravity: 1, radius: 0.35, life: 3, spin: 9, bounces: 1 });
+      }
+    },
+  },
+  melonchunk: {
+    name: 'Melon chunk', hidden: true, profile: 'lob', radius: 0.35, dmg: 15, verb: 'flattened',
+    impact(p, hit, game) {
+      if (hit.actor) { game.damage(hit.actor, 15, p.owner, 'watermelon'); game.fx.burst('melon', hit.point, 0.4); return true; }
+      if (hit.world && hit.top && p.bounces > 0) { p.bounces--; p.pos.y = hit.point.y + 0.4; p.vel.y = Math.abs(p.vel.y) * 0.45 + 2; return false; }
+      game.fx.burst('melon', hit.point, 0.3);
+      return true;
+    },
+  },
+
+  pineapple: {
+    name: 'Pineapple', role: 'Sticky spike grenade', maxStack: 1, give: 1, weight: 6,
+    profile: 'lob', charge: 0.4, speed: 26, recovery: 0.8, radius: 0.45, dmg: 35, verb: 'spiked',
+    hint: 'Sticks to whatever it hits, then bursts into a spike field. Roll or get wet to shake it off.',
+    release(a, c, game) {
+      game.projectiles.launch({ food: 'pineapple', owner: a, pos: a.handPos(), vel: lobVel(a, lobSpeed('pineapple', c)), spin: 7, fuse: 2 });
+      a.consume(1);
+      game.sfx.play('throw', a.pos);
+    },
+    impact(p, hit, game) {
+      // stick to a Titan or a surface; the projectile system runs the fuse
+      if (hit.actor) { p.attached = hit.actor; game.floatText(hit.actor, 'PINEAPPLE!', 'slip'); }
+      else { p.stuck = true; p.pos.copy(hit.point); if (hit.top) p.pos.y += 0.4; }
+      p.vel.set(0, 0, 0);
+      game.sfx.play('thud', hit.point, 0.7);
+      return false;
+    },
+    detonate(p, game) {
+      const pt = p.pos.clone();
+      game.explode(pt, 3, 35, p.owner, 'pineapple', 7);
+      const gy = groundHeight(pt.x, pt.z, pt.y + 0.5);
+      game.addSpikeField(new THREE.Vector3(pt.x, gy, pt.z), 5, 5, 8, p.owner);
+      game.fx.burst('pine', pt);
+      game.sfx.play('boom', pt, 0.9);
+    },
+  },
+
+  jelly: {
+    name: 'Jelly Cube', role: 'Root · trampoline', maxStack: 2, give: 1, weight: 8,
+    profile: 'lob', charge: 0.3, speed: 24, recovery: 0.6, radius: 0.35, dmg: 12, verb: 'jellied',
+    altLabel: 'Place a trampoline',
+    hint: 'Bounces off walls and roots whoever it hits. Place it as a trampoline to reach high places.',
+    release(a, c, game) {
+      game.projectiles.launch({ food: 'jelly', owner: a, pos: a.handPos(), vel: lobVel(a, lobSpeed('jelly', c)), spin: 5, bounces: 4, life: 5 });
+      a.consume(1);
+      game.sfx.play('throw', a.pos);
+    },
+    impact(p, hit, game) {
+      if (hit.actor) {
+        game.damage(hit.actor, 12, p.owner, 'jelly');
+        if (hit.actor.alive && hit.actor.applyHardCC('rooted', 1.0)) hit.actor.addSticky(0.3, 2);
+        game.fx.burst('jelly', hit.point);
+        game.sfx.play('boing', hit.point, 0.8);
+        return true;
+      }
+      if (p.bounces > 0) {
+        p.bounces--;
+        if (hit.top) { p.pos.y = hit.point.y + 0.4; p.vel.y = Math.abs(p.vel.y) * 0.72 + 1; }
+        else { p.pos.copy(hit.point); p.vel.x *= -0.75; p.vel.z *= -0.75; }
+        game.sfx.play('boing', hit.point, 0.35);
+        return false;
+      }
+      game.fx.burst('jelly', hit.point);
+      game.world.paintSplat(hit.point.x, hit.point.y, hit.point.z, 1.4, 'jelly');
+      return true;
+    },
+    alt(a, game) {
+      const f = forwardOf(a.yaw, _v);
+      const pos = a.pos.clone().addScaledVector(f, 2.4);
+      pos.y = groundHeight(pos.x, pos.z, a.pos.y + 0.6);
+      game.items.addTrampoline(a, pos);
+      a.consume(1);
+      game.sfx.play('boing', pos, 0.8);
+    },
+  },
 };
 
-export const FOOD_IDS = ['tomato', 'banana', 'carrot', 'ice', 'soda', 'cheese'];
+export const FOOD_IDS = ['tomato', 'banana', 'carrot', 'ice', 'soda', 'cheese', 'grapes', 'chili', 'cookie', 'watermelon', 'pineapple', 'jelly'];
 
+// Food casts real shadows only when the shadow map updates every frame (High).
+let FOOD_SHADOWS = true;
+export function setFoodShadows(on) { FOOD_SHADOWS = on; }
+
+// Each food model is built once, merged into one geometry per material, and shared by every
+// copy (pickups, held food, projectiles). A bunch of grapes goes from 17 draw calls to 2.
+const MERGED = {};
+function bakeFood(id) {
+  const src = MAKERS[id]();
+  src.updateMatrixWorld(true);
+  const byMat = new Map(), parts = [];
+  src.traverse((o) => {
+    if (!o.isMesh) return;
+    const g = (Array.isArray(o.material) ? o.geometry.clone() : (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone())).applyMatrix4(o.matrixWorld);
+    if (Array.isArray(o.material)) { parts.push([g, o.material]); return; } // multi-material: keep its groups
+    for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+    if (!byMat.has(o.material)) byMat.set(o.material, []);
+    byMat.get(o.material).push(g);
+  });
+  for (const [m, gs] of byMat) parts.push([gs.length > 1 ? mergeGeometries(gs) : gs[0], m]);
+  return parts;
+}
 export function makeFoodMesh(id) {
-  const m = MAKERS[id]();
-  m.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return m;
+  MERGED[id] ||= bakeFood(id);
+  const grp = new THREE.Group();
+  for (const [g, m] of MERGED[id]) {
+    const mesh = new THREE.Mesh(g, m);
+    mesh.castShadow = FOOD_SHADOWS;
+    grp.add(mesh);
+  }
+  return grp;
 }
 
 export function randomFoodId() {
@@ -407,5 +733,6 @@ export function randomFoodId() {
 
 export const FEED_VERB = {
   tomato: "tomato'd", banana: 'boomeranged', peel: 'slipped up', carrot: 'sniped', ice: 'iced',
-  soda: 'fizzed', cheese: 'rolled over', landmark: 'buried',
+  soda: 'fizzed', cheese: 'rolled over', landmark: 'buried', grapes: 'grape-shot', chili: 'torched',
+  cookie: 'cookied', watermelon: 'flattened', pineapple: 'spiked', jelly: 'jellied',
 };

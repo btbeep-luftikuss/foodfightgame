@@ -5,7 +5,7 @@ A multiplayer 3D food-fight battle royale. You're frog-sized, the kitchen is eno
 ## Documents
 
 - [Game Design Document](docs/GDD.md): core systems, the 30 foods and their balance, map layout, graphics and performance plan, technical architecture, and the implementation roadmap.
-- [Browser prototype](prototype/README.md): a playable countertop arena with 6 foods, 7 bots and the Soap Tide.
+- [Browser prototype](prototype/README.md): the whole kitchen as a playable arena with 12 foods, 11 bots and the Soap Tide.
 
 ## Status
 

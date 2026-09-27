@@ -88,7 +88,12 @@ const PALETTE = {
   ember: [C('#ff6a00'), C('#ffae00'), C('#ff3d00')],
   water: [C('#bfe8ff'), C('#8fd3ff'), C('#ffffff')],
   dust: [C('#d9c7a8'), C('#c9b490')],
-  crumb: [C('#d4a15a'), C('#b98240')],
+  crumb: [C('#d4a15a'), C('#b98240'), C('#3b2112')],
+  grape: [C('#6b2a86'), C('#8e3fae'), C('#c9a4e0')],
+  melon: [C('#f25a6a'), C('#ff8a94'), C('#2f7a30'), C('#1d1616')],
+  pine: [C('#f2c230'), C('#d99a1e'), C('#4f9a3a')],
+  jelly: [C('#5fd35a'), C('#9cf09a'), C('#3fae3a')],
+  fire: [C('#ff3d00'), C('#ff8a00'), C('#ffd000')],
 };
 
 export class FX {
@@ -177,6 +182,24 @@ export class FX {
         this.spray('puffs', pos, 12, { speed: 4, up: 3, colors: P.foam, size: 0.9, life: 0.8, grav: 0, grow: 1.5 });
         break;
       }
+      case 'grape':
+        this.spray('blobs', pos, 14 * power, { speed: 5, up: 4, colors: P.grape, size: 0.12, life: 0.6 });
+        break;
+      case 'melon':
+        this.spray('blobs', pos, 40 * power, { speed: 10 * power, up: 8, colors: P.melon, size: 0.22, life: 1 });
+        this.spray('chunks', pos, 10 * power, { speed: 8, up: 7, colors: [P.melon[2]], size: 0.25, life: 1.2 });
+        break;
+      case 'pine':
+        this.spray('chunks', pos, 40, { speed: 12, up: 8, colors: P.pine, size: 0.2, life: 1 });
+        this.spray('puffs', pos, 10, { speed: 3, up: 2, colors: [P.pine[0]], size: 0.8, life: 0.5, grav: 0, grow: 1.5 });
+        break;
+      case 'jelly':
+        this.spray('blobs', pos, 22, { speed: 6, up: 6, colors: P.jelly, size: 0.18, life: 0.8 });
+        break;
+      case 'fire':
+        this.spray('blobs', pos, 20, { speed: 5, up: 6, colors: P.fire, size: 0.14, life: 0.6, grav: -0.2 });
+        this.spray('puffs', pos, 6, { speed: 2, up: 3, colors: [P.fire[1]], size: 0.6, life: 0.4, grav: -0.1, grow: 1.4 });
+        break;
       case 'bubbles':
         this.spray('puffs', pos, 2, { speed: 0.8, up: 2, colors: P.foam, size: 0.5, life: 1.4, grav: -0.1, drag: 0.8 });
         break;

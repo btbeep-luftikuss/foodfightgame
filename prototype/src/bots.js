@@ -2,18 +2,20 @@
 // same ballistic math the projectiles use, strafe, dodge, loot and heal.
 import * as THREE from 'three';
 import {
-  G, COUNTER, FLOOR_Y, clamp, rand, pick, yawOf, forwardOf, hasLineOfSight, solveLob,
+  G, FLOOR_Y, clamp, rand, pick, yawOf, forwardOf, hasLineOfSight, solveLob, groundHeight, raycastWorld,
 } from './core.js';
 import { FOODS } from './foods.js';
 
-const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _aim = new THREE.Vector3();
+const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _aim = new THREE.Vector3(), _q = new THREE.Vector3();
 
-export const BOT_NAMES = ['Pip', 'Crouton', 'Waffles', 'Nibbles', 'Sprout', 'Mochi', 'Biscuit', 'Pickles', 'Dumpling', 'Truffle'];
+export const BOT_NAMES = ['Pip', 'Crouton', 'Waffles', 'Nibbles', 'Sprout', 'Mochi', 'Biscuit', 'Pickles', 'Dumpling', 'Truffle', 'Nacho', 'Gnocchi', 'Tofu', 'Pretzel', 'Kiwi', 'Muffin'];
 
 // Preferred engagement ranges per food [min, max, score].
 const RANGE = {
   carrot: [20, 70, 3.2], tomato: [6, 28, 2.6], ice: [5, 24, 2.3], soda: [5, 22, 2.5],
   banana: [4, 20, 1.9], cheese: [4, 20, 2.4], peel: [0, 7, 1.2],
+  grapes: [2, 14, 2.6], chili: [6, 40, 2.5], cookie: [5, 30, 2.2], watermelon: [4, 22, 2.4],
+  pineapple: [6, 24, 2.4], jelly: [5, 22, 2.1],
 };
 
 export class BotBrain {
@@ -27,12 +29,13 @@ export class BotBrain {
     this.foodLockUntil = 0; this.aimErr = new THREE.Vector3();
     this.pendingDodge = false; this.pendingAlt = false; this.pendingJump = false;
     this.aimYaw = 0;
+    this.detourUntil = 0; this.detourSide = 1;
   }
 
   think() {
     const a = this.a, g = this.game, now = g.time;
     // choose target: whoever hit me recently, else the nearest visible enemy
-    let best = null, bestD = 48;
+    let best = null, bestD = 65;
     const eye = a.headPos(_v);
     for (const o of g.actors) {
       if (o === a || !o.alive) continue;
@@ -47,20 +50,41 @@ export class BotBrain {
     const tide = g.tide;
     const onFloor = a.pos.y < FLOOR_Y + 5;
     if (tide && Math.hypot(a.pos.x - tide.x, a.pos.z - tide.z) > tide.r - 4) {
-      if (onFloor) this._goPad(); else { this.goal = new THREE.Vector3(tide.x, a.pos.y, tide.z); this.goalKind = 'tide'; }
-    } else if (onFloor) {
-      this._goPad();
+      // The safe zone may be up on a counter: then take the spatula pad that lands closest to it.
+      const zoneY = groundHeight(tide.x, tide.z, 50);
+      let allHigh = zoneY > a.pos.y + 3;
+      for (let k = 0; k < 8 && allHigh; k++) { // is any part of the zone down at my level?
+        const ang = (k / 8) * Math.PI * 2;
+        if (groundHeight(tide.x + Math.cos(ang) * tide.r * 0.8, tide.z + Math.sin(ang) * tide.r * 0.8, a.pos.y + 1) <= a.pos.y + 3) allHigh = false;
+      }
+      const it = !a.inv.some(Boolean) ? this._nearestItem(40, tide) : null;
+      if (it) { this.goal = it.pos; this.goalKind = 'item'; }
+      else if (allHigh) this._goPad(new THREE.Vector3(tide.x, zoneY, tide.z));
+      else { this.goal = new THREE.Vector3(tide.x, a.pos.y, tide.z); this.goalKind = 'tide'; } // may mean jumping off a counter
     } else if (!a.inv.some(Boolean) || (!this.target && a.inv.filter(Boolean).length < 3)) {
-      const it = this._nearestItem(this.target ? 25 : 70);
+      const it = this._nearestItem(this.target ? 25 : 80);
       if (it) { this.goal = it.pos; this.goalKind = 'item'; }
     }
-    if (!this.goal && a.glaze < 40 && g.world.honey.cap > 30 && (!this.target || bestD > 18)) {
-      const h = g.world.honey;
-      if (Math.hypot(a.pos.x - h.x, a.pos.z - h.z) < 35) { this.goal = new THREE.Vector3(h.x, 0, h.z); this.goalKind = 'honey'; }
+    // Nobody in sight: go hunting. Titans can hear the fighting across the kitchen.
+    if (!this.goal && !this.target && a.inv.some(Boolean)) {
+      let prey = null, pd = Infinity;
+      for (const o of g.actors) {
+        if (o === a || !o.alive) continue;
+        const d = o.pos.distanceTo(a.pos);
+        if (d < pd) { pd = d; prey = o; }
+      }
+      if (prey) {
+        if (prey.pos.y > a.pos.y + 3 && onFloor) this._goPad(); // they're up high: take a spatula pad
+        else { this.goal = prey.pos.clone(); this.goalKind = 'hunt'; }
+      }
+    }
+    const hn = g.world.nearestHoney(a.pos);
+    if (!this.goal && a.glaze < 40 && hn && hn.h.cap > 30 && hn.d < 40 && (!this.target || bestD > 18)) {
+      this.goal = new THREE.Vector3(hn.h.x, hn.h.y, hn.h.z); this.goalKind = 'honey';
     }
 
     // heal with a banana when hurt and not under pressure
-    const bananaSlot = a.inv.findIndex((s) => s && s.id === 'banana');
+    const bananaSlot = a.inv.findIndex((s) => s && (s.id === 'banana' || s.id === 'grapes'));
     if (a.hp < 60 && bananaSlot >= 0 && (!this.target || bestD > 14) && !a.eat) {
       a.select(bananaSlot);
       this.pendingAlt = true;
@@ -92,21 +116,24 @@ export class BotBrain {
     this.aimErr.set(rand(-1, 1), rand(-0.6, 0.6), rand(-1, 1)).multiplyScalar(err);
   }
 
-  _goPad() {
+  _goPad(toward = null) {
     const a = this.a;
     let best = null, bd = Infinity;
     for (const p of this.game.world.pads) {
-      const d = Math.hypot(a.pos.x - p.x, a.pos.z - p.z);
+      const d = toward
+        ? p.target.distanceTo(toward) + Math.hypot(a.pos.x - p.x, a.pos.z - p.z) * 0.3
+        : Math.hypot(a.pos.x - p.x, a.pos.z - p.z) + rand(0, 40); // not always the same pad
       if (d < bd) { bd = d; best = p; }
     }
     if (best) { this.goal = new THREE.Vector3(best.x, FLOOR_Y, best.z); this.goalKind = 'pad'; }
   }
 
-  _nearestItem(maxD) {
+  _nearestItem(maxD, insideTide = null) {
     const a = this.a;
     let best = null, bd = maxD;
     for (const it of this.game.items.list) {
       if (it.vel || Math.abs(it.pos.y - a.pos.y) > 3) continue;
+      if (insideTide && Math.hypot(it.pos.x - insideTide.x, it.pos.z - insideTide.z) > insideTide.r) continue;
       const d = it.pos.distanceTo(a.pos);
       if (d < bd && a.inv.some((s) => !s || (s.id === it.id && s.count < FOODS[it.id].maxStack))) { bd = d; best = it; }
     }
@@ -163,16 +190,28 @@ export class BotBrain {
     }
     if (now < this.unstickUntil) mv.copy(this.unstickDir);
 
-    // stay off the edge unless heading for a pad; avoid a hot burner
-    if (a.pos.y > -2 && this.goalKind !== 'pad') {
-      const m = 4;
-      if (a.pos.x < COUNTER.minX + m) mv.x = Math.max(mv.x, 1);
-      if (a.pos.x > COUNTER.maxX - m) mv.x = Math.min(mv.x, -1);
-      if (a.pos.z < COUNTER.minZ + m) mv.z = Math.max(mv.z, 1);
-      if (a.pos.z > COUNTER.maxZ - m) mv.z = Math.min(mv.z, -1);
+    // Walls in the way (the island, the fridge, chairs): follow the wall until the way is clear.
+    if (this.goal && mv.lengthSq() > 1e-4) {
+      _q.copy(mv).setY(0).normalize();
+      _w.set(a.pos.x, a.pos.y + 1, a.pos.z);
+      if (raycastWorld(_w, _q, 5) < 5) {
+        if (now > this.detourUntil) this.detourSide = pick([-1, 1]);
+        this.detourUntil = now + 1.2;
+      }
+      if (now < this.detourUntil) mv.set(-_q.z * this.detourSide, 0, _q.x * this.detourSide).addScaledVector(_q, 0.15);
     }
-    const b = g.world.burner;
-    if (b.state !== 'off') {
+
+    // Don't walk off a counter or the table unless the goal (or the target) is down there.
+    if (a.onGround && a.pos.y > FLOOR_Y + 2 && mv.lengthSq() > 1e-4) {
+      const wantDown = this.goalKind === 'tide' || (this.goal && this.goal.y < a.pos.y - 3) || (t && t.pos.y < a.pos.y - 3 && !this.goal);
+      if (!wantDown) {
+        _w.copy(mv).normalize();
+        const gh = groundHeight(a.pos.x + _w.x * 3, a.pos.z + _w.z * 3, a.pos.y + 0.6);
+        if (a.pos.y - gh > 3) { mv.set(-_w.x, 0, -_w.z).add(_q.set(-_w.z * this.strafeDir, 0, _w.x * this.strafeDir)); }
+      }
+    }
+    for (const b of g.world.burners) {
+      if (b.state === 'off' || Math.abs(a.pos.y - b.y) > 2) continue;
       _w.set(a.pos.x - b.x, 0, a.pos.z - b.z);
       const d = _w.length();
       if (d < b.r + 3) mv.addScaledVector(_w.normalize(), 3);
@@ -187,11 +226,15 @@ export class BotBrain {
       const speed = food.speed || 25;
       const tFlight = d / speed;
       _aim.addScaledVector(t.vel, tFlight * this.skill).add(this.aimErr);
+      a.botTarget = t;
       if (food.profile === 'lob') {
-        solveLob(from, _aim, speed, G, a.aimDir);
-      } else if (food.profile === 'line') {
-        _aim.y += 0.5 * G * 0.3 * tFlight * tFlight;
+        solveLob(from, _aim, speed, G * (food.gravity ?? 1), a.aimDir);
+      } else if (food.profile === 'line' || food.profile === 'spray') {
+        _aim.y += 0.5 * G * (food.gravity ?? 0.3) * tFlight * tFlight;
         a.aimDir.subVectors(_aim, from).normalize();
+      } else if (food.profile === 'seek') {
+        a.aimDir.subVectors(_aim, from).normalize();
+        a.aimDir.y += 0.15; a.aimDir.normalize();
       } else if (food.profile === 'return') {
         a.aimDir.subVectors(_aim, from).normalize();
         const off = -1.3 * (d / speed) * 0.5; // counter the banana's curve
@@ -206,7 +249,7 @@ export class BotBrain {
       a.yaw = this.aimYaw;
 
       const r = RANGE[slot.id] || [0, 30];
-      const inRange = d >= r[0] * 0.6 && d <= r[1] * 1.15;
+      const inRange = d <= r[1] * 1.15; // no minimum: point-blank throws are fine
       if (slot.id === 'cheese') {
         if (!a.shieldUp && d > 12 && now > this.nextShotAt) { this.pendingAlt = true; this.nextShotAt = now + 1; }
         else if (d < 13 && now > this.nextShotAt) { it.primary = true; this.nextShotAt = now + rand(0.6, 1.2); }
