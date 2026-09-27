@@ -159,15 +159,6 @@ button { font: inherit; color: inherit; }
 .sniff-chip { position: absolute; right: 16px; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: var(--ink-glass); color: var(--paper-dim); }
 .sniff-chip.ready { color: var(--glaze); border: 2px solid var(--glaze); }
 .tbtn.sniffb { width: 50px; height: 50px; right: 106px; bottom: calc(172px + env(safe-area-inset-bottom, 0px)); background: var(--glaze); font-size: 10px; }
-@media (pointer: coarse) and (max-width: 560px) { /* phone held upright: stack the buttons above the aim stick */
-  .tbtn.jump { right: 24px; bottom: calc(158px + env(safe-area-inset-bottom, 0px)); }
-  .tbtn.roll { right: 92px; bottom: calc(164px + env(safe-area-inset-bottom, 0px)); }
-  .tbtn.alt { right: 26px; bottom: calc(228px + env(safe-area-inset-bottom, 0px)); }
-  .tbtn.sniffb { right: 94px; bottom: calc(232px + env(safe-area-inset-bottom, 0px)); }
-  .bottom { width: calc(100vw - 176px) !important; }
-  .slot { width: 40px !important; height: 40px !important; }
-  .hotbar { gap: 5px !important; }
-}
 .tbtn.cooling { opacity: 0.45; }
 .fps { position: absolute; left: 16px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); font-size: 11px; color: var(--paper-dim); font-variant-numeric: tabular-nums; }
 .fx-overlay { position: absolute; inset: 0; transition: box-shadow 0.25s, background 0.25s; }
@@ -203,6 +194,15 @@ button { font: inherit; color: inherit; }
   .hint { display: none; }
   .fps { display: none; }
   .feed { font-size: 11px; max-width: 42vw; }
+}
+@media (pointer: coarse) and (max-width: 560px) { /* phone held upright: stack the buttons above the aim stick (must come after the base touch rules) */
+  .tbtn.jump { right: 24px; bottom: calc(158px + env(safe-area-inset-bottom, 0px)); }
+  .tbtn.roll { right: 92px; bottom: calc(164px + env(safe-area-inset-bottom, 0px)); }
+  .tbtn.alt { right: 26px; bottom: calc(228px + env(safe-area-inset-bottom, 0px)); }
+  .tbtn.sniffb { right: 94px; bottom: calc(232px + env(safe-area-inset-bottom, 0px)); }
+  .bottom { width: calc(100vw - 176px) !important; }
+  .slot { width: 40px !important; height: 40px !important; }
+  .hotbar { gap: 5px !important; }
 }
 
 /* ------------------------------------------------------------------ menus */

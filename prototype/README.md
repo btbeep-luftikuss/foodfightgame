@@ -67,6 +67,8 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 - **Mode menu:** Play vs bots opens a choice between **Classic** and **Chef's Choice**; Chef's Choice then shows the food picker.
 - **Chef's Choice mode** (vs bots): pick 3 foods. They never run out (the hotbar shows ∞), but no food spawns anywhere: no floating pickups, grocery drops, Giant Tomato piles or loot from splatted Titans. Bots bring 3 random foods each. Food never heals in this mode (bananas and grapes can't be eaten); instead green heal crosses float on every third spawn point (21 on the map) and give +60 HP, returning 20 s after being taken. Hurt bots go for them. Your pick is remembered.
+- **Carrot sniper:** full charge takes 1.6 s (was 1.0) but the carrot flies at 210 m/s (was 120). Speed grows with the square of the charge, so quick flicks stay slow and only a full charge gets the fast shot.
+- **Phone held upright:** the Jump, Dash, Alt and Sniff buttons now stack above the aim stick instead of covering the health bar and food slots (the upright layout rules were being overridden by the landscape ones).
 - **More common staples:** spawn weights raised for tomato (26 → 42), carrot (14 → 28) and blueberries (12 → 26), so about half of all food pickups are one of the three.
 
 **Version 0.8:**

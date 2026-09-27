@@ -375,12 +375,12 @@ export const FOODS = {
 
   carrot: {
     name: 'Carrot', role: 'Sniper', maxStack: 4, give: 2, weight: 28,
-    profile: 'line', charge: 1.0, speed: 120, recovery: 0.9, radius: 0.18, verb: 'sniped',
+    profile: 'line', charge: 1.6, speed: 210, recovery: 0.9, radius: 0.18, verb: 'sniped',
     hint: 'Hold to zoom and charge. Face hits deal x1.75. Your glint gives you away.',
     release(a, c, game) {
       const from = a.handPos();
       const dir = a.isBot ? a.aimDir.clone() : _v.subVectors(a.aimPoint, from).normalize().clone();
-      const speed = this.speed * (0.45 + 0.55 * c);
+      const speed = this.speed * (0.28 + 0.72 * c * c); // a full charge is much faster than a quick flick
       game.projectiles.launch({ food: 'carrot', owner: a, pos: from, vel: dir.multiplyScalar(speed), gravity: 0.3, radius: 0.18, charge: c, orient: true, life: 4 });
       a.consume(1);
       game.sfx.play('throw', a.pos, 1.2);
