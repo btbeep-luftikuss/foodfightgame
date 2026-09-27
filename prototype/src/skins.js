@@ -5,6 +5,7 @@
 // 1-3 extra draw calls per Titan. Geometry and materials are built once per skin and shared.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { HEAD_MAP, BODY_MAP } from './human.js';
 
 export const RARITY = {
   common: { name: 'Common', color: '#9aa3ad' },
@@ -24,11 +25,12 @@ const cone = (r, h, m, seg = 12) => new THREE.ConeGeometry(r, h, seg).applyMatri
 const torus = (r, t, m, arc = Math.PI * 2) => new THREE.TorusGeometry(r, t, 8, 24, arc).applyMatrix4(m);
 const star = (r, m) => new THREE.OctahedronGeometry(r).applyMatrix4(m);
 const HALF = Math.PI / 2;
+const _c = new THREE.Vector3();
 
 export const SKINS = [
   { id: 'chef', name: 'Head Chef', rarity: 'common', hat: true, desc: 'The classic chef hat.' },
   {
-    id: 'ninja', name: 'Nori Ninja', rarity: 'rare', color: '#2c2c3c', belly: '#4a4a60', desc: 'Headband, face wrap and crossed chopsticks.',
+    id: 'ninja', name: 'Nori Ninja', rarity: 'rare', color: '#2c2c3c', belly: '#23232f', desc: 'Headband, face wrap and crossed chopsticks.',
     mats: { red: ['#e0302a'], wrap: ['#1b1b26'], wood: ['#c9964f'] },
     parts: () => [
       ['red', torus(0.435, 0.05, M(0, 1.7, 0, HALF))],
@@ -40,7 +42,7 @@ export const SKINS = [
     ],
   },
   {
-    id: 'astro', name: 'Space Sprout', rarity: 'epic', color: '#eef1f6', belly: '#ffffff', desc: 'Bubble helmet, antenna and oxygen pack.',
+    id: 'astro', name: 'Space Sprout', rarity: 'epic', color: '#eef1f6', belly: '#dfe4ec', desc: 'Bubble helmet, antenna and oxygen pack.',
     mats: { glass: ['#bfe8ff', { transparent: true, opacity: 0.28, roughness: 0.05, metalness: 0.2, depthWrite: false }], orange: ['#ff7a1a'], dark: ['#3a4150'], glow: ['#7df9ff', { emissive: '#35e0ff', emissiveIntensity: 1.2 }] },
     parts: () => [
       ['glass', sph(0.56, M(0, 1.54, 0.02))],
@@ -53,7 +55,7 @@ export const SKINS = [
     ],
   },
   {
-    id: 'knight', name: 'Sir Crumb', rarity: 'epic', color: '#b9c2cc', belly: '#dde3ea', desc: 'Steel helm, red plume and a round back shield.',
+    id: 'knight', name: 'Sir Crumb', rarity: 'epic', color: '#b9c2cc', belly: '#8e98a4', hideHair: true, desc: 'Steel helm, red plume and a round back shield.',
     mats: { steel: ['#c9d1da', { metalness: 0.85, roughness: 0.25 }], red: ['#d42a2a'], gold: ['#f0c040', { metalness: 0.8, roughness: 0.3 }] },
     parts: () => [
       ['steel', sph(0.47, M(0, 1.55, 0), Math.PI * 0.42)],
@@ -64,7 +66,7 @@ export const SKINS = [
     ],
   },
   {
-    id: 'pirate', name: 'Captain Pickle', rarity: 'rare', color: '#6fb33f', belly: '#b8e08a', desc: 'Tricorn hat, eyepatch and a parrot pal.',
+    id: 'pirate', name: 'Captain Pickle', rarity: 'rare', color: '#f2ead8', belly: '#3a2a22', hair: 'long', desc: 'Tricorn hat, eyepatch and a parrot pal.',
     mats: { black: ['#1d1a1f'], gold: ['#f0c040', { metalness: 0.7, roughness: 0.3 }], parrot: ['#e8322b'], beak: ['#ffcc33'] },
     parts: () => [
       ['black', cyl(0.56, 0.56, 0.05, M(0, 1.9, 0), 3)],
@@ -78,7 +80,7 @@ export const SKINS = [
     ],
   },
   {
-    id: 'dino', name: 'Rex Hoodie', rarity: 'uncommon', color: '#5cc46a', belly: '#d6f2b0', desc: 'Dino hood with back spikes and a tail.',
+    id: 'dino', name: 'Rex Hoodie', rarity: 'uncommon', color: '#5cc46a', belly: '#2e7a3a', hideHair: true, desc: 'Dino hood with back spikes and a tail.',
     mats: { hood: ['#2e7a3a'], spike: ['#ffd447'], eye: ['#fffaf2'], pupil: ['#1d1620'] },
     parts: () => {
       const p = [['hood', sph(0.48, M(0, 1.52, -0.06, -0.35), Math.PI * 0.55)]];
@@ -92,7 +94,7 @@ export const SKINS = [
     },
   },
   {
-    id: 'robot', name: 'Toastbot 3000', rarity: 'legendary', color: '#8d98a6', belly: '#c6ced8', desc: 'Glowing visor, antenna and twin jet boosters.',
+    id: 'robot', name: 'Toastbot 3000', rarity: 'legendary', color: '#8d98a6', belly: '#5b6573', tone: '#a9b3bf', hideHair: true, desc: 'Glowing visor, antenna and twin jet boosters.',
     mats: { metal: ['#5b6573', { metalness: 0.8, roughness: 0.35 }], visor: ['#35e0ff', { emissive: '#1ad0ff', emissiveIntensity: 1.5 }], flame: ['#ff8a1a', { emissive: '#ff6a00', emissiveIntensity: 1.6 }] },
     parts: () => [
       ['visor', box(0.66, 0.16, 0.2, M(0, 1.58, 0.36))],
@@ -107,7 +109,7 @@ export const SKINS = [
     ],
   },
   {
-    id: 'wizard', name: 'Waffle Wizard', rarity: 'epic', color: '#7a5cff', belly: '#c9b8ff', desc: 'Starry pointed hat and a long white beard.',
+    id: 'wizard', name: 'Waffle Wizard', rarity: 'epic', color: '#5a3cd8', belly: '#3d2a9c', hair: 'long', desc: 'Starry pointed hat and a long white beard.',
     mats: { hat: ['#3d2a9c'], star: ['#ffd447', { emissive: '#ffb400', emissiveIntensity: 0.8 }], beard: ['#f7f4ee'] },
     parts: () => [
       ['hat', cyl(0.62, 0.62, 0.05, M(0, 1.86, 0), 24)],
@@ -118,7 +120,7 @@ export const SKINS = [
     ],
   },
   {
-    id: 'cat', name: 'Cool Cat', rarity: 'uncommon', color: '#ffb347', belly: '#ffe3b8', desc: 'Cat ears, shades and a curly tail.',
+    id: 'cat', name: 'Cool Cat', rarity: 'uncommon', color: '#ffb347', belly: '#3a3a48', desc: 'Cat ears, shades and a curly tail.',
     mats: { ear: ['#e8892a'], shades: ['#141418', { metalness: 0.6, roughness: 0.15 }], pink: ['#ff9fb8'] },
     parts: () => [
       ['ear', cone(0.14, 0.28, M(0.24, 1.92, 0, 0, 0, -0.35), 4)],
@@ -132,17 +134,19 @@ export const SKINS = [
     ],
   },
   {
-    id: 'hero', name: 'Super Spud', rarity: 'legendary', color: '#d9a066', belly: '#f1d3a8', desc: 'Hero mask, flowing cape and a gold star emblem.',
-    mats: { cape: ['#e0302a', { side: THREE.DoubleSide }], mask: ['#1f3fbf'], gold: ['#ffd447', { metalness: 0.7, roughness: 0.25, emissive: '#6a4a00', emissiveIntensity: 0.4 }] },
+    id: 'hero', name: 'Super Spud', rarity: 'legendary', color: '#2a55e0', belly: '#1f3fbf', desc: 'Hero mask, flowing cape and a gold star emblem.',
+    mats: { cape: ['#e0302a', { side: THREE.DoubleSide }], mask: ['#1f3fbf'], eyes: ['#fffaf2'], pupil: ['#1d1620'], gold: ['#ffd447', { metalness: 0.7, roughness: 0.25, emissive: '#6a4a00', emissiveIntensity: 0.4 }] },
     parts: () => [
       ['mask', cyl(0.445, 0.445, 0.13, M(0, 1.6, 0), 24)],
+      ['eyes', sph(0.075, M(0.142, 1.585, 0.44, 0, 0, 0, 1.1, 0.8, 0.5))], ['eyes', sph(0.075, M(-0.142, 1.585, 0.44, 0, 0, 0, 1.1, 0.8, 0.5))],
+      ['pupil', sph(0.035, M(0.142, 1.585, 0.475))], ['pupil', sph(0.035, M(-0.142, 1.585, 0.475))],
       ['cape', box(0.8, 1.2, 0.03, M(0, 0.62, -0.5, 0.18))],
       ['cape', torus(0.36, 0.05, M(0, 1.12, -0.05, HALF), Math.PI)],
       ['gold', star(0.14, M(0, 0.82, 0.44, 0, 0, 0, 1, 1, 0.35))],
     ],
   },
   {
-    id: 'viking', name: 'Viking Veg', rarity: 'rare', color: '#ff8a5c', belly: '#ffd2b8', desc: 'Horned helmet and a mighty braided beard.',
+    id: 'viking', name: 'Viking Veg', rarity: 'rare', color: '#8a5a3a', belly: '#4a3a2e', hideHair: true, desc: 'Horned helmet and a mighty braided beard.',
     mats: { steel: ['#a8b0ba', { metalness: 0.8, roughness: 0.3 }], horn: ['#f4ead2'], beard: ['#d9772b'] },
     parts: () => [
       ['steel', sph(0.47, M(0, 1.56, 0), Math.PI * 0.4)],
@@ -154,7 +158,7 @@ export const SKINS = [
     ],
   },
   {
-    id: 'galaxy', name: 'Galaxy Glaze', rarity: 'legendary', color: '#2a1b5c', belly: '#5b3fc2', glow: '#3a1f9c', desc: 'A body full of night sky, a golden halo and orbiting stars.',
+    id: 'galaxy', name: 'Galaxy Glaze', rarity: 'legendary', color: '#2a1b5c', belly: '#1c1240', glow: '#3a1f9c', tone: '#4a36b8', desc: 'A body full of night sky, a golden halo and orbiting stars.',
     mats: { halo: ['#ffe27a', { emissive: '#ffc400', emissiveIntensity: 1.4 }], star: ['#ffffff', { emissive: '#b9a8ff', emissiveIntensity: 1.6 }] },
     parts: () => [
       ['halo', torus(0.3, 0.035, M(0, 2.12, 0, HALF - 0.2))],
@@ -166,7 +170,7 @@ export const SKINS = [
     ],
   },
   {
-    id: 'fruitpunch', name: 'Fruit Punch DJ', rarity: 'epic', color: '#ff4f9a', belly: '#ffc0dc', desc: 'Big headphones and a boombox on the back.',
+    id: 'fruitpunch', name: 'Fruit Punch DJ', rarity: 'epic', color: '#ff4f9a', belly: '#2b2b35', hair: 'curly', desc: 'Big headphones and a boombox on the back.',
     mats: { phones: ['#1e1e28', { metalness: 0.4, roughness: 0.3 }], cup: ['#39f0c8', { emissive: '#12b894', emissiveIntensity: 0.8 }], box: ['#2b2b35'], speaker: ['#ffd447'] },
     parts: () => [
       ['phones', torus(0.46, 0.04, M(0, 1.55, 0, 0, HALF, 0), Math.PI)],
@@ -187,7 +191,12 @@ function outfitParts(skin) {
   const list = [];
   if (skin.parts) {
     const groups = {};
-    for (const [key, g] of skin.parts()) (groups[key] ||= []).push(g);
+    for (const [key, g] of skin.parts()) {
+      // Pieces were modelled on the old round Titan: fit head pieces to the human head, the rest to the torso.
+      g.computeBoundingBox();
+      g.applyMatrix4(g.boundingBox.getCenter(_c).y >= 1.0 ? HEAD_MAP : BODY_MAP);
+      (groups[key] ||= []).push(g);
+    }
     for (const [key, geos] of Object.entries(groups)) {
       const [color, opts = {}] = skin.mats[key];
       const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.5, ...opts });

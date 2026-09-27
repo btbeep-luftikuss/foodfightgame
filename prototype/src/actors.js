@@ -1,13 +1,13 @@
 // Tiny Titans: shared by the player and bots. Movement kit, statuses and inventory follow
 // GDD sections 4-5 (hard-CC diminishing returns, 50% slow cap, Wet cleansing, Glaze shield).
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   G, FLOOR_Y, clamp, rand, damp, angleLerp, forwardOf, rightOf,
   groundHeight, resolveHorizontal,
 } from './core.js';
 import { FOODS, makeFoodMesh } from './foods.js';
 import { SKIN_BY_ID, makeOutfit } from './skins.js';
+import { buildHuman, hairGeometry, SKIN_TONES, HAIR_COLORS, HAIR_STYLES, pick } from './human.js';
 
 const JUMP_V = Math.sqrt(2 * G * 6);   // 6 m jump: about three times a Titan's height
 const JUMP2_V = Math.sqrt(2 * G * 5);  // double jump adds another 5 m
@@ -34,48 +34,31 @@ function glintTexture() {
 }
 let GLINT_TEX = null;
 
-// Merged, shared Titan body geometry (one BufferGeometry per material).
-let TITAN_GEO = null;
-function titanGeometry() {
-  if (TITAN_GEO) return TITAN_GEO;
-  const M = (x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => new THREE.Matrix4().compose(
-    new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(sx, sy, sz));
-  const hat = M(0, 1.88, 0, 0, 0, -0.12);
-  const put = (g, m) => g.applyMatrix4(m);
-  const eyeG = () => new THREE.SphereGeometry(0.12, 12, 10), pupG = () => new THREE.SphereGeometry(0.06, 10, 8);
-  const puffs = [[-0.14, 0], [0.14, 0], [0, 0.13], [0, -0.13], [0, 0]].map(([x, z]) => put(new THREE.SphereGeometry(0.2, 12, 10), hat.clone().multiply(M(x, 0.42, z))));
-  TITAN_GEO = {
-    skin: mergeGeometries([put(new THREE.CapsuleGeometry(0.42, 0.45, 6, 16), M(0, 0.72, 0)), put(new THREE.SphereGeometry(0.43, 24, 18), M(0, 1.52, 0))]),
-    belly: put(new THREE.SphereGeometry(0.34, 16, 12), M(0, 0.66, 0.2, 0, 0, 0, 1, 1.1, 0.55)),
-    white: mergeGeometries([put(eyeG(), M(-0.16, 1.58, 0.36)), put(eyeG(), M(0.16, 1.58, 0.36))]),
-    hat: mergeGeometries([put(new THREE.CylinderGeometry(0.28, 0.26, 0.3, 20), hat.clone().multiply(M(0, 0.2, 0))), ...puffs]),
-    black: mergeGeometries([
-      put(pupG(), M(-0.16, 1.58, 0.46)), put(pupG(), M(0.16, 1.58, 0.46)),
-      put(new THREE.TorusGeometry(0.08, 0.025, 6, 12, Math.PI), M(0, 1.4, 0.4, 0, 0, Math.PI)),
-    ]),
-    band: put(new THREE.CylinderGeometry(0.3, 0.3, 0.14, 20), hat.clone()),
+// Materials for one human Titan; tone/hair are the person, shirt/pants come from the skin.
+function humanMats(shirt, pants, tone, hair) {
+  return {
+    tone: new THREE.MeshStandardMaterial({ color: tone, roughness: 0.62 }),
+    shirt: new THREE.MeshPhysicalMaterial({ color: shirt, roughness: 0.55, sheen: 0.4 }),
+    pants: new THREE.MeshStandardMaterial({ color: pants, roughness: 0.7 }),
+    hair: new THREE.MeshStandardMaterial({ color: hair, roughness: 0.8 }),
+    white: new THREE.MeshStandardMaterial({ color: '#fffaf2', roughness: 0.5 }),
+    black: new THREE.MeshStandardMaterial({ color: '#1d1620', roughness: 0.4 }),
+    band: new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.5 }),
+    shoe: new THREE.MeshStandardMaterial({ color: '#2b2230', roughness: 0.6 }),
   };
-  return TITAN_GEO;
 }
+const pantsFor = (skin) => skin.belly || '#35486e'; // default: blue jeans
 
 // A standing Titan wearing a skin, for the locker thumbnails.
 export function titanPreview(skinId, baseColor = '#ff9a1f') {
   const skin = SKIN_BY_ID[skinId] || SKIN_BY_ID.chef;
-  const color = skin.color || baseColor;
-  const G = titanGeometry();
   const g = new THREE.Group();
-  const skinM = new THREE.MeshPhysicalMaterial({ color, roughness: 0.45, clearcoat: 0.4, emissive: skin.glow || '#000000' });
-  const bellyM = new THREE.MeshStandardMaterial({ color: skin.belly || new THREE.Color(color).lerp(new THREE.Color('#fff6e6'), 0.55), roughness: 0.6 });
-  const white = new THREE.MeshStandardMaterial({ color: '#fffaf2', roughness: 0.5 });
-  for (const [geo, m] of [[G.skin, skinM], [G.belly, bellyM], [G.white, white], [G.black, new THREE.MeshStandardMaterial({ color: '#1d1620', roughness: 0.3 })]]) g.add(new THREE.Mesh(geo, m));
-  if (skin.hat) g.add(new THREE.Mesh(G.hat, white), new THREE.Mesh(G.band, new THREE.MeshStandardMaterial({ color })));
-  for (const s of [1, -1]) {
-    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.35, 4, 8), skinM);
-    arm.position.set(s * 0.5, 0.8, 0); arm.rotation.z = s * 0.25;
-    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), bellyM);
-    foot.scale.set(1, 0.6, 1.4); foot.position.set(s * 0.2, 0.08, 0.05);
-    g.add(arm, foot);
-  }
+  const mats = humanMats(skin.color || baseColor, pantsFor(skin), skin.tone || SKIN_TONES[1], HAIR_COLORS[1]);
+  if (skin.glow) mats.shirt.emissive.set(skin.glow);
+  const h = buildHuman(g, mats, skin.hair || 'short');
+  h.chefHat.visible = !!skin.hat;
+  h.hair.visible = !skin.hideHair;
+  h.armL.pivot.rotation.z = 0.25; h.armR.pivot.rotation.z = -0.25;
   g.add(makeOutfit(skin.id));
   return g;
 }
@@ -125,45 +108,16 @@ export class Actor {
     const root = new THREE.Group();
     const body = new THREE.Group();
     root.add(body);
-    const skin = new THREE.MeshPhysicalMaterial({ color: this.color, roughness: 0.45, clearcoat: 0.4, sheen: 0.3 });
-    const belly = new THREE.MeshStandardMaterial({ color: new THREE.Color(this.color).lerp(new THREE.Color('#fff6e6'), 0.55), roughness: 0.6 });
-    const white = new THREE.MeshStandardMaterial({ color: '#fffaf2', roughness: 0.5 });
-    const black = new THREE.MeshStandardMaterial({ color: '#1d1620', roughness: 0.3 });
-    this.skinMat = skin; this.bellyMat = belly;
+    // Each Titan is a person: their own skin tone and hair; the skin (outfit) sets shirt and pants.
     this.baseColor = this.color;
-    this.bandMat = new THREE.MeshStandardMaterial({ color: this.color, roughness: 0.5 });
-
-    // Static body parts are merged per material (6 draw calls instead of ~20) and shared by all Titans.
-    const G = titanGeometry();
-    for (const [g, m] of [[G.skin, skin], [G.belly, belly], [G.white, white], [G.black, black]]) body.add(new THREE.Mesh(g, m));
-    this.chefHat = new THREE.Group();
-    this.chefHat.add(new THREE.Mesh(G.hat, white), new THREE.Mesh(G.band, this.bandMat));
-    body.add(this.chefHat);
+    this.tone = pick(SKIN_TONES); this.hairColor = pick(HAIR_COLORS); this.hairStyle = pick(HAIR_STYLES);
+    const mats = humanMats(this.color, '#35486e', this.tone, this.hairColor);
+    this.mats = mats;
+    this.skinMat = mats.shirt; this.bellyMat = mats.pants; this.toneMat = mats.tone; this.bandMat = mats.band;
+    addRimLight(mats.shirt); addRimLight(mats.tone);
+    const h = buildHuman(body, mats, this.hairStyle);
+    this.armL = h.armL; this.armR = h.armR; this.legs = h.legs; this.hair = h.hair; this.chefHat = h.chefHat;
     this.outfit = null; this.skinId = 'chef'; this.skinGlow = new THREE.Color(0, 0, 0);
-    addRimLight(skin);
-
-    const armG = new THREE.CapsuleGeometry(0.1, 0.35, 4, 8);
-    const mkArm = (s) => {
-      const pivot = new THREE.Group();
-      pivot.position.set(s * 0.46, 1.02, 0);
-      const arm = new THREE.Mesh(armG, skin);
-      arm.position.y = -0.22;
-      const hand = new THREE.Group();
-      hand.position.y = -0.46;
-      pivot.add(arm, hand);
-      body.add(pivot);
-      return { pivot, hand };
-    };
-    // The model faces local +z and is turned by yaw + PI, so local -x is the character's right.
-    this.armL = mkArm(1); this.armR = mkArm(-1);
-    const footG = new THREE.SphereGeometry(0.16, 10, 8);
-    this.feet = [-1, 1].map((s) => {
-      const f = new THREE.Mesh(footG, belly);
-      f.scale.set(1, 0.6, 1.4);
-      f.position.set(s * 0.2, 0.08, 0.05);
-      body.add(f);
-      return f;
-    });
 
     // napkin glider
     const napkinTex = (() => {
@@ -223,10 +177,13 @@ export class Actor {
     this.skinId = skin.id;
     this.color = skin.color || this.baseColor;
     this.skinMat.color.set(this.color);
-    this.bellyMat.color.set(skin.belly || new THREE.Color(this.color).lerp(new THREE.Color('#fff6e6'), 0.55));
+    this.bellyMat.color.set(pantsFor(skin));
     this.bandMat.color.set(this.color);
+    this.toneMat.color.set(skin.tone || this.tone);
     this.skinGlow.set(skin.glow || '#000000');
     this.chefHat.visible = !!skin.hat;
+    this.hair.visible = !skin.hideHair;
+    this.hair.geometry = hairGeometry(skin.hair || this.hairStyle);
     if (this.outfit) this.body.remove(this.outfit);
     this.outfit = makeOutfit(skin.id);
     const shadows = !!this.game.quality.dynamicShadows;
@@ -259,7 +216,7 @@ export class Actor {
     return out.copy(this.pos).addScaledVector(_r, 0.5).addScaledVector(_f, 0.45).setY(this.pos.y + 1.45);
   }
   center(out = new THREE.Vector3()) { return out.copy(this.pos).setY(this.pos.y + 0.95); }
-  headPos(out = new THREE.Vector3()) { return out.copy(this.pos).setY(this.pos.y + 1.55); }
+  headPos(out = new THREE.Vector3()) { return out.copy(this.pos).setY(this.pos.y + 1.7); }
   isFrozen() { return this.game.time < this.frozenUntil; }
   isTripped() { return this.game.time < this.trippedUntil; }
   isWet() { return this.game.time < this.wetUntil; }
@@ -635,15 +592,16 @@ export class Actor {
     if (this.shieldUp) { rx = lx = -1.4; }
     this.armR.pivot.rotation.x = damp(this.armR.pivot.rotation.x, rx, 20, dt);
     this.armL.pivot.rotation.x = damp(this.armL.pivot.rotation.x, lx, 20, dt);
-    this.feet[0].position.z = 0.05 + (moving ? Math.sin(this.walkPhase) * 0.18 : 0);
-    this.feet[1].position.z = 0.05 - (moving ? Math.sin(this.walkPhase) * 0.18 : 0);
+    // legs stride opposite the arms; in the air one knee comes up
+    const stride = moving ? swing * 1.15 : (this.onGround ? 0 : 0.35);
+    this.legs[0].rotation.x = damp(this.legs[0].rotation.x, stride, 20, dt);
+    this.legs[1].rotation.x = damp(this.legs[1].rotation.x, moving ? -stride : -stride * 0.5, 20, dt);
 
-    // Level of detail: far-away Titans drop the small parts you can't see anyway (4 fewer draw calls each).
+    // Level of detail: far-away Titans drop their arms, which you can't make out anyway (4 fewer draw calls each).
     const near = camera.position.distanceToSquared(this.pos) < 70 * 70;
     if (near !== this.lodNear) {
       this.lodNear = near;
       this.armL.pivot.visible = this.armR.pivot.visible = near;
-      this.feet[0].visible = this.feet[1].visible = near;
     }
     this.napkin.visible = this.gliding;
     if (this.gliding) this.napkin.rotation.z = Math.sin(t * 3) * 0.08;
@@ -657,6 +615,7 @@ export class Actor {
     const burnGlow = this.isBurning() ? 0.25 + 0.15 * Math.sin(t * 20) : 0;
     const gl = this.skinGlow;
     this.skinMat.emissive.setRGB(gl.r + this.hitFlash * 0.9 + burnGlow, gl.g + this.hitFlash * 0.9 + burnGlow * 0.3, gl.b + this.hitFlash * 0.9);
+    this.toneMat.emissive.setRGB(this.hitFlash * 0.9 + burnGlow, this.hitFlash * 0.9 + burnGlow * 0.3, this.hitFlash * 0.9);
 
     // carrot glint while charging
     const glinting = this.charging && this.selected()?.id === 'carrot';

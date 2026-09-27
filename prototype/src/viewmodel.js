@@ -13,11 +13,19 @@ export class ViewModel {
     camera.add(this.root);
     this.sway = new THREE.Group();
     this.root.add(this.sway);
-    this.armMat = new THREE.MeshPhysicalMaterial({ color: '#ff9a1f', roughness: 0.45, clearcoat: 0.4 });
-    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.55, 4, 10), this.armMat);
+    // bare forearm and hand in the Titan's skin tone, with the shirt sleeve at the elbow
+    this.armMat = new THREE.MeshStandardMaterial({ color: '#eab893', roughness: 0.6 });
+    this.sleeveMat = new THREE.MeshPhysicalMaterial({ color: '#ff9a1f', roughness: 0.55, sheen: 0.4 });
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.55, 4, 10), this.armMat);
     arm.rotation.x = Math.PI / 2 - 0.25;
     arm.position.set(0.06, -0.12, 0.28);
-    this.sway.add(arm);
+    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.34, 14), this.sleeveMat);
+    sleeve.rotation.x = Math.PI / 2 - 0.25;
+    sleeve.position.set(0.06, -0.05, 0.55);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 10), this.armMat);
+    hand.scale.set(1.1, 0.85, 1.2);
+    hand.position.set(0.05, -0.17, -0.04);
+    this.sway.add(arm, sleeve, hand);
     this.hand = new THREE.Group();
     this.hand.position.set(0, 0, -0.05);
     this.sway.add(this.hand);
@@ -26,12 +34,14 @@ export class ViewModel {
     this.root.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
   }
 
-  setColor(c) { this.armMat.color.set(c); }
 
   update(dt, player, visible) {
     this.root.visible = visible;
     if (!visible) return;
-    if (this.armColor !== player.color) { this.armColor = player.color; this.armMat.color.set(player.color); } // matches your skin
+    if (this.armColor !== player.color + player.toneMat.color.getHexString()) { // matches your Titan and skin
+      this.armColor = player.color + player.toneMat.color.getHexString();
+      this.sleeveMat.color.copy(player.skinMat.color); this.armMat.color.copy(player.toneMat.color);
+    }
     const slot = player.selected();
     const id = slot ? slot.id : null;
     if (id !== this.heldId) {

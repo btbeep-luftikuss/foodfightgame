@@ -63,6 +63,10 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.11:**
+
+- **Titans are people now:** a head with eyes, eyebrows, nose, ears and a smile; hair; a neck; a shirt; jeans; arms with hands; legs with shoes. Each Titan gets its own skin tone (8), hair colour (8) and hairstyle (short, spiky, long, bun, buzz, curly). Legs stride when walking and a knee lifts in the air. Skins set the shirt and trousers, and every costume piece was refitted onto the human head and torso (helmets and hoods hide the hair). Your first-person arm shows your own skin tone, hand and sleeve. Face hits now use the smaller human head (0.3 m hit sphere at 1.7 m, was 0.43 m at 1.55 m).
+
 **Version 0.10:**
 
 - **Skins and the Locker:** 13 original costume outfits in a battle-royale locker style, with Common, Uncommon, Rare, Epic and Legendary tiers (no weapons, just hats, helmets, capes and back bling): Head Chef, Nori Ninja, Space Sprout, Sir Crumb, Captain Pickle, Rex Hoodie, Toastbot 3000, Waffle Wizard, Cool Cat, Super Spud, Viking Veg, Galaxy Glaze and Fruit Punch DJ. Pick one from **Locker** on the menu; it's remembered, your first-person arm matches it, bots wear random skins, and online players see each other's skins. Each outfit is merged per material, so it adds only 1-4 draw calls per Titan.

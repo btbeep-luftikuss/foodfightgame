@@ -70,8 +70,8 @@ function renderIcons() {
     const m = titanPreview(s.id);
     m.rotation.y = 0.45;
     scene.add(m);
-    cam.position.set(0, 1.35, 5.4);
-    cam.lookAt(0, 1.15, 0);
+    cam.position.set(0, 1.25, 4.1);
+    cam.lookAt(0, 1.08, 0);
     r.render(scene, cam);
     icons['skin:' + s.id] = r.domElement.toDataURL('image/png');
     scene.remove(m);
