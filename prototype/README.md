@@ -63,6 +63,13 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.10:**
+
+- **Skins and the Locker:** 13 original costume outfits in a battle-royale locker style, with Common, Uncommon, Rare, Epic and Legendary tiers (no weapons, just hats, helmets, capes and back bling): Head Chef, Nori Ninja, Space Sprout, Sir Crumb, Captain Pickle, Rex Hoodie, Toastbot 3000, Waffle Wizard, Cool Cat, Super Spud, Viking Veg, Galaxy Glaze and Fruit Punch DJ. Pick one from **Locker** on the menu; it's remembered, your first-person arm matches it, bots wear random skins, and online players see each other's skins. Each outfit is merged per material, so it adds only 1-4 draw calls per Titan.
+- **Chili Pepper:** time between throws 0.7 → 1.8 s.
+- **Cheese Wheel shield:** raising it costs 25 stamina; it holds 150 HP (was 300); after it melts, a new one can't go up for 4 s.
+- **New alts that only affect you** (each uses 1 of the food and has a cooldown): Carrot **Pole Vault** (leap forward, 4 s), Tomato **Tomato Bounce** (super jump, 5 s), Ice **Chill Out** (shake off burning, sticky and slows, 6 s), Chili **Hot Feet** (35% faster for 4 s, 12 s), Cookie **Sugar Rush** (full stamina, 12 s).
+
 **Version 0.9:**
 
 - **Mode menu:** Play vs bots opens a choice between **Classic** and **Chef's Choice**; Chef's Choice then shows the food picker.

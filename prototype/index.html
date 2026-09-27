@@ -74,6 +74,7 @@ button { font: inherit; color: inherit; }
 .chip { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: var(--ink-glass); border: 2px solid var(--paper-dim); }
 .chip.frozen, .chip.wet { border-color: var(--glaze); color: var(--glaze); }
 .chip.juiced, .chip.burning { border-color: var(--tomato); color: #ffb3a6; }
+.chip.fast { border-color: #ffb13a; color: #ffd08a; }
 .chip.sticky { border-color: #c98a4a; color: #f3c89a; }
 .chip.slick, .chip.tripped { border-color: var(--butter); color: var(--butter); }
 .chip.rooted { border-color: var(--basil); color: #a8ecc8; }
@@ -137,6 +138,13 @@ button { font: inherit; color: inherit; }
 .online input { font: inherit; font-size: 16px; color: var(--paper); background: var(--ink); border: 2px solid var(--paper-dim); border-radius: 10px; padding: 8px 10px; }
 .online p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--paper-dim); }
 .online p.err { color: #ffb3a6; }
+.locker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.locker-grid button { display: grid; justify-items: center; gap: 1px; padding: 6px 4px 8px; border-radius: 12px; border: 2px solid transparent; cursor: pointer; font: inherit; color: var(--paper);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--rar) 55%, #22142a) 0%, #22142a 100%); }
+.locker-grid button img { width: 84px; height: 84px; }
+.locker-grid button b { font-size: 12.5px; line-height: 1.15; text-align: center; }
+.locker-grid button small { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--rar); }
+.locker-grid button[aria-pressed="true"] { border-color: var(--butter); box-shadow: 0 0 0 2px var(--butter); }
 .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .mode { display: grid; gap: 4px; align-content: start; text-align: left; padding: 12px; border-radius: 14px; border: 2px solid var(--paper-dim); background: var(--ink); color: var(--paper); font: inherit; cursor: pointer; }
 .mode b { font-size: 17px; color: var(--butter); }
@@ -315,12 +323,13 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 
 <section id="menu" class="menu" aria-label="Main menu">
   <div class="menu-panel">
-    <p class="eyebrow">Prototype 0.9 · The Grand Kitchen</p>
+    <p class="eyebrow">Prototype 0.10 · The Grand Kitchen</p>
     <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
     <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Play in first person against 11 bots until the Soap Tide closes in, or online against your friends. Blueberries fire like a machine gun.</p>
     <div class="row">
       <button id="play" class="btn" type="button">Play vs bots</button>
       <button id="online-open" class="btn ghost" type="button">Play online</button>
+      <button id="locker-open" class="btn ghost" type="button">Locker</button>
       <label class="field" for="quality">Graphics
         <select id="quality">
           <option value="low">Low</option>
@@ -330,6 +339,10 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       </label>
     </div>
     <p id="menu-error" hidden></p>
+    <div id="locker" class="online" hidden>
+      <p id="locker-now"></p>
+      <div id="locker-grid" class="locker-grid" role="group" aria-label="Skins"></div>
+    </div>
     <div id="modes" class="online" hidden>
       <p><b>Choose a mode</b></p>
       <div class="modes">

@@ -6,6 +6,8 @@ import { HUD } from './hud.js';
 import { Input } from './input.js';
 import { Sfx } from './fx.js';
 import { FOODS, FOOD_IDS, makeFoodMesh, setFoodShadows } from './foods.js';
+import { SKINS, SKIN_BY_ID, RARITY } from './skins.js';
+import { titanPreview } from './actors.js';
 import { TITANS } from './game.js';
 import { Net, roomAvailable, cleanRoom } from './net.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -61,6 +63,17 @@ function renderIcons() {
     cam.lookAt(sph.center);
     r.render(scene, cam);
     icons[id] = r.domElement.toDataURL('image/png');
+    scene.remove(m);
+  }
+  // Locker thumbnails: each skin on a standing Titan, turned a little toward the light.
+  for (const s of SKINS) {
+    const m = titanPreview(s.id);
+    m.rotation.y = 0.45;
+    scene.add(m);
+    cam.position.set(0, 1.35, 5.4);
+    cam.lookAt(0, 1.15, 0);
+    r.render(scene, cam);
+    icons['skin:' + s.id] = r.domElement.toDataURL('image/png');
     scene.remove(m);
   }
   pm.dispose();
@@ -137,7 +150,7 @@ function boot() {
   // Play opens the mode chooser: Classic starts right away, Chef's Choice opens the food picker.
   const reveal = (el) => requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
   $('play').addEventListener('click', () => {
-    $('modes').hidden = false; $('online').hidden = true;
+    $('modes').hidden = false; $('online').hidden = true; $('locker').hidden = true;
     reveal($('modes'));
   });
   $('mode-classic').addEventListener('click', () => start({}));
@@ -147,6 +160,31 @@ function boot() {
     if (open) reveal($('chef'));
   });
   $('again').addEventListener('click', () => start());
+
+  // Locker: pick a skin. Remembered on this device and shown to everyone online.
+  let skinId = 'chef';
+  try { skinId = SKIN_BY_ID[localStorage.getItem('tt-skin')] ? localStorage.getItem('tt-skin') : 'chef'; } catch { /* storage blocked */ }
+  game.playerSkin = skinId;
+  const lockerGrid = $('locker-grid');
+  lockerGrid.innerHTML = SKINS.map((s) => `<button type="button" data-id="${s.id}" aria-pressed="false" style="--rar:${RARITY[s.rarity].color}" title="${s.desc}"><img src="${icons['skin:' + s.id] || ''}" alt=""><b>${s.name}</b><small>${RARITY[s.rarity].name}</small></button>`).join('');
+  function renderLocker() {
+    for (const b of lockerGrid.children) b.setAttribute('aria-pressed', b.dataset.id === skinId ? 'true' : 'false');
+    const s = SKIN_BY_ID[skinId];
+    $('locker-now').innerHTML = `Wearing <b style="color:${RARITY[s.rarity].color}">${s.name}</b>: ${s.desc}`;
+    $('locker-open').textContent = `Locker · ${s.name}`;
+  }
+  lockerGrid.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    skinId = b.dataset.id; game.playerSkin = skinId;
+    try { localStorage.setItem('tt-skin', skinId); } catch { /* storage blocked */ }
+    renderLocker();
+  });
+  renderLocker();
+  $('locker-open').addEventListener('click', () => {
+    $('locker').hidden = !$('locker').hidden; $('modes').hidden = true; $('online').hidden = true;
+    if (!$('locker').hidden) reveal($('locker'));
+  });
 
   // Chef's Choice: pick 3 foods that never run out; nothing spawns on the map.
   let chefPick = [];
@@ -181,7 +219,7 @@ function boot() {
   // Online: join a room code; everyone with the same code plays together.
   const status = $('online-status');
   try { $('nick').value = localStorage.getItem('tt-nick') || ''; } catch { /* storage blocked */ }
-  $('online-open').addEventListener('click', () => { $('online').hidden = !$('online').hidden; $('modes').hidden = true; if (!$('online').hidden) $('nick').focus(); });
+  $('online-open').addEventListener('click', () => { $('online').hidden = !$('online').hidden; $('modes').hidden = true; $('locker').hidden = true; if (!$('online').hidden) $('nick').focus(); });
   $('online').addEventListener('submit', async (e) => {
     e.preventDefault();
     sfx.unlock();

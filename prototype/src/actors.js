@@ -7,6 +7,7 @@ import {
   groundHeight, resolveHorizontal,
 } from './core.js';
 import { FOODS, makeFoodMesh } from './foods.js';
+import { SKIN_BY_ID, makeOutfit } from './skins.js';
 
 const JUMP_V = Math.sqrt(2 * G * 6);   // 6 m jump: about three times a Titan's height
 const JUMP2_V = Math.sqrt(2 * G * 5);  // double jump adds another 5 m
@@ -46,10 +47,8 @@ function titanGeometry() {
   TITAN_GEO = {
     skin: mergeGeometries([put(new THREE.CapsuleGeometry(0.42, 0.45, 6, 16), M(0, 0.72, 0)), put(new THREE.SphereGeometry(0.43, 24, 18), M(0, 1.52, 0))]),
     belly: put(new THREE.SphereGeometry(0.34, 16, 12), M(0, 0.66, 0.2, 0, 0, 0, 1, 1.1, 0.55)),
-    white: mergeGeometries([
-      put(eyeG(), M(-0.16, 1.58, 0.36)), put(eyeG(), M(0.16, 1.58, 0.36)),
-      put(new THREE.CylinderGeometry(0.28, 0.26, 0.3, 20), hat.clone().multiply(M(0, 0.2, 0))), ...puffs,
-    ]),
+    white: mergeGeometries([put(eyeG(), M(-0.16, 1.58, 0.36)), put(eyeG(), M(0.16, 1.58, 0.36))]),
+    hat: mergeGeometries([put(new THREE.CylinderGeometry(0.28, 0.26, 0.3, 20), hat.clone().multiply(M(0, 0.2, 0))), ...puffs]),
     black: mergeGeometries([
       put(pupG(), M(-0.16, 1.58, 0.46)), put(pupG(), M(0.16, 1.58, 0.46)),
       put(new THREE.TorusGeometry(0.08, 0.025, 6, 12, Math.PI), M(0, 1.4, 0.4, 0, 0, Math.PI)),
@@ -57,6 +56,28 @@ function titanGeometry() {
     band: put(new THREE.CylinderGeometry(0.3, 0.3, 0.14, 20), hat.clone()),
   };
   return TITAN_GEO;
+}
+
+// A standing Titan wearing a skin, for the locker thumbnails.
+export function titanPreview(skinId, baseColor = '#ff9a1f') {
+  const skin = SKIN_BY_ID[skinId] || SKIN_BY_ID.chef;
+  const color = skin.color || baseColor;
+  const G = titanGeometry();
+  const g = new THREE.Group();
+  const skinM = new THREE.MeshPhysicalMaterial({ color, roughness: 0.45, clearcoat: 0.4, emissive: skin.glow || '#000000' });
+  const bellyM = new THREE.MeshStandardMaterial({ color: skin.belly || new THREE.Color(color).lerp(new THREE.Color('#fff6e6'), 0.55), roughness: 0.6 });
+  const white = new THREE.MeshStandardMaterial({ color: '#fffaf2', roughness: 0.5 });
+  for (const [geo, m] of [[G.skin, skinM], [G.belly, bellyM], [G.white, white], [G.black, new THREE.MeshStandardMaterial({ color: '#1d1620', roughness: 0.3 })]]) g.add(new THREE.Mesh(geo, m));
+  if (skin.hat) g.add(new THREE.Mesh(G.hat, white), new THREE.Mesh(G.band, new THREE.MeshStandardMaterial({ color })));
+  for (const s of [1, -1]) {
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.35, 4, 8), skinM);
+    arm.position.set(s * 0.5, 0.8, 0); arm.rotation.z = s * 0.25;
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), bellyM);
+    foot.scale.set(1, 0.6, 1.4); foot.position.set(s * 0.2, 0.08, 0.05);
+    g.add(arm, foot);
+  }
+  g.add(makeOutfit(skin.id));
+  return g;
 }
 
 // A soft rim light keeps Titans readable against busy food splats (GDD 11.1).
@@ -94,7 +115,7 @@ export class Actor {
     this.lastHitBy = null; this.lastHitFood = null; this.lastHitAt = -99;
     this.envAcc = 0; this.burnAcc = 0; this.tideAcc = 0; this.nextDrip = 0; this.honeySfxAt = 0;
     this.fallTop = 0; this.armT = 0; this.squash = 0; this.walkPhase = 0; this.hitFlash = 0;
-    this.placement = 0;
+    this.placement = 0; this.altReadyAt = {}; this.speedBoostUntil = 0; this.shieldBrokenUntil = 0;
     this.root.visible = true;
     this._refreshHeld();
   }
@@ -108,13 +129,17 @@ export class Actor {
     const belly = new THREE.MeshStandardMaterial({ color: new THREE.Color(this.color).lerp(new THREE.Color('#fff6e6'), 0.55), roughness: 0.6 });
     const white = new THREE.MeshStandardMaterial({ color: '#fffaf2', roughness: 0.5 });
     const black = new THREE.MeshStandardMaterial({ color: '#1d1620', roughness: 0.3 });
-    this.skinMat = skin;
+    this.skinMat = skin; this.bellyMat = belly;
+    this.baseColor = this.color;
+    this.bandMat = new THREE.MeshStandardMaterial({ color: this.color, roughness: 0.5 });
 
-    // Static body parts are merged per material (5 draw calls instead of ~20) and shared by all Titans.
+    // Static body parts are merged per material (6 draw calls instead of ~20) and shared by all Titans.
     const G = titanGeometry();
-    for (const [g, m] of [[G.skin, skin], [G.belly, belly], [G.white, white], [G.black, black], [G.band, new THREE.MeshStandardMaterial({ color: this.color, roughness: 0.5 })]]) {
-      body.add(new THREE.Mesh(g, m));
-    }
+    for (const [g, m] of [[G.skin, skin], [G.belly, belly], [G.white, white], [G.black, black]]) body.add(new THREE.Mesh(g, m));
+    this.chefHat = new THREE.Group();
+    this.chefHat.add(new THREE.Mesh(G.hat, white), new THREE.Mesh(G.band, this.bandMat));
+    body.add(this.chefHat);
+    this.outfit = null; this.skinId = 'chef'; this.skinGlow = new THREE.Color(0, 0, 0);
     addRimLight(skin);
 
     const armG = new THREE.CapsuleGeometry(0.1, 0.35, 4, 8);
@@ -186,6 +211,29 @@ export class Actor {
     this.game.scene.add(root);
   }
 
+  spendStamina(n) {
+    if (this.stamina < n) { this.staminaFlash = 0.4; return false; } // too tired
+    this.stamina -= n; this.staminaUsedAt = this.game.time; return true;
+  }
+  speedBoost(dur) { this.speedBoostUntil = Math.max(this.speedBoostUntil, this.game.time + dur); }
+
+  // Dress this Titan in a skin (see skins.js). 'chef' keeps the Titan's own colour.
+  applySkin(id) {
+    const skin = SKIN_BY_ID[id] || SKIN_BY_ID.chef;
+    this.skinId = skin.id;
+    this.color = skin.color || this.baseColor;
+    this.skinMat.color.set(this.color);
+    this.bellyMat.color.set(skin.belly || new THREE.Color(this.color).lerp(new THREE.Color('#fff6e6'), 0.55));
+    this.bandMat.color.set(this.color);
+    this.skinGlow.set(skin.glow || '#000000');
+    this.chefHat.visible = !!skin.hat;
+    if (this.outfit) this.body.remove(this.outfit);
+    this.outfit = makeOutfit(skin.id);
+    const shadows = !!this.game.quality.dynamicShadows;
+    this.outfit.traverse((o) => { if (o.isMesh && !o.material.transparent) o.castShadow = shadows; });
+    this.body.add(this.outfit);
+  }
+
   _refreshHeld() {
     const slot = this.inv[this.sel];
     const id = slot ? slot.id : null;
@@ -234,6 +282,7 @@ export class Actor {
     if (this.isTripped()) out.push(['tripped', 'Slipped']);
     if (this.isRooted()) out.push(['rooted', 'Rooted']);
     if (t < this.juicedUntil) out.push(['juiced', 'Juiced']);
+    if (t < this.speedBoostUntil) out.push(['fast', 'Hot Feet']);
     const slow = this.slowAmount();
     if (slow > 0.01) out.push(['sticky', `Sticky -${Math.round(slow * 100)}%`]);
     if (this.isBurning()) out.push(['burning', 'Burning']);
@@ -319,7 +368,7 @@ export class Actor {
       if (!this.inv[i]) {
         const k = Math.min(left, max);
         this.inv[i] = { id, count: k };
-        if (id === 'cheese') this.inv[i].hp = 300;
+        if (id === 'cheese') this.inv[i].hp = FOODS.cheese.shieldHp;
         left -= k;
       }
     }
@@ -329,10 +378,10 @@ export class Actor {
   consume(n) {
     const s = this.inv[this.sel];
     if (!s) return;
-    if (s.inf) { if (s.id === 'cheese') s.hp = 300; this._refreshHeld(); return; } // Chef's Choice: never runs out
+    if (s.inf) { if (s.id === 'cheese') s.hp = FOODS.cheese.shieldHp; this._refreshHeld(); return; } // Chef's Choice: never runs out
     s.count -= n;
     if (s.count <= 0) { this.inv[this.sel] = null; this.shieldUp = false; }
-    else if (s.id === 'cheese') s.hp = 300; // the next wheel in the stack is a fresh shield
+    else if (s.id === 'cheese') s.hp = FOODS.cheese.shieldHp; // the next wheel in the stack is a fresh shield
     this._refreshHeld();
   }
   select(i) {
@@ -347,7 +396,7 @@ export class Actor {
   // Chef's Choice: bottomless slots; food never heals there (green heal crosses on the map do).
   giveLoadout(ids) {
     this.inv = [null, null, null, null, null];
-    ids.forEach((id, i) => { this.inv[i] = { id, count: FOODS[id].maxStack, inf: true }; if (id === 'cheese') this.inv[i].hp = 300; });
+    ids.forEach((id, i) => { this.inv[i] = { id, count: FOODS[id].maxStack, inf: true }; if (id === 'cheese') this.inv[i].hp = FOODS.cheese.shieldHp; });
     this.sel = 0;
     this._refreshHeld();
   }
@@ -398,6 +447,7 @@ export class Actor {
     const control = this.canControl() && !this.isRooted();
     const slow = this.slowAmount();
     let speed = (it.sprint && !this.heavy() ? 10 : 6.5) * (1 - slow); // walk 6.5 m/s, sprint 10 m/s
+    if (now < this.speedBoostUntil) speed *= 1.35; // Hot Feet
     if (this.shieldUp) speed *= 0.75;
     else if (this.heavy()) speed *= 0.85; // lugging a watermelon
     if (this.eat) speed *= 0.5;
@@ -417,10 +467,7 @@ export class Actor {
     if (this.onGround) { this.airJumps = 0; this.airDashes = 0; }
     if (now - this.staminaUsedAt > REGEN_DELAY) this.stamina = Math.min(STAMINA_MAX, this.stamina + REGEN * dt);
     this.staminaFlash = Math.max(0, this.staminaFlash - dt);
-    const spend = (n) => {
-      if (this.stamina < n) { this.staminaFlash = 0.4; return false; } // too tired
-      this.stamina -= n; this.staminaUsedAt = now; return true;
-    };
+    const spend = (n) => this.spendStamina(n);
     if (control && it.jump && !this.gliding) {
       if (this.onGround) {
         if (spend(COST_JUMP)) { this.vel.y = JUMP_V; this.onGround = false; }
@@ -519,7 +566,11 @@ export class Actor {
     }
     const ready = this.canControl() && now >= this.recoverUntil && now >= this.swapLockUntil;
     if (!food || !this.canControl()) { this.charging = false; this.primaryPrev = it.primary; return; }
-    if (it.alt && food.alt && ready) food.alt(this, g);
+    if (it.alt && food.alt && ready) {
+      const readyAt = food.altCd ? this.altReadyAt[slot.id] || 0 : 0;
+      if (now < readyAt) { if (!this.isBot) g.hud.toast(`${food.altName || 'Alt'} ready in ${Math.ceil(readyAt - now)} s`); }
+      else if (food.alt(this, g) !== false && food.altCd) this.altReadyAt[slot.id] = now + food.altCd;
+    }
     if (!ready) { this.primaryPrev = it.primary; return; }
     if (food.auto) { // rapid fire: keeps firing while held
       if (it.primary) this._release(food, 1);
@@ -604,7 +655,8 @@ export class Actor {
 
     this.hitFlash = Math.max(0, this.hitFlash - dt * 6);
     const burnGlow = this.isBurning() ? 0.25 + 0.15 * Math.sin(t * 20) : 0;
-    this.skinMat.emissive.setRGB(this.hitFlash * 0.9 + burnGlow, this.hitFlash * 0.9 + burnGlow * 0.3, this.hitFlash * 0.9);
+    const gl = this.skinGlow;
+    this.skinMat.emissive.setRGB(gl.r + this.hitFlash * 0.9 + burnGlow, gl.g + this.hitFlash * 0.9 + burnGlow * 0.3, gl.b + this.hitFlash * 0.9);
 
     // carrot glint while charging
     const glinting = this.charging && this.selected()?.id === 'carrot';

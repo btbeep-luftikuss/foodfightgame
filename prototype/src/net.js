@@ -153,7 +153,7 @@ export class Net {
     if (p.onGround) f |= FLAG.ground;
     const s = [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.vel.x), r2(p.vel.y), r2(p.vel.z), r2(p.yaw), r2(this.game.input.pitch),
       Math.round(p.hp), Math.round(p.glaze), p.alive ? 1 : 0, p.selected()?.id || '', f, p.kills, r2(Math.min(99, t - p.noiseAt))];
-    this.room.presence({ n: this.name, c: this.color, s, e: this.log.map((e) => e.slice(0, -1)) }).catch(() => {});
+    this.room.presence({ n: this.name, c: this.color, k: this.game.playerSkin, s, e: this.log.map((e) => e.slice(0, -1)) }).catch(() => {});
   }
 
   // ---------------------------------------------------------------- incoming
@@ -195,6 +195,7 @@ export class Net {
     const actor = new Actor(game, { id: 100 + this.proxies.size, name: cleanName(pres.n), color: /^#[0-9a-f]{6}$/i.test(pres.c) ? pres.c : '#f2f2f2', isBot: false });
     actor.isRemote = true;
     actor.gliding = false;
+    actor.applySkin(typeof pres.k === 'string' ? pres.k : 'chef'); // unknown ids fall back to the chef
     const pr = { actor, lastSeq: null, presence: null, recvAt: game.time, target: new THREE.Vector3(), netVel: new THREE.Vector3(), throws: [] };
     this.proxies.set(peer, pr);
     game.actors.push(actor);

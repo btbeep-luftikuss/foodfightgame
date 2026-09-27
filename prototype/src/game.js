@@ -12,6 +12,7 @@ import { Projectiles } from './projectiles.js';
 import { Items } from './items.js';
 import { BotBrain, BOT_NAMES } from './bots.js';
 import { ViewModel } from './viewmodel.js';
+import { randomSkinId } from './skins.js';
 import { FOODS, FOOD_IDS, FEED_VERB, lobSpeed, lobDir, randomFoodId, rollAmmo, pickupAmmo } from './foods.js';
 
 const PLAYER_COLOR = '#ff9a1f';
@@ -49,6 +50,7 @@ export class Game {
     this.brains = new Map();
     this.botActors = this.actors;
     this.net = null; this.online = false; this.respawnAt = 0;
+    this.playerSkin = 'chef'; // chosen in the Locker
     this.mode = 'classic'; // 'classic' | 'chef' (Chef's Choice: 3 bottomless foods, nothing spawns)
     this.player = null;
     this.tide = { x: 0, z: 0, r: 330, dps: 2, phase: 0, mode: 'wait', t: 99, phases: TIDE_PHASES };
@@ -95,6 +97,7 @@ export class Game {
     this.actors = [this.botActors[0]];
     this.player = this.botActors[0];
     this.player.isBot = false;
+    this.player.applySkin(this.playerSkin);
     Object.assign(this.tide, { x: 0, z: 0, r: 330, phase: TIDE_PHASES.length, mode: 'wait', t: 0 });
     this.world.setTide(0, 0, 330);
     this.player.kills = 0;
@@ -244,6 +247,7 @@ export class Game {
     this.actors.forEach((a, i) => {
       a.reset();
       a.isBot = !(withPlayer && i === 0);
+      a.applySkin(a.isBot ? randomSkinId() : this.playerSkin);
       a.name = withPlayer && i === 0 ? 'You' : names[i];
       let p;
       for (let k = 0; k < 30; k++) {
@@ -320,11 +324,12 @@ export class Game {
     const sp = _c.copy(a.pos).addScaledVector(_f, 1.45).setY(a.pos.y + 1);
     this.fx.burst('cheese', sp, 0.4);
     this.sfx.play('shield', sp);
-    if (slot.hp < 150) this.surface.stamp(sp.x, a.pos.y, sp.z, 1.2, 'sticky', 3, this.time, { slow: 0.25 });
+    if (slot.hp < FOODS.cheese.shieldHp / 2) this.surface.stamp(sp.x, a.pos.y, sp.z, 1.2, 'sticky', 3, this.time, { slow: 0.25 });
     if (slot.hp <= 0) {
       this.surface.stamp(sp.x, a.pos.y, sp.z, 4, 'sticky', 6, this.time, { slow: 0.35, visual: 'melt' });
       this.world.paintSplat(sp.x, a.pos.y, sp.z, 3, 'cheese');
       a.shieldUp = false;
+      a.shieldBrokenUntil = this.time + 4;
       a.consume(1);
       this.floatText(a, 'SHIELD MELTED', 'slip');
     }

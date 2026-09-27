@@ -290,6 +290,13 @@ export const FOODS = {
     name: 'Tomato', role: 'Splash · slows', maxStack: 4, give: 2, weight: 42,
     profile: 'lob', charge: 0.25, speed: 30, recovery: 0.22, radius: 0.4, dmg: 25, verb: "tomato'd",
     hint: 'Hold to power up, release to lob. Victims drip a slick trail.',
+    altName: 'Tomato Bounce', altLabel: 'Tomato Bounce: squish it underfoot for a super jump (uses 1, 5 s)', altCd: 5,
+    alt(a, game) {
+      a.vel.y = 20; a.onGround = false; a.gliding = false;
+      a.consume(1);
+      game.fx.burst('tomato', a.pos, 0.6);
+      game.sfx.play('splat', a.pos, 0.8);
+    },
     release(a, c, game) {
       game.projectiles.launch({ food: 'tomato', owner: a, pos: a.handPos(), vel: lobVel(a, lobSpeed('tomato', c)), spin: 8 });
       a.consume(1);
@@ -377,6 +384,15 @@ export const FOODS = {
     name: 'Carrot', role: 'Sniper', maxStack: 4, give: 2, weight: 28,
     profile: 'line', charge: 1.6, speed: 210, recovery: 0.9, radius: 0.18, verb: 'sniped',
     hint: 'Hold to zoom and charge. Face hits deal x1.75. Your glint gives you away.',
+    altName: 'Pole Vault', altLabel: 'Pole Vault: leap forward (uses 1, 4 s)', altCd: 4,
+    alt(a, game) {
+      const f = forwardOf(a.yaw, _v);
+      a.vel.x = f.x * 17; a.vel.z = f.z * 17; a.vel.y = 15;
+      a.onGround = false;
+      a.consume(1);
+      game.fx.burst('dust', a.pos);
+      game.sfx.play('boing', a.pos, 0.7);
+    },
     release(a, c, game) {
       const from = a.handPos();
       const dir = a.isBot ? a.aimDir.clone() : _v.subVectors(a.aimPoint, from).normalize().clone();
@@ -407,6 +423,14 @@ export const FOODS = {
     name: 'Ice Cube', role: 'Freeze · rink', maxStack: 3, give: 2, weight: 15,
     profile: 'lob', charge: 0.2, speed: 26, recovery: 0.3, radius: 0.35, verb: 'iced',
     hint: 'Direct hit freezes (longer if Wet). Ground hit makes an ice rink.',
+    altName: 'Chill Out', altLabel: 'Chill Out: shake off burning, sticky and slows (uses 1, 6 s)', altCd: 6,
+    alt(a, game) {
+      a.sticky.length = 0; a.burnUntil = 0; a.surfaceSlowUntil = 0; a.juicedUntil = 0;
+      a.consume(1);
+      game.fx.burst('ice', a.center(_v));
+      game.sfx.play('freeze', a.pos, 0.5);
+      if (!a.isBot) game.hud.toast('Chilled out');
+    },
     release(a, c, game) {
       game.projectiles.launch({ food: 'ice', owner: a, pos: a.handPos(), vel: lobVel(a, lobSpeed('ice', c)), spin: 6 });
       a.consume(1);
@@ -473,7 +497,8 @@ export const FOODS = {
   cheese: {
     name: 'Cheese Wheel', role: 'Shield · ram', maxStack: 1, give: 1, weight: 13, heavy: true,
     profile: 'roll', charge: 0, speed: 22, recovery: 0.8, radius: 0.75, pierce: true, verb: 'rolled over',
-    altLabel: 'Raise or lower the 300 HP shield',
+    shieldHp: 150, shieldCost: 25,
+    altLabel: 'Raise the 150 HP shield (25 stamina) or lower it',
     hint: 'Right-click to push it as a shield. Click to launch it as a rolling ram.',
     release(a, c, game) {
       const d = a.aimDir.clone().setY(0);
@@ -504,7 +529,13 @@ export const FOODS = {
       game.sfx.play('thud', p.pos, 0.6);
     },
     alt(a, game) {
-      a.shieldUp = !a.shieldUp;
+      if (a.shieldUp) { a.shieldUp = false; game.sfx.play('shield', a.pos, 0.4); return; }
+      if (game.time < a.shieldBrokenUntil) { // a melted shield needs a moment before the next one goes up
+        if (!a.isBot) game.hud.toast(`Shield ready in ${Math.ceil(a.shieldBrokenUntil - game.time)} s`);
+        return;
+      }
+      if (!a.spendStamina(this.shieldCost)) { if (!a.isBot) game.hud.toast('Too tired to raise the shield'); return; }
+      a.shieldUp = true;
       game.sfx.play('shield', a.pos, 0.6);
     },
   },
@@ -589,8 +620,15 @@ export const FOODS = {
 
   chili: {
     name: 'Chili Pepper', role: 'Homing · burn', maxStack: 3, give: 2, weight: 9,
-    profile: 'seek', charge: 0, speed: 32, recovery: 0.7, radius: 0.25, dmg: 15, verb: 'torched',
+    profile: 'seek', charge: 0, speed: 32, recovery: 1.8, radius: 0.25, dmg: 15, verb: 'torched',
     hint: 'Locks onto the Titan nearest your crosshair and sets them on fire. Water puts it out.',
+    altName: 'Hot Feet', altLabel: 'Hot Feet: run 35% faster for 4 s (uses 1, 12 s)', altCd: 12,
+    alt(a, game) {
+      a.speedBoost(4);
+      a.consume(1);
+      game.fx.burst('fire', a.pos, 0.5);
+      game.sfx.play('sizzle', a.pos, 0.7);
+    },
     release(a, c, game) {
       const target = a.isBot ? a.botTarget : game.lockTarget(a);
       const dir = a.isBot ? a.aimDir.clone() : _v.subVectors(a.aimPoint, a.handPos()).normalize().clone();
@@ -614,6 +652,14 @@ export const FOODS = {
     name: 'Cookie', role: 'Auto-seeker', maxStack: 3, give: 2, weight: 9,
     profile: 'seek', charge: 0, speed: 18, recovery: 1.1, radius: 0.4, dmg: 18, verb: 'cookied',
     hint: 'Hunts the nearest enemy on its own. Any food thrown at it knocks it out of the air.',
+    altName: 'Sugar Rush', altLabel: 'Sugar Rush: refill your stamina (uses 1, 12 s)', altCd: 12,
+    alt(a, game) {
+      a.stamina = 100; a.staminaFlash = 0;
+      a.consume(1);
+      game.fx.burst('crumb', a.center(_v));
+      game.sfx.play('crunch', a.pos, 0.8);
+      if (!a.isBot) game.hud.toast('Sugar rush: stamina full');
+    },
     release(a, c, game) {
       const mine = game.projectiles.list.filter((p) => p.food === 'cookie' && p.owner === a && !p.done);
       if (mine.length >= 2) { mine[0].done = true; game.fx.burst('crumb', mine[0].pos); } // max 2 cookies in the air

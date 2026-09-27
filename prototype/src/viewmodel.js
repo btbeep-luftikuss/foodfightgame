@@ -31,6 +31,7 @@ export class ViewModel {
   update(dt, player, visible) {
     this.root.visible = visible;
     if (!visible) return;
+    if (this.armColor !== player.color) { this.armColor = player.color; this.armMat.color.set(player.color); } // matches your skin
     const slot = player.selected();
     const id = slot ? slot.id : null;
     if (id !== this.heldId) {
