@@ -140,7 +140,16 @@ button { font: inherit; color: inherit; }
 .noise span { position: absolute; left: -30px; top: -198px; width: 60px; text-align: center; font-weight: 800; font-size: 12px; color: var(--glaze); text-shadow: 0 1px 2px var(--ink); }
 .sniff-chip { position: absolute; right: 16px; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: var(--ink-glass); color: var(--paper-dim); }
 .sniff-chip.ready { color: var(--glaze); border: 2px solid var(--glaze); }
-.tbtn.sniffb { width: 50px; height: 50px; right: 176px; bottom: calc(214px + env(safe-area-inset-bottom, 0px)); background: var(--glaze); font-size: 10px; }
+.tbtn.sniffb { width: 50px; height: 50px; right: 106px; bottom: calc(172px + env(safe-area-inset-bottom, 0px)); background: var(--glaze); font-size: 10px; }
+@media (pointer: coarse) and (max-width: 560px) { /* phone held upright: stack the buttons above the aim stick */
+  .tbtn.jump { right: 24px; bottom: calc(158px + env(safe-area-inset-bottom, 0px)); }
+  .tbtn.roll { right: 92px; bottom: calc(164px + env(safe-area-inset-bottom, 0px)); }
+  .tbtn.alt { right: 26px; bottom: calc(228px + env(safe-area-inset-bottom, 0px)); }
+  .tbtn.sniffb { right: 94px; bottom: calc(232px + env(safe-area-inset-bottom, 0px)); }
+  .bottom { width: calc(100vw - 176px) !important; }
+  .slot { width: 40px !important; height: 40px !important; }
+  .hotbar { gap: 5px !important; }
+}
 .tbtn.cooling { opacity: 0.45; }
 .fps { position: absolute; left: 16px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); font-size: 11px; color: var(--paper-dim); font-variant-numeric: tabular-nums; }
 .fx-overlay { position: absolute; inset: 0; transition: box-shadow 0.25s, background 0.25s; }
@@ -158,10 +167,16 @@ button { font: inherit; color: inherit; }
 .stick.on { opacity: 1; }
 .stick div { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,244,226,0.75); }
 .tbtn { position: fixed; pointer-events: auto; border-radius: 50%; border: 3px solid rgba(34,20,42,0.6); font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; background: rgba(255,244,226,0.82); color: var(--ink); }
-.tbtn.fire { width: 86px; height: 86px; right: 20px; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); background: var(--butter); font-size: 14px; }
-.tbtn.jump { width: 60px; height: 60px; right: 33px; bottom: calc(122px + env(safe-area-inset-bottom, 0px)); }
-.tbtn.roll { width: 54px; height: 54px; right: 108px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
-.tbtn.alt { width: 54px; height: 54px; right: 36px; bottom: calc(196px + env(safe-area-inset-bottom, 0px)); background: var(--glaze); }
+.aimstick { position: fixed; pointer-events: auto; width: 124px; height: 124px; right: 22px; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); border-radius: 50%; border: 3px solid rgba(255,212,71,0.75); background: rgba(34,20,42,0.35); touch-action: none; }
+.aimstick .knob { position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px; border-radius: 50%; background: var(--butter); color: var(--ink); display: grid; place-items: center; align-content: center; gap: 0; box-shadow: 0 3px 0 #b8901a; pointer-events: none; transition: transform 0.05s linear; }
+.aimstick .knob img { width: 38px; height: 38px; object-fit: contain; }
+.aimstick .knob img:not([src]) { display: none; }
+.aimstick .knob span { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+.aimstick.active { border-color: var(--tomato); }
+.aimstick.active .knob { background: #ffe07a; }
+.tbtn.jump { width: 62px; height: 62px; right: 160px; bottom: calc(26px + env(safe-area-inset-bottom, 0px)); }
+.tbtn.roll { width: 54px; height: 54px; right: 162px; bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
+.tbtn.alt { width: 54px; height: 54px; right: 42px; bottom: calc(160px + env(safe-area-inset-bottom, 0px)); background: var(--glaze); }
 @media (pointer: coarse) {
   .sniff-chip { display: none; }
   .bottom { left: 16px; transform: none; width: min(300px, calc(100vw - 136px)); justify-items: start; }
@@ -271,7 +286,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 
 <div id="touch" class="touch" hidden>
   <div id="stick" class="stick"><div></div></div>
-  <button data-touch-btn id="tFire" class="tbtn fire" type="button">Throw</button>
+  <div data-touch-btn id="tFire" class="aimstick" role="button" aria-label="Aim and throw"><div class="knob"><img id="tFireIcon" alt=""><span id="tFireLabel">Throw</span></div></div>
   <button data-touch-btn id="tJump" class="tbtn jump" type="button">Jump</button>
   <button data-touch-btn id="tDash" class="tbtn roll" type="button">Dash</button>
   <button data-touch-btn id="tAlt" class="tbtn alt" type="button">Alt</button>
@@ -316,7 +331,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     <dl class="keys touch-only">
       <dt>Left thumb</dt><dd>Drag anywhere on the left to move (push far to sprint)</dd>
       <dt>Right thumb</dt><dd>Drag on the right to aim</dd>
-      <dt>Throw</dt><dd>Hold to charge, release to throw</dd>
+      <dt>Aim stick</dt><dd>Hold it to charge (or to fire blueberries non-stop) and drag to aim; let go to throw</dd>
       <dt>Jump · Dash</dt><dd>Tap Jump again in the air to double jump; Dash for a quick burst</dd>
       <dt>Plates</dt><dd>Tap a food plate to switch</dd>
       <dt>Sniff</dt><dd>Points at Titans making noise; quiet ones stay hidden</dd>
@@ -334,6 +349,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     <h3>Paused</h3>
     <p>The food will wait for you.</p>
     <div class="row"><button id="resume" class="btn" type="button">Resume</button><button id="leave" class="btn ghost" type="button">Main menu</button></div>
+    <label class="field" for="quality2">Graphics <select id="quality2"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
   </div>
 </section>
 

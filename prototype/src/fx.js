@@ -103,7 +103,7 @@ export class FX {
     const glossy = new THREE.MeshStandardMaterial({ roughness: 0.25, metalness: 0 });
     const matte = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0 });
     const puff = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.45, depthWrite: false });
-    const cap = Math.round(2400 * this.scale);
+    const cap = 2400; // pools sized for High; lower settings just spawn fewer particles
     this.blobs = new ParticlePool(scene, new THREE.IcosahedronGeometry(1, 0), glossy, cap);
     this.chunks = new ParticlePool(scene, new THREE.BoxGeometry(1, 1, 1), matte, Math.round(cap * 0.6));
     this.puffs = new ParticlePool(scene, new THREE.IcosahedronGeometry(1, 1), puff, Math.round(cap * 0.5));

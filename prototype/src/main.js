@@ -18,10 +18,11 @@ const $ = (id) => document.getElementById(id);
 // Low: no shadow map, blob shadows. Medium: shadows baked once (static scenery) plus blob
 // shadows. High: shadows every frame for everything, plus bloom. All tiers scale resolution
 // automatically to hold the frame rate (GDD 11.5-11.7).
+// Low also shortens the view distance (fog and far clip), so less of the kitchen is drawn.
 const QUALITY = {
-  low: { name: 'Low', pixelRatio: Math.min(devicePixelRatio || 1, 1.25) * 0.75, shadows: 0, dynamicShadows: false, bloom: false, particles: 0.4, splatRes: 1024, antialias: false },
-  medium: { name: 'Medium', pixelRatio: Math.min(devicePixelRatio || 1, 1.5), shadows: 2048, dynamicShadows: false, bloom: false, particles: 0.7, splatRes: 1536, antialias: true },
-  high: { name: 'High', pixelRatio: Math.min(devicePixelRatio || 1, 2), shadows: 4096, dynamicShadows: true, bloom: true, particles: 1, splatRes: 2048, antialias: true },
+  low: { name: 'Low', pixelRatio: Math.min(devicePixelRatio || 1, 1.25) * 0.7, shadows: 0, dynamicShadows: false, bloom: false, particles: 0.35, splatRes: 1024, antialias: false, far: 430, fog: [130, 410], minScale: 0.45 },
+  medium: { name: 'Medium', pixelRatio: Math.min(devicePixelRatio || 1, 1.5), shadows: 2048, dynamicShadows: false, bloom: false, particles: 0.7, splatRes: 1536, antialias: true, far: 1400, fog: [240, 720], minScale: 0.55 },
+  high: { name: 'High', pixelRatio: Math.min(devicePixelRatio || 1, 2), shadows: 4096, dynamicShadows: true, bloom: true, particles: 1, splatRes: 2048, antialias: true, far: 1400, fog: [240, 720], minScale: 0.55 },
 };
 
 function readQuality() {
@@ -70,7 +71,7 @@ function renderIcons() {
 
 function boot() {
   const qKey = readQuality();
-  const quality = QUALITY[qKey];
+  const quality = { ...QUALITY[qKey] }; // one live object shared by the whole game; the setting switches it in place
   $('quality').value = qKey;
   const canvas = $('game');
   let renderer;
@@ -86,11 +87,9 @@ function boot() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
-  if (quality.shadows) {
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
-    renderer.shadowMap.autoUpdate = false; // Medium bakes the static scenery once; High refreshes at 30 Hz
-  }
+  renderer.shadowMap.enabled = !!quality.shadows;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.autoUpdate = false; // Medium bakes the static scenery once; High refreshes at 30 Hz
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 1400);
@@ -170,12 +169,7 @@ function boot() {
   });
   $('spectate').addEventListener('click', () => { end.hidden = true; });
   $('resume').addEventListener('click', () => { pause.hidden = true; game.paused = false; input.requestLock(); });
-  $('quality').addEventListener('change', (e) => {
-    const v = e.target.value;
-    try { localStorage.setItem('tt-quality', v); } catch { /* storage blocked: the hash carries it */ }
-    location.hash = `q-${v}`;
-    location.reload();
-  });
+
 
   input.onLockChange = (locked) => {
     if (!playing || input.isTouch) return;
@@ -218,7 +212,43 @@ function boot() {
     b.addEventListener('touchend', (e) => { e.preventDefault(); off?.(); });
     b.addEventListener('touchcancel', () => off?.());
   };
-  hold('tFire', () => { input.touch.fire = true; }, () => { input.touch.fire = false; });
+  // Aim stick (phones): holding it is the trigger, dragging it aims. Charge foods charge while
+  // held and throw on release; blueberries stream while held; tap foods throw at once.
+  const aimEl = $('tFire'), aimKnob = aimEl.querySelector('.knob');
+  const aimR = 44;
+  let aimId = null, aimLast = null, aimC = null;
+  input.aimEdge = { x: 0, y: 0 };
+  const aimEnd = () => {
+    aimId = null; input.touch.fire = false; input.aimEdge.x = input.aimEdge.y = 0;
+    aimKnob.style.transform = ''; aimEl.classList.remove('active');
+  };
+  aimEl.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (aimId !== null) return;
+    const t = e.changedTouches[0];
+    aimId = t.identifier; aimLast = { x: t.clientX, y: t.clientY };
+    const r = aimEl.getBoundingClientRect();
+    aimC = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    input.touch.fire = true;
+    aimEl.classList.add('active');
+  }, { passive: false });
+  aimEl.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      if (t.identifier !== aimId) continue;
+      input.look(t.clientX - aimLast.x, t.clientY - aimLast.y, 0.006 * input.zoomSens);
+      aimLast = { x: t.clientX, y: t.clientY };
+      const dx = t.clientX - aimC.x, dy = t.clientY - aimC.y, l = Math.hypot(dx, dy) || 1;
+      const k = Math.min(1, aimR / l);
+      aimKnob.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
+      // held past the ring: keep turning, like a console stick
+      const edge = Math.min(1, Math.max(0, (l - aimR) / aimR));
+      input.aimEdge.x = (dx / l) * edge; input.aimEdge.y = (dy / l) * edge;
+    }
+  }, { passive: false });
+  for (const ev of ['touchend', 'touchcancel']) {
+    aimEl.addEventListener(ev, (e) => { for (const t of e.changedTouches) if (t.identifier === aimId) aimEnd(); });
+  }
   hold('tJump', () => { input.pressed.jump = true; });
   hold('tDash', () => { input.pressed.dodge = true; });
   hold('tAlt', () => { input.pressed.alt = true; });
@@ -232,14 +262,16 @@ function boot() {
 
   // Bloom on High: emissive burners, honey, sunlight and the carrot glint glow.
   let composer = null;
-  if (quality.bloom) {
-    composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
-    composer.addPass(new RenderPass(scene, camera));
-    composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.32, 0.45, 0.88));
-    composer.addPass(new OutputPass());
-    composer.setPixelRatio(quality.pixelRatio);
-    composer.setSize(innerWidth, innerHeight);
-  }
+  const makeComposer = () => {
+    const c = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
+    c.addPass(new RenderPass(scene, camera));
+    c.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.32, 0.45, 0.88));
+    c.addPass(new OutputPass());
+    c.setPixelRatio(quality.pixelRatio);
+    c.setSize(innerWidth, innerHeight);
+    return c;
+  };
+  if (quality.bloom) composer = makeComposer();
 
   // Dynamic resolution: drop render scale when the frame rate sags, restore it when there's headroom.
   let resScale = 1, fpsEma = 60, adjustT = 0;
@@ -248,6 +280,35 @@ function boot() {
     renderer.setSize(innerWidth, innerHeight, false);
     if (composer) { composer.setPixelRatio(quality.pixelRatio * resScale); composer.setSize(innerWidth, innerHeight); }
   };
+
+  // Switch the graphics setting live (no reload), in any mode, including online games.
+  function applyQuality(key) {
+    if (!QUALITY[key]) return;
+    Object.assign(quality, QUALITY[key]);
+    const sun = game.world.sun;
+    renderer.shadowMap.enabled = !!quality.shadows;
+    sun.castShadow = !!quality.shadows;
+    if (quality.shadows && sun.shadow.mapSize.x !== quality.shadows) {
+      sun.shadow.mapSize.set(quality.shadows, quality.shadows);
+      sun.shadow.map?.dispose(); sun.shadow.map = null;
+    }
+    renderer.shadowMap.needsUpdate = true;
+    setFoodShadows(quality.dynamicShadows);
+    for (const a of game.actors.concat(game.botActors)) {
+      a.root.traverse((o) => { if (o.isMesh) o.castShadow = !!quality.dynamicShadows && o !== a.iceBlock; });
+    }
+    scene.traverse((o) => { const m = o.material; if (m) (Array.isArray(m) ? m : [m]).forEach((x) => { x.needsUpdate = true; }); });
+    game.fx.scale = quality.particles;
+    game.world.setAtmosphere(quality.name !== 'Low');
+    camera.far = quality.far; camera.updateProjectionMatrix();
+    scene.fog.near = quality.fog[0]; scene.fog.far = quality.fog[1];
+    if (quality.bloom && !composer) composer = makeComposer();
+    resScale = 1; applyScale();
+    for (const id of ['quality', 'quality2']) { const el = $(id); if (el) el.value = key; }
+    try { localStorage.setItem('tt-quality', key); } catch { /* storage blocked */ }
+  }
+  applyQuality(qKey);
+  for (const id of ['quality', 'quality2']) $(id)?.addEventListener('change', (e) => applyQuality(e.target.value));
   game.perf = { get scale() { return resScale; }, get fps() { return fpsEma; } };
 
   addEventListener('resize', () => {
@@ -271,18 +332,19 @@ function boot() {
     renderer.info.reset();
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000)); // rAF time can precede `last`
     last = now;
+    if (input.aimEdge && (input.aimEdge.x || input.aimEdge.y)) input.look(input.aimEdge.x * 320 * dt, input.aimEdge.y * 200 * dt, 0.006 * input.zoomSens);
     game.update(dt);
     if (game.world.shadowDirty && quality.shadows && !quality.dynamicShadows) { renderer.shadowMap.needsUpdate = true; game.world.shadowDirty = false; }
     // High: moving shadows refresh at 30 Hz instead of every frame (half the shadow cost).
     if (quality.dynamicShadows) renderer.shadowMap.needsUpdate = (frameNo++ & 1) === 0;
-    if (composer) composer.render(dt); else renderer.render(scene, camera);
+    if (composer && quality.bloom) composer.render(dt); else renderer.render(scene, camera);
     game.lastDrawCalls = renderer.info.render.calls;
 
     if (dt > 0) fpsEma += (1 / dt - fpsEma) * 0.05;
     adjustT += dt;
     if (adjustT > 1.2) {
       adjustT = 0;
-      if (fpsEma < 50 && resScale > 0.55) { resScale = Math.max(0.55, resScale - 0.1); applyScale(); }
+      if (fpsEma < 50 && resScale > quality.minScale) { resScale = Math.max(quality.minScale, resScale - 0.1); applyScale(); }
       else if (fpsEma > 58 && resScale < 1) { resScale = Math.min(1, resScale + 0.05); applyScale(); }
     }
   });

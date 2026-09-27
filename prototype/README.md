@@ -37,6 +37,14 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 - **Blueberries (13th food):** rapid fire, about 12 berries a second at 5 damage each, with spray that grows while you hold the trigger. Pickups hold a handful (24–90 berries) and stack to 240.
 - **Food system reverted:** bushes are gone; food floats at its spawn points again.
 
+**Version 0.7:**
+
+- **Graphics setting applies instantly, in every mode including online.** It no longer reloads the page, which is likely why Low didn't stick before. Low also shortens the view distance, lowers render resolution further and drops the sunbeam. The setting is on the main menu and in the pause menu.
+- **Phone aim stick:** the Throw button is now a joystick with the held food's icon.
+  - Hold it to pull the trigger and drag to aim; pushing past the ring keeps turning.
+  - Charge foods (carrot, tomato, soda…) charge while held and throw on release; blueberries stream while held; tap foods throw at once.
+  - In a simulated-phone test: the High → Low switch mid-online-game turned off shadows, bloom and the sunbeam, cut view distance from 1400 to 430 and render scale from 2× to 0.79×; blueberries streamed while held and stopped on release; the carrot charged with the scope zoom and threw on release.
+
 ## What's in it
 
 | Area | Included |

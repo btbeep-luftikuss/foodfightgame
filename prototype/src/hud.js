@@ -99,6 +99,17 @@ export class HUD {
       } else hint = 'Walk over food to pick it up';
       if (hint !== this.lastHint) { $('hint').innerHTML = hint; this.lastHint = hint; }
 
+      // aim stick on phones shows what you're holding and what holding it does
+      const fi = document.getElementById('tFireIcon');
+      if (fi && this.input.isTouch) {
+        const hid = slot ? slot.id : '';
+        if (fi.dataset.id !== hid) {
+          fi.dataset.id = hid;
+          if (hid && this.icons[hid]) fi.src = this.icons[hid]; else fi.removeAttribute('src');
+          document.getElementById('tFireLabel').textContent = !food ? 'Throw' : food.auto ? 'Hold: fire' : food.charge > 0 ? 'Hold: charge' : 'Tap: throw';
+        }
+      }
+
       // statuses
       const st = a.statusList().map(([k, label]) => `<span class="chip ${k}">${label}</span>`).join('');
       if (st !== this.lastStatus) { $('statuses').innerHTML = st; this.lastStatus = st; }

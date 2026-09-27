@@ -191,9 +191,9 @@ export class World {
     sun.position.set(-110, 190, -120); // pouring in through the window over the sink
     sun.target.position.set(0, -20, 0);
     s.add(sun, sun.target);
-    if (this.quality.shadows) {
-      sun.castShadow = true;
-      sun.shadow.mapSize.set(this.quality.shadows, this.quality.shadows);
+    { // shadow settings are always prepared so the graphics setting can switch them live
+      sun.castShadow = !!this.quality.shadows;
+      sun.shadow.mapSize.set(this.quality.shadows || 2048, this.quality.shadows || 2048);
       const cam = sun.shadow.camera;
       cam.left = -270; cam.right = 270; cam.top = 230; cam.bottom = -230; cam.near = 20; cam.far = 620;
       sun.shadow.bias = -0.0005;
@@ -231,8 +231,8 @@ export class World {
   _mesh(geo, mat, x, y, z, { cast = true, receive = true, dyn = false } = {}) {
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, y, z);
-    mesh.castShadow = cast && !!this.quality.shadows;
-    mesh.receiveShadow = receive && !!this.quality.shadows;
+    mesh.castShadow = cast;       // only matters while the renderer's shadows are on
+    mesh.receiveShadow = receive;
     mesh.userData.world = true;
     mesh.userData.dyn = dyn;
     this.scene.add(mesh);
@@ -606,7 +606,7 @@ export class World {
     const mk = (g, mat) => {
       const im = new THREE.InstancedMesh(g, mat, pads.length);
       im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      im.frustumCulled = false; im.receiveShadow = !!this.quality.shadows;
+      im.frustumCulled = false; im.receiveShadow = true;
       this.scene.add(im);
       return im;
     };
@@ -628,7 +628,7 @@ export class World {
       color: '#e0271c', roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.15, sheen: 0.5, sheenColor: new THREE.Color('#ff8a6a'),
     }));
     body.scale.set(1, 0.88, 1);
-    body.castShadow = body.receiveShadow = !!this.quality.shadows;
+    body.castShadow = body.receiveShadow = true;
     group.add(body);
     const leafMat = new THREE.MeshStandardMaterial({ color: '#3f8f2f', roughness: 0.6 });
     for (let i = 0; i < 6; i++) {
@@ -689,8 +689,8 @@ export class World {
   }
 
   // Sunbeam through the window and floating dust (Medium and High only).
+  setAtmosphere(on) { if (this.shaft) { this.shaft.visible = on; this.motes.visible = on; } }
   _atmosphere() {
-    if (this.quality.name === 'Low') return;
     const shaft = new THREE.Mesh(new THREE.PlaneGeometry(70, 190), new THREE.MeshBasicMaterial({
       map: canvasTex(64, 256, shaftTex), transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false,
     }));
@@ -698,6 +698,7 @@ export class World {
     shaft.rotation.set(-0.95, 0.12, 0);
     shaft.renderOrder = 6;
     this.scene.add(shaft);
+    this.shaft = shaft;
     const n = 420, pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       pos[i * 3] = rand(-140, -40); pos[i * 3 + 1] = rand(F + 2, 50); pos[i * 3 + 2] = rand(-170, -30);
@@ -709,6 +710,7 @@ export class World {
     }));
     this.motes.frustumCulled = false;
     this.scene.add(this.motes);
+    this.setAtmosphere(this.quality.name !== 'Low');
   }
 
   // ------------------------------------------------------------------ spawning
