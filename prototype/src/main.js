@@ -120,9 +120,11 @@ function boot() {
     touch.hidden = !input.isTouch;
     if (!input.isTouch) input.requestLock();
   }
-  function start() {
+  let matchOpts = {}; // what "Play again" repeats
+  function start(opts = matchOpts) {
     sfx.unlock();
-    game.newMatch(true);
+    matchOpts = opts;
+    game.newMatch(true, opts);
     enterPlay();
   }
   async function toMenu() {
@@ -131,8 +133,36 @@ function boot() {
     menu.hidden = false; input.exitLock();
     game.newMatch(false);
   }
-  $('play').addEventListener('click', start);
-  $('again').addEventListener('click', start);
+  $('play').addEventListener('click', () => start({}));
+  $('again').addEventListener('click', () => start());
+
+  // Chef's Choice: pick 3 foods that never run out; nothing spawns on the map.
+  let chefPick = [];
+  try { chefPick = JSON.parse(localStorage.getItem('tt-chef') || '[]').filter((id) => FOOD_IDS.includes(id)).slice(0, 3); } catch { /* storage blocked */ }
+  const chefGrid = $('chef-grid');
+  chefGrid.innerHTML = FOOD_IDS.map((id) => `<button type="button" data-id="${id}" aria-pressed="false"><img src="${icons[id] || ''}" alt=""><span>${FOODS[id].name}</span><small>${FOODS[id].role}</small></button>`).join('');
+  function renderChef() {
+    for (const b of chefGrid.children) {
+      const i = chefPick.indexOf(b.dataset.id);
+      b.setAttribute('aria-pressed', i >= 0 ? 'true' : 'false');
+      b.dataset.n = i >= 0 ? i + 1 : '';
+      b.disabled = i < 0 && chefPick.length >= 3;
+    }
+    const left = 3 - chefPick.length;
+    $('chef-play').disabled = left > 0;
+    $('chef-play').textContent = left > 0 ? `Pick ${left} more food${left > 1 ? 's' : ''}` : 'Start Chef\'s Choice';
+  }
+  chefGrid.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const id = b.dataset.id, i = chefPick.indexOf(id);
+    if (i >= 0) chefPick.splice(i, 1); else if (chefPick.length < 3) chefPick.push(id);
+    try { localStorage.setItem('tt-chef', JSON.stringify(chefPick)); } catch { /* storage blocked */ }
+    renderChef();
+  });
+  renderChef();
+  $('chef-open').addEventListener('click', () => { $('chef').hidden = !$('chef').hidden; $('online').hidden = true; });
+  $('chef-play').addEventListener('click', () => { if (chefPick.length === 3) start({ mode: 'chef', loadout: [...chefPick] }); });
   $('end-menu').addEventListener('click', toMenu);
   $('leave').addEventListener('click', toMenu);
   $('hud-menu').addEventListener('click', toMenu);
@@ -140,7 +170,7 @@ function boot() {
   // Online: join a room code; everyone with the same code plays together.
   const status = $('online-status');
   try { $('nick').value = localStorage.getItem('tt-nick') || ''; } catch { /* storage blocked */ }
-  $('online-open').addEventListener('click', () => { $('online').hidden = !$('online').hidden; if (!$('online').hidden) $('nick').focus(); });
+  $('online-open').addEventListener('click', () => { $('online').hidden = !$('online').hidden; $('chef').hidden = true; if (!$('online').hidden) $('nick').focus(); });
   $('online').addEventListener('submit', async (e) => {
     e.preventDefault();
     sfx.unlock();

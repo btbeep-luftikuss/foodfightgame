@@ -168,7 +168,7 @@ export class Projectiles {
       if (p.bruise < 2) {
         if (o.give('banana', 1)) {
           const s = o.inv.find((x) => x && x.id === 'banana');
-          if (s) s.bruise = Math.max(s.bruise || 0, p.bruise + 1);
+          if (s && !s.inf) s.bruise = Math.max(s.bruise || 0, p.bruise + 1);
         } else this.game.items.drop('banana', 1, o.pos);
         this.game.sfx.play('pickup', o.pos, 0.8);
       } else {

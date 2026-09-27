@@ -12,7 +12,7 @@ import { Projectiles } from './projectiles.js';
 import { Items } from './items.js';
 import { BotBrain, BOT_NAMES } from './bots.js';
 import { ViewModel } from './viewmodel.js';
-import { FOODS, FEED_VERB, lobSpeed, lobDir, randomFoodId, rollAmmo, pickupAmmo } from './foods.js';
+import { FOODS, FOOD_IDS, FEED_VERB, lobSpeed, lobDir, randomFoodId, rollAmmo, pickupAmmo } from './foods.js';
 
 const PLAYER_COLOR = '#ff9a1f';
 const BOT_COLORS = ['#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#f2f2f2', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5'];
@@ -49,6 +49,7 @@ export class Game {
     this.brains = new Map();
     this.botActors = this.actors;
     this.net = null; this.online = false; this.respawnAt = 0;
+    this.mode = 'classic'; // 'classic' | 'chef' (Chef's Choice: 3 bottomless foods, nothing spawns)
     this.player = null;
     this.tide = { x: 0, z: 0, r: 330, dps: 2, phase: 0, mode: 'wait', t: 99, phases: TIDE_PHASES };
     this.hitStopUntil = 0;
@@ -87,7 +88,7 @@ export class Game {
   // ------------------------------------------------------------------ online (0.6)
   // Free-for-all food fight with respawns; no Soap Tide (players join at different times).
   startOnline(net) {
-    this.net = net; this.online = true;
+    this.net = net; this.online = true; this.mode = 'classic';
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
     this.world.resetRound(); this.hud.clearFeed(); this.brains.clear();
     for (const a of this.botActors.slice(1)) { a.alive = false; a.hide(); }
@@ -229,7 +230,10 @@ export class Game {
 
   aliveCount() { return this.actors.filter((a) => a.alive).length; }
 
-  newMatch(withPlayer) {
+  // opts.mode 'chef' = Chef's Choice: every Titan brings 3 foods with endless ammo and no food spawns.
+  newMatch(withPlayer, opts = {}) {
+    this.mode = opts.mode === 'chef' ? 'chef' : 'classic';
+    const chef = this.mode === 'chef';
     this.actors = this.botActors;
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
     this.world.resetRound();
@@ -250,7 +254,9 @@ export class Game {
       a.pos.set(p.x, p.y + 30 + rand(0, 7), p.z);
       a.yaw = Math.atan2(p.x, p.z); // face roughly toward the centre
       a.gliding = true; a.onGround = false;
-      a.give('tomato', 2);
+      if (!chef) a.give('tomato', 2);
+      else if (!a.isBot && opts.loadout?.length) a.giveLoadout(opts.loadout);
+      else a.giveLoadout([...FOOD_IDS].sort(() => Math.random() - 0.5).slice(0, 3));
       if (a.isBot) this.brains.set(a, new BotBrain(a, this, rand(0.3, 0.75)));
     });
     this.player = withPlayer ? this.actors[0] : null;
@@ -266,7 +272,7 @@ export class Game {
     this.state = 'drop'; this.stateT = 0;
     this.spectate = null; this.endAt = 0; this.winner = null;
     this.onMatchEvent?.('start');
-    if (withPlayer) this.hud.banner('Drop in!', 'Steer your napkin glider onto the counter');
+    if (withPlayer) this.hud.banner(chef ? "Chef's Choice" : 'Drop in!', chef ? 'Your 3 foods never run out. Nothing spawns, so aim well' : 'Steer your napkin glider onto the counter');
   }
 
   // ------------------------------------------------------------------ combat API used by foods
@@ -381,7 +387,7 @@ export class Game {
       const a = (i / 4) * Math.PI * 2 + rand(-0.3, 0.3);
       this.items.drop('tomato', rollAmmo(), _o.set(L.x, 3, L.z), _v.set(Math.cos(a) * 8, 10, Math.sin(a) * 8));
     }
-    if (attacker === this.player) this.hud.toast('Giant Tomato harvested: 4 piles of tomatoes dropped');
+    if (attacker === this.player && this.mode !== 'chef') this.hud.toast('Giant Tomato harvested: 4 piles of tomatoes dropped');
   }
 
   kill(victim, attacker, foodId) {
@@ -552,6 +558,7 @@ export class Game {
 
   // Grocery drops (GDD 3.2): fresh food falls from the ceiling inside the next safe zone.
   _groceryDrop(zone) {
+    if (this.mode === 'chef') return;
     const n = 7;
     for (let i = 0; i < n; i++) {
       const ang = rand(0, Math.PI * 2), d = Math.sqrt(Math.random()) * Math.max(4, zone.r * 0.85);

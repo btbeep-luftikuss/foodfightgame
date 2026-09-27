@@ -40,6 +40,7 @@ export class Items {
 
   // Loose food, e.g. a banana that hit a wall or a splatted Titan's inventory.
   drop(id, count, pos, vel = null, spawner = null) {
+    if (this.game.mode === 'chef') return null; // Chef's Choice: no food anywhere on the map
     const p = pos.clone();
     if (!vel) p.y = groundHeight(p.x, p.z, p.y + 0.5);
     const it = { id, count, pos: p, vel: vel ? vel.clone() : null, born: this.game.time, phase: rand(0, 6), visible: true, spawner };
@@ -51,6 +52,7 @@ export class Items {
   pickables() { return this.list.filter((it) => !it.vel); }
 
   fillSpawners(now) {
+    if (this.game.mode === 'chef') return;
     for (const s of this.spawners) {
       if (!s.item && now >= s.respawnAt) {
         const id = randomFoodId();

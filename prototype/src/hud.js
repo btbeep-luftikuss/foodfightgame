@@ -36,7 +36,7 @@ export class HUD {
   show(on) { this.el.hidden = !on; }
 
   _renderHotbar(a) {
-    const sig = a.inv.map((s) => (s ? `${s.id}:${s.count}` : '-')).join('|') + `#${a.sel}`;
+    const sig = a.inv.map((s) => (s ? `${s.id}:${s.inf ? 'inf' : s.count}` : '-')).join('|') + `#${a.sel}`;
     if (sig === this.hotSig) return;
     this.hotSig = sig;
     a.inv.forEach((s, i) => {
@@ -46,7 +46,7 @@ export class HUD {
       const img = b.querySelector('img');
       if (s) { img.src = this.icons[s.id]; img.alt = FOODS[s.id].name; }
       else { img.removeAttribute('src'); img.alt = ''; }
-      b.querySelector('.count').textContent = s && FOODS[s.id].maxStack > 1 ? s.count : '';
+      b.querySelector('.count').textContent = !s ? '' : s.inf ? '∞' : FOODS[s.id].maxStack > 1 ? s.count : '';
       b.title = s ? `${FOODS[s.id].name}: ${FOODS[s.id].role}` : 'Empty';
     });
   }

@@ -94,7 +94,7 @@ export class Actor {
     this.lastHitBy = null; this.lastHitFood = null; this.lastHitAt = -99;
     this.envAcc = 0; this.burnAcc = 0; this.tideAcc = 0; this.nextDrip = 0; this.honeySfxAt = 0;
     this.fallTop = 0; this.armT = 0; this.squash = 0; this.walkPhase = 0; this.hitFlash = 0;
-    this.placement = 0;
+    this.placement = 0; this.snackReadyAt = 0;
     this.root.visible = true;
     this._refreshHeld();
   }
@@ -311,6 +311,7 @@ export class Actor {
     const max = FOODS[id].maxStack;
     let left = count;
     for (const s of this.inv) {
+      if (s && s.id === id && s.inf) { left = 0; break; } // Chef's Choice: bottomless already
       if (s && s.id === id && s.count < max) { const k = Math.min(left, max - s.count); s.count += k; left -= k; }
       if (!left) break;
     }
@@ -328,6 +329,7 @@ export class Actor {
   consume(n) {
     const s = this.inv[this.sel];
     if (!s) return;
+    if (s.inf) { if (s.id === 'cheese') s.hp = 300; this._refreshHeld(); return; } // Chef's Choice: never runs out
     s.count -= n;
     if (s.count <= 0) { this.inv[this.sel] = null; this.shieldUp = false; }
     else if (s.id === 'cheese') s.hp = 300; // the next wheel in the stack is a fresh shield
@@ -342,7 +344,23 @@ export class Actor {
     if (prev && next && prev.id !== next.id) this.swapLockUntil = this.game.time + 0.35; // GDD swap lockout
     this._refreshHeld();
   }
-  startEat(dur, done) { this.eat = { end: this.game.time + dur, done, dmg: 0 }; }
+  // Chef's Choice: a bottomless stack of food to eat would mean endless healing, so snacks share an 8 s cooldown.
+  giveLoadout(ids) {
+    this.inv = [null, null, null, null, null];
+    ids.forEach((id, i) => { this.inv[i] = { id, count: FOODS[id].maxStack, inf: true }; if (id === 'cheese') this.inv[i].hp = 300; });
+    this.sel = 0;
+    this._refreshHeld();
+  }
+  startEat(dur, done) {
+    if (this.inv[this.sel]?.inf) {
+      if (this.game.time < (this.snackReadyAt || 0)) {
+        if (!this.isBot) this.game.hud.toast(`Still full: snack again in ${Math.ceil(this.snackReadyAt - this.game.time)} s`);
+        return;
+      }
+      this.snackReadyAt = this.game.time + 8;
+    }
+    this.eat = { end: this.game.time + dur, done, dmg: 0 };
+  }
 
   // ------------------------------------------------------------------ simulation
   update(dt, it) {

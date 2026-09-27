@@ -86,7 +86,7 @@ export class BotBrain {
 
     // heal with a banana when hurt and not under pressure
     const bananaSlot = a.inv.findIndex((s) => s && (s.id === 'banana' || s.id === 'grapes'));
-    if (a.hp < MAX_HP * 0.6 && bananaSlot >= 0 && (!this.target || bestD > 14) && !a.eat) {
+    if (a.hp < MAX_HP * 0.6 && bananaSlot >= 0 && (!this.target || bestD > 14) && !a.eat && now >= (a.snackReadyAt || 0)) {
       a.select(bananaSlot);
       this.pendingAlt = true;
       this.foodLockUntil = now + 1.4;

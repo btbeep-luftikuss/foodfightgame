@@ -287,7 +287,7 @@ function stampAtGround(game, p, radius, state, dur, opts) {
 
 export const FOODS = {
   tomato: {
-    name: 'Tomato', role: 'Splash · slows', maxStack: 4, give: 2, weight: 26,
+    name: 'Tomato', role: 'Splash · slows', maxStack: 4, give: 2, weight: 42,
     profile: 'lob', charge: 0.25, speed: 30, recovery: 0.22, radius: 0.4, dmg: 25, verb: "tomato'd",
     hint: 'Hold to power up, release to lob. Victims drip a slick trail.',
     release(a, c, game) {
@@ -374,7 +374,7 @@ export const FOODS = {
   },
 
   carrot: {
-    name: 'Carrot', role: 'Sniper', maxStack: 4, give: 2, weight: 14,
+    name: 'Carrot', role: 'Sniper', maxStack: 4, give: 2, weight: 28,
     profile: 'line', charge: 1.0, speed: 120, recovery: 0.9, radius: 0.18, verb: 'sniped',
     hint: 'Hold to zoom and charge. Face hits deal x1.75. Your glint gives you away.',
     release(a, c, game) {
@@ -510,7 +510,7 @@ export const FOODS = {
   },
   // ---------------------------------------------------------------- added in prototype 0.6
   blueberry: {
-    name: 'Blueberries', role: 'Rapid fire', maxStack: 240, give: 40, weight: 12,
+    name: 'Blueberries', role: 'Rapid fire', maxStack: 240, give: 40, weight: 26,
     profile: 'auto', auto: true, charge: 0, speed: 75, gravity: 0.25, recovery: 1 / 12, radius: 0.13, dmg: 5, verb: 'berry-blasted',
     hint: 'Hold to fire about 12 berries a second. Aim drifts the longer you hold, so fire in bursts.',
     ammo: () => rollAmmo() * 6, // they come by the handful: 24-90 berries per pickup
