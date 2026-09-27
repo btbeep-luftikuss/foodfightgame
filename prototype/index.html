@@ -201,7 +201,7 @@ button { font: inherit; color: inherit; }
 .menu { position: fixed; inset: 0; display: flex; align-items: stretch; pointer-events: none; }
 .menu-panel { pointer-events: auto; width: min(520px, 100%); box-sizing: border-box; overflow-y: auto; background: var(--ink-glass);
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); padding: calc(28px + env(safe-area-inset-top, 0px)) 28px calc(24px + env(safe-area-inset-bottom, 0px));
-  display: grid; align-content: start; gap: 18px; -webkit-user-select: text; user-select: text; touch-action: pan-y; }
+  display: grid; align-content: start; gap: 18px; -webkit-user-select: text; user-select: text; touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .eyebrow { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--glaze); font-weight: 700; margin: 0; }
 .title { margin: 0; font-family: var(--display); font-weight: 400; line-height: 0.88; text-wrap: balance; }
 .title .big { display: block; font-size: clamp(54px, 13vw, 84px); color: var(--butter); text-shadow: 4px 5px 0 var(--tomato); letter-spacing: -0.01em; }
@@ -239,7 +239,8 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 .live::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--tomato); margin-right: 8px; animation: blink 1.2s infinite; }
 @keyframes blink { 50% { opacity: 0.3; } }
 @media (max-width: 640px) { .live { display: none; } }
-.overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(34, 20, 42, 0.55); padding-inline: 16px; }
+.overlay { position: fixed; inset: 0; display: grid; background: rgba(34, 20, 42, 0.55); padding: 16px; box-sizing: border-box; overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.overlay > .card { margin: auto; } /* centred, but scrolls instead of clipping on short screens */
 .card { background: var(--ink); border-radius: 22px; padding: 26px 26px 22px; width: min(420px, 100%); box-sizing: border-box; display: grid; gap: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
 .card h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 44px; color: var(--butter); text-shadow: 3px 4px 0 var(--tomato); line-height: 1; }
 .card p { margin: 0; color: var(--paper-dim); line-height: 1.45; }

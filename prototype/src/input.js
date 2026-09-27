@@ -95,7 +95,9 @@ export class Input {
       e.preventDefault();
     };
     const onMove = (e) => {
+      let steering = false; // only swallow drags that move or aim the Titan; menus must still scroll
       for (const t of e.changedTouches) {
+        if (t.identifier === this.touch.moveId || t.identifier === this.touch.lookId) steering = true;
         if (t.identifier === this.touch.moveId) {
           const dx = t.clientX - this.touch.moveOrigin.x, dy = t.clientY - this.touch.moveOrigin.y;
           const l = Math.hypot(dx, dy), m = Math.min(l, 60) / 60;
@@ -106,7 +108,7 @@ export class Input {
           this.touch.lookLast = { x: t.clientX, y: t.clientY };
         }
       }
-      e.preventDefault();
+      if (steering) e.preventDefault();
     };
     const onEnd = (e) => {
       for (const t of e.changedTouches) {
