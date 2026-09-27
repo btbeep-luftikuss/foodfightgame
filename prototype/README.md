@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.8:**
+
+- **Smaller HUD:** the player-count and splat tags, the health and Glaze bars, and the hotbar are all smaller.
+- **Bigger splats, faster throws:** tomato splash radius 2.5 → 4 m with a much bigger stain; soda, grape, jelly and watermelon stains are bigger too. Recovery between throws is much shorter: tomato 0.55 → 0.22 s, ice 0.6 → 0.3, soda 0.7 → 0.35, grapes 0.8 → 0.4, pineapple 0.8 → 0.45, jelly 0.6 → 0.3.
+- **Stamina for jumping and dashing:** 100 max; a jump costs 18, a double jump 24 and a dash 30. It refills at 30 a second after a 0.6 s pause. A green bar sits under the health bar and flashes red when you're too tired. Bots use the same rules.
+
 **Quickest:** build the single self-contained file and open it in a browser.
 
 ```bash

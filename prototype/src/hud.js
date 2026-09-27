@@ -87,6 +87,8 @@ export class HUD {
       $('glazeFill').style.transform = `scaleX(${gl / 100})`;
       $('hpText').textContent = Math.ceil(hp);
       $('glazeText').textContent = Math.ceil(gl);
+      $('stamFill').style.transform = `scaleX(${a.stamina / 100})`;
+      $('stam').classList.toggle('tired', a.staminaFlash > 0);
       this._renderHotbar(a);
 
       const food = a.selectedFood();

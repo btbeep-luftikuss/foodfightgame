@@ -288,7 +288,7 @@ function stampAtGround(game, p, radius, state, dur, opts) {
 export const FOODS = {
   tomato: {
     name: 'Tomato', role: 'Splash · slows', maxStack: 4, give: 2, weight: 26,
-    profile: 'lob', charge: 0.4, speed: 30, recovery: 0.55, radius: 0.4, dmg: 25, verb: "tomato'd",
+    profile: 'lob', charge: 0.25, speed: 30, recovery: 0.22, radius: 0.4, dmg: 25, verb: "tomato'd",
     hint: 'Hold to power up, release to lob. Victims drip a slick trail.',
     release(a, c, game) {
       game.projectiles.launch({ food: 'tomato', owner: a, pos: a.handPos(), vel: lobVel(a, lobSpeed('tomato', c)), spin: 8 });
@@ -301,14 +301,14 @@ export const FOODS = {
         game.damage(hit.actor, 25, p.owner, 'tomato');
         hit.actor.addSticky(0.2, 3); hit.actor.juice(5);
       }
-      game.splash(pt, 2.5, 10, p.owner, 'tomato', {
+      game.splash(pt, 4, 10, p.owner, 'tomato', {
         exclude: hit.actor || hit.blockedBy,
         onHit: (act) => { if (act !== p.owner) { act.addSticky(0.2, 3); act.juice(3); } },
       });
-      game.world.paintSplat(pt.x, pt.y, pt.z, 2.4, 'tomato');
-      stampAtGround(game, pt, 1.8, 'slick', 5);
+      game.world.paintSplat(pt.x, pt.y, pt.z, 4.2, 'tomato'); // big juicy splat
+      stampAtGround(game, pt, 3, 'slick', 5);
       if (game.world.onBurner(pt)) game.sfx.play('sizzle', pt);
-      game.fx.burst('tomato', pt);
+      game.fx.burst('tomato', pt, 1.5);
       game.sfx.play('splat', pt);
       return true;
     },
@@ -405,7 +405,7 @@ export const FOODS = {
 
   ice: {
     name: 'Ice Cube', role: 'Freeze · rink', maxStack: 3, give: 2, weight: 15,
-    profile: 'lob', charge: 0.3, speed: 26, recovery: 0.6, radius: 0.35, verb: 'iced',
+    profile: 'lob', charge: 0.2, speed: 26, recovery: 0.3, radius: 0.35, verb: 'iced',
     hint: 'Direct hit freezes (longer if Wet). Ground hit makes an ice rink.',
     release(a, c, game) {
       game.projectiles.launch({ food: 'ice', owner: a, pos: a.handPos(), vel: lobVel(a, lobSpeed('ice', c)), spin: 6 });
@@ -438,7 +438,7 @@ export const FOODS = {
 
   soda: {
     name: 'Soda Can', role: 'Blast · rocket jump', maxStack: 2, give: 1, weight: 14,
-    profile: 'lob', charge: 1.5, speed: 24, recovery: 0.7, radius: 0.3, verb: 'fizzed',
+    profile: 'lob', charge: 1.2, speed: 24, recovery: 0.35, radius: 0.3, verb: 'fizzed',
     altLabel: 'Fizz Jump: pop it underfoot',
     hint: 'Hold to shake: a longer shake means a bigger blast. Blasts knock you back too.',
     release(a, c, game) {
@@ -450,8 +450,8 @@ export const FOODS = {
       const pt = hit.point, c = p.charge;
       const dmg = 20 + 20 * c, r = 3 + 1.5 * c, force = 12 + 8 * c;
       game.explode(pt, r, dmg, p.owner, 'soda', force, hit.actor);
-      stampAtGround(game, pt, 4, 'sticky', 6, { slow: 0.3, visual: 'soda' });
-      game.world.paintSplat(pt.x, pt.y, pt.z, 3.2, 'soda');
+      stampAtGround(game, pt, 5.5, 'sticky', 6, { slow: 0.3, visual: 'soda' });
+      game.world.paintSplat(pt.x, pt.y, pt.z, 5, 'soda');
       game.fx.burst('soda', pt, 0.8 + 0.5 * c);
       game.sfx.play('boom', pt, 0.8 + 0.4 * c);
       game.sfx.play('fizz', pt);
@@ -546,7 +546,7 @@ export const FOODS = {
   // ---------------------------------------------------------------- added in prototype 0.2
   grapes: {
     name: 'Grapes', role: 'Scatter shot · snack', maxStack: 2, give: 1, weight: 10,
-    profile: 'spray', charge: 0, speed: 45, gravity: 0.6, recovery: 0.8, radius: 0.16, dmg: 7, verb: 'grape-shot',
+    profile: 'spray', charge: 0, speed: 45, gravity: 0.6, recovery: 0.4, radius: 0.16, dmg: 7, verb: 'grape-shot',
     altLabel: 'Eat the bunch: +40 HP',
     hint: 'Fires 8 bouncing grapes in a cone. Deadly up close.',
     release(a, c, game) {
@@ -581,7 +581,7 @@ export const FOODS = {
         p.vel.y = Math.abs(p.vel.y) * 0.5 + 2; p.vel.x *= 0.7; p.vel.z *= 0.7;
         return false;
       }
-      game.world.paintSplat(hit.point.x, hit.point.y, hit.point.z, 0.6, 'grape');
+      game.world.paintSplat(hit.point.x, hit.point.y, hit.point.z, 1.1, 'grape');
       game.fx.burst('grape', hit.point, 0.3);
       return true;
     },
@@ -655,7 +655,7 @@ export const FOODS = {
     expire(p, game) { this.split(p, game); },
     split(p, game) {
       game.fx.burst('melon', p.pos, 1.4);
-      game.world.paintSplat(p.pos.x, p.pos.y - 0.8, p.pos.z, 3.5, 'melon');
+      game.world.paintSplat(p.pos.x, p.pos.y - 0.8, p.pos.z, 5.5, 'melon');
       stampAtGround(game, p.pos, 3, 'slick', 5);
       game.sfx.play('splat', p.pos, 1.5); game.sfx.play('thud', p.pos, 1.2);
       for (let i = 0; i < 4; i++) {
@@ -676,7 +676,7 @@ export const FOODS = {
 
   pineapple: {
     name: 'Pineapple', role: 'Sticky spike grenade', maxStack: 1, give: 1, weight: 6,
-    profile: 'lob', charge: 0.4, speed: 26, recovery: 0.8, radius: 0.45, dmg: 35, verb: 'spiked',
+    profile: 'lob', charge: 0.25, speed: 26, recovery: 0.45, radius: 0.45, dmg: 35, verb: 'spiked',
     hint: 'Sticks to whatever it hits, then bursts into a spike field. Dash or get wet to shake it off.',
     release(a, c, game) {
       game.projectiles.launch({ food: 'pineapple', owner: a, pos: a.handPos(), vel: lobVel(a, lobSpeed('pineapple', c)), spin: 7, fuse: 2 });
@@ -703,7 +703,7 @@ export const FOODS = {
 
   jelly: {
     name: 'Jelly Cube', role: 'Root · trampoline', maxStack: 2, give: 1, weight: 8,
-    profile: 'lob', charge: 0.3, speed: 24, recovery: 0.6, radius: 0.35, dmg: 12, verb: 'jellied',
+    profile: 'lob', charge: 0.2, speed: 24, recovery: 0.3, radius: 0.35, dmg: 12, verb: 'jellied',
     altLabel: 'Place a trampoline',
     hint: 'Bounces off walls and roots whoever it hits. Place it as a trampoline to reach high places.',
     release(a, c, game) {
@@ -727,7 +727,7 @@ export const FOODS = {
         return false;
       }
       game.fx.burst('jelly', hit.point);
-      game.world.paintSplat(hit.point.x, hit.point.y, hit.point.z, 1.4, 'jelly');
+      game.world.paintSplat(hit.point.x, hit.point.y, hit.point.z, 2.4, 'jelly');
       return true;
     },
     alt(a, game) {

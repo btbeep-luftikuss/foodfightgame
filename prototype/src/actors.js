@@ -11,6 +11,9 @@ import { FOODS, makeFoodMesh } from './foods.js';
 const JUMP_V = Math.sqrt(2 * G * 6);   // 6 m jump: about three times a Titan's height
 const JUMP2_V = Math.sqrt(2 * G * 5);  // double jump adds another 5 m
 const DASH_SPEED = 28, DASH_TIME = 0.2, DASH_COOLDOWN = 0.45;
+// Stamina: jumping and dashing cost it; it refills after a short pause.
+export const STAMINA_MAX = 100;
+const COST_JUMP = 18, COST_DOUBLE = 24, COST_DASH = 30, REGEN = 30, REGEN_DELAY = 0.6;
 export const MAX_HP = 200;
 const RADIUS = 0.45, HEIGHT = 1.95;
 const _v = new THREE.Vector3(), _f = new THREE.Vector3(), _r = new THREE.Vector3();
@@ -79,6 +82,7 @@ export class Actor {
   reset() {
     this.alive = true; this.hp = MAX_HP; this.glaze = 0; this.kills = 0;
     this.airJumps = 0; this.airDashes = 0; this.dashT = 0; this.noiseAt = -99; this.fpCam = null;
+    this.stamina = STAMINA_MAX; this.staminaUsedAt = -99; this.staminaFlash = 0;
     this.vel.set(0, 0, 0); this.yaw = 0; this.onGround = false; this.gliding = false;
     this.inv = [null, null, null, null, null]; this.sel = 0;
     this.sticky = []; this.surfaceSlow = 0; this.surfaceSlowUntil = 0;
@@ -396,10 +400,16 @@ export class Actor {
     this.vel.x += dx; this.vel.z += dz;
 
     if (this.onGround) { this.airJumps = 0; this.airDashes = 0; }
+    if (now - this.staminaUsedAt > REGEN_DELAY) this.stamina = Math.min(STAMINA_MAX, this.stamina + REGEN * dt);
+    this.staminaFlash = Math.max(0, this.staminaFlash - dt);
+    const spend = (n) => {
+      if (this.stamina < n) { this.staminaFlash = 0.4; return false; } // too tired
+      this.stamina -= n; this.staminaUsedAt = now; return true;
+    };
     if (control && it.jump && !this.gliding) {
       if (this.onGround) {
-        this.vel.y = JUMP_V; this.onGround = false;
-      } else if (this.airJumps < 1) { // double jump
+        if (spend(COST_JUMP)) { this.vel.y = JUMP_V; this.onGround = false; }
+      } else if (this.airJumps < 1 && spend(COST_DOUBLE)) { // double jump
         this.vel.y = Math.max(this.vel.y, JUMP2_V);
         this.airJumps++;
         g.fx.burst('jump', this.pos);
@@ -408,7 +418,7 @@ export class Actor {
       }
     }
     // Dash: a quick burst in the move direction on a short cooldown; one per jump in the air.
-    if (control && it.dodge && now >= this.dodgeReadyAt && !this.gliding && (this.onGround || this.airDashes < 1)) {
+    if (control && it.dodge && now >= this.dodgeReadyAt && !this.gliding && (this.onGround || this.airDashes < 1) && spend(COST_DASH)) {
       const d = _v.set(it.moveX, 0, it.moveZ);
       if (d.lengthSq() < 0.01) forwardOf(this.yaw, d);
       d.normalize();
