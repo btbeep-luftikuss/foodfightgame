@@ -14,7 +14,7 @@ export const BOT_NAMES = ['Pip', 'Crouton', 'Waffles', 'Nibbles', 'Sprout', 'Moc
 const RANGE = {
   carrot: [20, 70, 3.2], tomato: [6, 28, 2.6], ice: [5, 24, 2.3], soda: [5, 22, 2.5],
   banana: [4, 20, 1.9], cheese: [4, 20, 2.4], peel: [0, 7, 1.2],
-  grapes: [2, 14, 2.6], chili: [6, 40, 2.5], cookie: [5, 30, 2.2], watermelon: [4, 22, 2.4],
+  grapes: [2, 14, 2.6], chili: [6, 40, 2.5], cookie: [5, 30, 1.9], watermelon: [4, 22, 2.4],
   pineapple: [6, 24, 2.4], jelly: [5, 22, 2.1],
 };
 

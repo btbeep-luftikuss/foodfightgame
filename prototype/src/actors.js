@@ -8,7 +8,7 @@ import {
 } from './core.js';
 import { FOODS, makeFoodMesh } from './foods.js';
 
-const JUMP_V = Math.sqrt(2 * G * 3.5); // 3.5 m jump
+const JUMP_V = Math.sqrt(2 * G * 6); // 6 m jump: about three times a Titan's height
 const RADIUS = 0.45, HEIGHT = 1.95;
 const _v = new THREE.Vector3(), _f = new THREE.Vector3(), _r = new THREE.Vector3();
 
@@ -312,6 +312,7 @@ export class Actor {
     if (!s) return;
     s.count -= n;
     if (s.count <= 0) { this.inv[this.sel] = null; this.shieldUp = false; }
+    else if (s.id === 'cheese') s.hp = 300; // the next wheel in the stack is a fresh shield
     this._refreshHeld();
   }
   select(i) {
@@ -363,7 +364,7 @@ export class Actor {
 
     const control = this.canControl() && !this.isRooted();
     const slow = this.slowAmount();
-    let speed = (it.sprint && !this.heavy() ? 7.2 : 4.6) * (1 - slow);
+    let speed = (it.sprint && !this.heavy() ? 10 : 6.5) * (1 - slow); // walk 6.5 m/s, sprint 10 m/s
     if (this.shieldUp) speed *= 0.75;
     else if (this.heavy()) speed *= 0.85; // lugging a watermelon
     if (this.eat) speed *= 0.5;
@@ -387,7 +388,7 @@ export class Actor {
       const d = _v.set(it.moveX, 0, it.moveZ);
       if (d.lengthSq() < 0.01) forwardOf(this.yaw, d);
       d.normalize();
-      this.vel.x = d.x * 15; this.vel.z = d.z * 15;
+      this.vel.x = d.x * 19; this.vel.z = d.z * 19;
       if (this.onGround) this.vel.y = 3;
       this.dodgeReadyAt = now + 1.5; this.knockUntil = now + 0.25; this.rollT = 0.4; this.lastDodgeAt = now;
       for (const e of this.sticky) e.until -= 1; // Duck & Roll sheds 1 s of sticky

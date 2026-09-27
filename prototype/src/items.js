@@ -1,7 +1,7 @@
 // Ground pickups (spawners, drops, loot piles), banana-peel traps and stuck-in-the-wall decor.
 import * as THREE from 'three';
 import { G, groundHeight, resolveHorizontal, rand } from './core.js';
-import { FOODS, makeFoodMesh, randomFoodId } from './foods.js';
+import { FOODS, makeFoodMesh, randomFoodId, rollAmmo } from './foods.js';
 
 const ringGeo = new THREE.RingGeometry(0.9, 1.15, 32).rotateX(-Math.PI / 2);
 const ringMat = new THREE.MeshBasicMaterial({ color: '#ffd447', transparent: true, opacity: 0.85, depthWrite: false });
@@ -40,7 +40,7 @@ export class Items {
     for (const s of this.spawners) {
       if (!s.item && now >= s.respawnAt) {
         const id = randomFoodId();
-        s.item = this._make(id, FOODS[id].give, s.pos, null, s);
+        s.item = this._make(id, rollAmmo(), s.pos, null, s);
       }
     }
   }

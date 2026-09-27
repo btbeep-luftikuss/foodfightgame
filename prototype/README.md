@@ -6,6 +6,8 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 **Version 0.2** made the map bigger, doubled the food roster to 12, and optimized the graphics (see "Performance" below).
 
+**Version 0.3** tuned the feel: jumps reach 6 m (was 3.5), walking is 6.5 m/s and sprinting 10 m/s (were 4.6 and 7.2), and every food pickup holds a random 4–15 of that food, with stacks of up to 30.
+
 ## What's in it
 
 | Area | Included |

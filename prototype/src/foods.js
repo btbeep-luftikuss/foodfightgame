@@ -559,7 +559,7 @@ export const FOODS = {
 
   cookie: {
     name: 'Cookie', role: 'Auto-seeker', maxStack: 3, give: 2, weight: 9,
-    profile: 'seek', charge: 0, speed: 18, recovery: 0.6, radius: 0.4, dmg: 18, verb: 'cookied',
+    profile: 'seek', charge: 0, speed: 18, recovery: 1.1, radius: 0.4, dmg: 18, verb: 'cookied',
     hint: 'Hunts the nearest enemy on its own. Any food thrown at it knocks it out of the air.',
     release(a, c, game) {
       const mine = game.projectiles.list.filter((p) => p.food === 'cookie' && p.owner === a && !p.done);
@@ -688,6 +688,9 @@ export const FOODS = {
   },
 };
 
+// Every food pickup holds a random 4-15 of that food; a slot stacks up to 30.
+export const AMMO_MIN = 4, AMMO_MAX = 15, STACK_MAX = 30;
+export const rollAmmo = () => AMMO_MIN + Math.floor(Math.random() * (AMMO_MAX - AMMO_MIN + 1));
 export const FOOD_IDS = ['tomato', 'banana', 'carrot', 'ice', 'soda', 'cheese', 'grapes', 'chili', 'cookie', 'watermelon', 'pineapple', 'jelly'];
 
 // Food casts real shadows only when the shadow map updates every frame (High).
@@ -722,6 +725,8 @@ export function makeFoodMesh(id) {
   }
   return grp;
 }
+
+for (const id of FOOD_IDS) FOODS[id].maxStack = STACK_MAX;
 
 export function randomFoodId() {
   let total = 0;

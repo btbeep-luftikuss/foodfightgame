@@ -11,7 +11,7 @@ import { Actor } from './actors.js';
 import { Projectiles } from './projectiles.js';
 import { Items } from './items.js';
 import { BotBrain, BOT_NAMES } from './bots.js';
-import { FOODS, FEED_VERB, lobSpeed, lobDir, randomFoodId } from './foods.js';
+import { FOODS, FEED_VERB, lobSpeed, lobDir, randomFoodId, rollAmmo } from './foods.js';
 
 const PLAYER_COLOR = '#ff9a1f';
 const BOT_COLORS = ['#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#f2f2f2', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5'];
@@ -302,9 +302,9 @@ export class Game {
     this.fx.shake(0.3);
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2 + rand(-0.3, 0.3);
-      this.items.drop('tomato', 2, _o.set(L.x, 3, L.z), _v.set(Math.cos(a) * 8, 10, Math.sin(a) * 8));
+      this.items.drop('tomato', rollAmmo(), _o.set(L.x, 3, L.z), _v.set(Math.cos(a) * 8, 10, Math.sin(a) * 8));
     }
-    if (attacker === this.player) this.hud.toast('Giant Tomato harvested: 8 tomatoes dropped');
+    if (attacker === this.player) this.hud.toast('Giant Tomato harvested: 4 piles of tomatoes dropped');
   }
 
   kill(victim, attacker, foodId) {
@@ -457,7 +457,7 @@ export class Game {
       const floorish = groundHeight(x, z, top + 0.1);
       if (top > floorish + 1) continue; // landed on something tall: skip this one
       const id = randomFoodId();
-      this.items.drop(id, FOODS[id].give, _o.set(x, top + 45 + rand(0, 15), z), _v.set(0, -6, 0));
+      this.items.drop(id, rollAmmo(), _o.set(x, top + 45 + rand(0, 15), z), _v.set(0, -6, 0));
     }
     if (this.player) this.hud.toast('Grocery drop inside the circle');
   }
