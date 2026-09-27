@@ -88,7 +88,7 @@ function boot() {
   if (quality.shadows) {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
-    renderer.shadowMap.autoUpdate = quality.dynamicShadows; // Medium bakes the static scenery once
+    renderer.shadowMap.autoUpdate = false; // Medium bakes the static scenery once; High refreshes at 30 Hz
   }
 
   const scene = new THREE.Scene();
@@ -182,6 +182,7 @@ function boot() {
   hold('tJump', () => { input.pressed.jump = true; });
   hold('tDash', () => { input.pressed.dodge = true; });
   hold('tAlt', () => { input.pressed.alt = true; });
+  hold('tSniff', () => { input.pressed.sniff = true; });
   const stick = $('stick');
   input.onStick = (phase, x, y) => {
     if (phase === 'start') { stick.style.left = `${x}px`; stick.style.top = `${y}px`; stick.classList.add('on'); stick.firstElementChild.style.transform = ''; }
@@ -216,7 +217,15 @@ function boot() {
   });
 
   game.newMatch(false); // bots fight behind the menu
-  let last = performance.now();
+
+  // Compile every shader up front (in parallel where the browser supports it) so the first
+  // throw of each food doesn't stutter.
+  const warm = new THREE.Group();
+  for (const id of [...FOOD_IDS, 'peel', 'grape', 'melonchunk']) warm.add(makeFoodMesh(id));
+  warm.position.set(0, -30, 0);
+  scene.add(warm);
+  renderer.compileAsync(scene, camera).catch(() => {}).finally(() => scene.remove(warm));
+  let last = performance.now(), frameNo = 0;
   renderer.info.autoReset = false; // count draw calls across all passes for the perf readout
   renderer.setAnimationLoop((now) => {
     renderer.info.reset();
@@ -224,7 +233,10 @@ function boot() {
     last = now;
     game.update(dt);
     if (game.world.shadowDirty && quality.shadows && !quality.dynamicShadows) { renderer.shadowMap.needsUpdate = true; game.world.shadowDirty = false; }
+    // High: moving shadows refresh at 30 Hz instead of every frame (half the shadow cost).
+    if (quality.dynamicShadows) renderer.shadowMap.needsUpdate = (frameNo++ & 1) === 0;
     if (composer) composer.render(dt); else renderer.render(scene, camera);
+    game.lastDrawCalls = renderer.info.render.calls;
 
     if (dt > 0) fpsEma += (1 / dt - fpsEma) * 0.05;
     adjustT += dt;

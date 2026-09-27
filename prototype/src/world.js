@@ -513,9 +513,12 @@ export class World {
     for (let i = 0; i < 3; i++) this._mesh(new THREE.CylinderGeometry(7 - i * 0.2, 4.5, 2.4, 36), bowl, -15, 1.2 + i * 1.6, -163);
     addCyl(-15, -163, 7, 0, 5.5, { surface: 'ceramic' });
     const spices = ['#b5471b', '#d9a21b', '#6b8e23', '#7a3b1b', '#c2410c'];
+    const spiceIM = new THREE.InstancedMesh(new THREE.CylinderGeometry(1.6, 1.6, 5.2, 20), new THREE.MeshStandardMaterial({ roughness: 0.9 }), spices.length);
+    this.scene.add(spiceIM); // one draw call, a colour per jar
     spices.forEach((col, i) => {
       const x = 190 + i * 8;
-      this._mesh(new THREE.CylinderGeometry(1.6, 1.6, 5.2, 20), new THREE.MeshStandardMaterial({ color: col, roughness: 0.9 }), x, 2.6, -171);
+      spiceIM.setMatrixAt(i, new THREE.Matrix4().makeTranslation(x, 2.6, -171));
+      spiceIM.setColorAt(i, new THREE.Color(col));
       this._mesh(new THREE.CylinderGeometry(1.8, 1.8, 6, 20, 1, true), m.glass, x, 3, -171, { cast: false });
       this._mesh(new THREE.CylinderGeometry(1.9, 1.9, 1.2, 20), tin, x, 6.6, -171);
       addCyl(x, -171, 1.9, 0, 7.2, { surface: 'glass' });
@@ -599,12 +602,16 @@ export class World {
     const ringMat = new THREE.MeshBasicMaterial({ color: '#ffd447', transparent: true, opacity: 0.8 });
     const arrowMat = new THREE.MeshStandardMaterial({ color: '#fff6e6', roughness: 0.5 });
     const baseG = new THREE.CylinderGeometry(3.2, 3.6, 0.8, 32), ringG = new THREE.TorusGeometry(3.6, 0.25, 8, 40).rotateX(Math.PI / 2), arrowG = new THREE.ConeGeometry(1.2, 2.2, 3);
-    for (const [x, z, tx, ty, tz] of pads) {
-      const base = this._mesh(baseG, padMat, x, F + 0.4, z, { dyn: true });
-      const ring = this._mesh(ringG, ringMat, x, F + 0.9, z, { cast: false, receive: false, dyn: true });
-      const arrow = this._mesh(arrowG, arrowMat, x, F + 1.6, z, { cast: false, dyn: true });
-      this.pads.push({ x, z, target: new THREE.Vector3(tx, ty, tz), base, ring, arrow, pulse: 0 });
-    }
+    // All pads share three instanced meshes (3 draw calls instead of 36), animated per instance.
+    const mk = (g, mat) => {
+      const im = new THREE.InstancedMesh(g, mat, pads.length);
+      im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      im.frustumCulled = false; im.receiveShadow = !!this.quality.shadows;
+      this.scene.add(im);
+      return im;
+    };
+    this.padMeshes = { base: mk(baseG, padMat), ring: mk(ringG, ringMat), arrow: mk(arrowG, arrowMat) };
+    for (const [x, z, tx, ty, tz] of pads) this.pads.push({ x, z, target: new THREE.Vector3(tx, ty, tz), pulse: 0 });
   }
 
   launchVelocity(pad, from) {
@@ -815,11 +822,16 @@ export class World {
       if (!merged) continue;
       const mesh = new THREE.Mesh(merged, list[0].material);
       mesh.castShadow = list[0].castShadow; mesh.receiveShadow = list[0].receiveShadow;
+      mesh.userData.merged = true;
       this.scene.add(mesh);
       for (const o of list) this.scene.remove(o);
       geos.forEach((g) => g.dispose());
     }
     this.drawCallsAfter = this._countMeshes();
+    // Scenery never moves: freeze its matrices so three.js skips recomputing them every frame.
+    for (const o of this.scene.children) {
+      if (o.isMesh && !o.userData.dyn && (o.userData.world || o.userData.merged)) { o.updateMatrix(); o.matrixAutoUpdate = false; }
+    }
   }
 
   // ------------------------------------------------------------------ per-frame
@@ -846,13 +858,18 @@ export class World {
       h.mesh.scale.set(hs, 1, hs);
       if (Math.random() < dt * 1.5) fx.burst('honey', new THREE.Vector3(h.x + rand(-1, 1), h.y + 0.3, h.z + rand(-1, 1)));
     }
-    for (const p of this.pads) {
+    const PM = this.padMeshes, m4 = this._pm ||= new THREE.Matrix4(), q = this._pq ||= new THREE.Quaternion(), v = this._pv ||= new THREE.Vector3(), s = this._ps ||= new THREE.Vector3();
+    const up = this._up ||= new THREE.Vector3(0, 1, 0);
+    this.pads.forEach((p, i) => {
       p.pulse = Math.max(0, p.pulse - dt * 3);
-      p.ring.scale.setScalar(1 + 0.08 * Math.sin(now * 4) + p.pulse * 0.4);
-      p.base.scale.y = 1 - p.pulse * 0.5;
-      p.arrow.position.y = F + 1.8 + Math.sin(now * 3 + p.x) * 0.3;
-      p.arrow.rotation.y += dt;
-    }
+      q.identity();
+      PM.base.setMatrixAt(i, m4.compose(v.set(p.x, F + 0.4, p.z), q, s.set(1, 1 - p.pulse * 0.5, 1)));
+      const rs = 1 + 0.08 * Math.sin(now * 4) + p.pulse * 0.4;
+      PM.ring.setMatrixAt(i, m4.compose(v.set(p.x, F + 0.9, p.z), q, s.set(rs, rs, rs)));
+      q.setFromAxisAngle(up, now + p.x);
+      PM.arrow.setMatrixAt(i, m4.compose(v.set(p.x, F + 1.8 + Math.sin(now * 3 + p.x) * 0.3, p.z), q, s.set(1, 1, 1)));
+    });
+    for (const k in PM) PM[k].instanceMatrix.needsUpdate = true;
     const L = this.landmark;
     if (!L.alive && now >= L.regrowAt) { L.alive = true; L.hp = L.maxHp; L.group.visible = true; L.growT = 0; }
     if (L.alive && L.growT < 1) {

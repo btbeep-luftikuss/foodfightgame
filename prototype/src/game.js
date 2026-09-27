@@ -79,6 +79,31 @@ export class Game {
     scene.add(this.blobs);
   }
 
+  // ------------------------------------------------------------------ finding players (0.5)
+  // Sniff: for 3 s, point at the 4 nearest Titans that made noise in the last 6 s.
+  // Quiet Titans (standing still, walking, hiding in a bush) never show up.
+  sniff() {
+    if (this.time < (this.sniffReadyAt || 0)) return;
+    this.sniffReadyAt = this.time + 10;
+    this.sniffUntil = this.time + 3;
+    this.sfx.play('sniff');
+  }
+  // Direction markers for the HUD: nearest noisy enemies.
+  noiseMarkers() {
+    const p = this.player;
+    if (!p || !p.alive) return [];
+    const now = this.time, out = [];
+    const sniffing = now < (this.sniffUntil || 0);
+    for (const o of this.actors) {
+      if (o === p || !o.alive) continue;
+      const age = now - o.noiseAt, d = o.pos.distanceTo(p.pos);
+      if (sniffing && age < 6) out.push({ actor: o, dist: d, strength: 1, sniff: true });
+      else if (age < 1.2 && d < 75) out.push({ actor: o, dist: d, strength: 1 - age / 1.2, sniff: false });
+    }
+    out.sort((a, b) => a.dist - b.dist);
+    return out.slice(0, sniffing ? 4 : 6);
+  }
+
   // ------------------------------------------------------------------ targeting helpers
   nearestEnemy(a, range, from = a.pos) {
     let best = null, bd = range;
@@ -154,7 +179,8 @@ export class Game {
       }
     }
     const cam = this.camera.position;
-    for (const it of this.items.list) if (!it.vel && it.mesh.visible && it.pos.distanceToSquared(cam) < 70 * 70) place(it.pos.x, it.pos.y, it.pos.z, 1.3);
+    for (const it of this.items.list) if (!it.vel && it.pos.distanceToSquared(cam) < 70 * 70) place(it.pos.x, it.pos.y, it.pos.z, 1.3);
+    for (const b of this.items.bushes) if (b.pos.distanceToSquared(cam) < 90 * 90) place(b.pos.x, b.pos.y, b.pos.z, 4.2);
     this.blobs.count = n;
     this.blobs.instanceMatrix.needsUpdate = true;
   }
@@ -379,7 +405,7 @@ export class Game {
       const intent = this.input.enabled ? this.input.intent() : null;
       for (let s = 0; s < steps; s++) {
         // edge-triggered presses only count once per frame
-        if (s === 1 && intent) Object.assign(intent, { jump: false, dodge: false, alt: false, slot: -1, cycle: 0 });
+        if (s === 1 && intent) Object.assign(intent, { jump: false, dodge: false, alt: false, sniff: false, slot: -1, cycle: 0 });
         this._step(dt, intent);
       }
     }
@@ -396,6 +422,7 @@ export class Game {
     this.time += dt;
     const p = this.player;
     if (p && p.alive && intent) {
+      if (intent.sniff) this.sniff();
       this._playerAim();
       p.update(dt, intent);
     }

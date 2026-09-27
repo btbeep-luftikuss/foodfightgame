@@ -200,6 +200,9 @@ export class FX {
         this.spray('blobs', pos, 20, { speed: 5, up: 6, colors: P.fire, size: 0.14, life: 0.6, grav: -0.2 });
         this.spray('puffs', pos, 6, { speed: 2, up: 3, colors: [P.fire[1]], size: 0.6, life: 0.4, grav: -0.1, grow: 1.4 });
         break;
+      case 'leaf':
+        this.spray('chunks', pos, 3, { speed: 3, up: 3, colors: [C('#4f9a3a'), C('#6fbf4a')], size: 0.14, life: 0.5 });
+        break;
       case 'dash':
         this.spray('puffs', pos, 2, { speed: 0.6, up: 0.3, colors: P.foam, size: 0.35, life: 0.35, grav: 0, drag: 4, grow: 0.6 });
         break;
@@ -320,6 +323,11 @@ export class Sfx {
       case 'slip':
         this._tone(o, t, 0.25, { type: 'sine', f0: 500, f1: 1400, vol: 0.35 });
         this._tone(o, t + 0.25, 0.35, { type: 'sine', f0: 1400, f1: 300, vol: 0.35 });
+        break;
+      case 'sniff':
+        this._noise(o, t, 0.18, { type: 'bandpass', f0: 900, f1: 2200, q: 3, vol: 0.5 });
+        this._noise(o, t + 0.22, 0.18, { type: 'bandpass', f0: 900, f1: 2200, q: 3, vol: 0.5 });
+        this._tone(o, t + 0.45, 0.4, { type: 'sine', f0: 660, f1: 990, vol: 0.2 });
         break;
       case 'boing':
         this._tone(o, t, 0.4, { type: 'sine', f0: 160, f1: 520, vol: 0.5 });

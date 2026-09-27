@@ -42,6 +42,7 @@ export class BotBrain {
       if (o === a || !o.alive) continue;
       const d = o.pos.distanceTo(a.pos);
       const bias = o === a.lastHitBy && now - a.lastHitAt < 4 ? 15 : 0;
+      if (d > 10 && now - o.noiseAt > 1.5 && g.items.inBush(o)) continue; // quiet Titans in bushes stay hidden
       if (d - bias < bestD && hasLineOfSight(eye, o.headPos(_w))) { best = o; bestD = d - bias; }
     }
     this.target = best;
@@ -70,7 +71,7 @@ export class BotBrain {
     if (!this.goal && !this.target && a.inv.some(Boolean)) {
       let prey = null, pd = Infinity;
       for (const o of g.actors) {
-        if (o === a || !o.alive) continue;
+        if (o === a || !o.alive || now - o.noiseAt > 6) continue; // only hunt Titans making noise
         const d = o.pos.distanceTo(a.pos);
         if (d < pd) { pd = d; prey = o; }
       }
@@ -132,8 +133,8 @@ export class BotBrain {
   _nearestItem(maxD, insideTide = null) {
     const a = this.a;
     let best = null, bd = maxD;
-    for (const it of this.game.items.list) {
-      if (it.vel || Math.abs(it.pos.y - a.pos.y) > 3) continue;
+    for (const it of this.game.items.pickables()) {
+      if (Math.abs(it.pos.y - a.pos.y) > 3) continue;
       if (insideTide && Math.hypot(it.pos.x - insideTide.x, it.pos.z - insideTide.z) > insideTide.r) continue;
       const d = it.pos.distanceTo(a.pos);
       if (d < bd && a.inv.some((s) => !s || (s.id === it.id && s.count < FOODS[it.id].maxStack))) { bd = d; best = it; }

@@ -715,6 +715,9 @@ function bakeFood(id) {
   for (const [m, gs] of byMat) parts.push([gs.length > 1 ? mergeGeometries(gs) : gs[0], m]);
   return parts;
 }
+// The merged [geometry, material] parts of a food, for instanced drawing.
+export function foodParts(id) { return (MERGED[id] ||= bakeFood(id)); }
+
 export function makeFoodMesh(id) {
   MERGED[id] ||= bakeFood(id);
   const grp = new THREE.Group();

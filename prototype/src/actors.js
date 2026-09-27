@@ -78,7 +78,7 @@ export class Actor {
 
   reset() {
     this.alive = true; this.hp = MAX_HP; this.glaze = 0; this.kills = 0;
-    this.airJumps = 0; this.airDashes = 0; this.dashT = 0;
+    this.airJumps = 0; this.airDashes = 0; this.dashT = 0; this.noiseAt = -99;
     this.vel.set(0, 0, 0); this.yaw = 0; this.onGround = false; this.gliding = false;
     this.inv = [null, null, null, null, null]; this.sel = 0;
     this.sticky = []; this.surfaceSlow = 0; this.surfaceSlowUntil = 0;
@@ -241,6 +241,7 @@ export class Actor {
     if (this.glaze > 0) { const g = Math.min(this.glaze, a); this.glaze -= g; a -= g; }
     this.hp -= a;
     this.hitFlash = 1;
+    this.noiseAt = this.game.time; // getting splatted is loud
     if (this.eat) this.eat.dmg += amount;
     return amount;
   }
@@ -393,6 +394,7 @@ export class Actor {
         this.vel.y = Math.max(this.vel.y, JUMP2_V);
         this.airJumps++;
         g.fx.burst('jump', this.pos);
+        this.noiseAt = now;
         g.sfx.play('boing', this.pos, 0.35);
       }
     }
@@ -404,7 +406,7 @@ export class Actor {
       this.vel.x = d.x * DASH_SPEED; this.vel.z = d.z * DASH_SPEED;
       if (!this.onGround) { this.vel.y = Math.max(this.vel.y, 2); this.airDashes++; }
       this.dodgeReadyAt = now + DASH_COOLDOWN; this.knockUntil = now + DASH_TIME; this.dashT = DASH_TIME;
-      this.lastDodgeAt = now;
+      this.lastDodgeAt = now; this.noiseAt = now;
       for (const e of this.sticky) e.until -= 1; // dashing sheds 1 s of sticky
       g.sfx.play('dodge', this.pos);
     }
@@ -413,6 +415,7 @@ export class Actor {
       g.fx.burst('dash', this.center(_f));
     }
 
+    if (this.onGround && Math.hypot(this.vel.x, this.vel.z) > 8.5) this.noiseAt = now; // sprinting footsteps
     this.vel.y -= G * dt;
     if (this.gliding) this.vel.y = Math.max(this.vel.y, -7);
     if (this.onGround) this.fallTop = this.pos.y; else this.fallTop = Math.max(this.fallTop, this.pos.y);
@@ -500,6 +503,7 @@ export class Actor {
     food.release(this, c, this.game);
     this.charging = false; this.chargeT = 0;
     this.recoverUntil = this.game.time + food.recovery;
+    this.noiseAt = this.game.time; // throwing is loud
     this.armT = 0.3;
   }
 
@@ -547,6 +551,13 @@ export class Actor {
     this.feet[0].position.z = 0.05 + (moving ? Math.sin(this.walkPhase) * 0.18 : 0);
     this.feet[1].position.z = 0.05 - (moving ? Math.sin(this.walkPhase) * 0.18 : 0);
 
+    // Level of detail: far-away Titans drop the small parts you can't see anyway (4 fewer draw calls each).
+    const near = camera.position.distanceToSquared(this.pos) < 70 * 70;
+    if (near !== this.lodNear) {
+      this.lodNear = near;
+      this.armL.pivot.visible = this.armR.pivot.visible = near;
+      this.feet[0].visible = this.feet[1].visible = near;
+    }
     this.napkin.visible = this.gliding;
     if (this.gliding) this.napkin.rotation.z = Math.sin(t * 3) * 0.08;
     const rooted = this.isRooted();

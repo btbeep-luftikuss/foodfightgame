@@ -57,8 +57,8 @@ export class HUD {
     // FPS
     this.fpsAcc += dt; this.fpsN++;
     if (this.fpsAcc > 0.5) {
-      const info = game.renderer.info.render, scale = game.perf ? game.perf.scale : 1;
-      $('fps').textContent = `${Math.round(this.fpsN / this.fpsAcc)} fps · ${info.calls} draw calls · ${Math.round(scale * 100)}% resolution`;
+      const scale = game.perf ? game.perf.scale : 1;
+      $('fps').textContent = `${Math.round(this.fpsN / this.fpsAcc)} fps · ${game.lastDrawCalls || 0} draw calls · ${Math.round(scale * 100)}% resolution`;
       this.fpsAcc = 0; this.fpsN = 0;
     }
 
@@ -120,7 +120,49 @@ export class HUD {
     this.bannerT -= dt; if (this.bannerT <= 0) $('banner').classList.remove('on');
 
     this._nameplates(game, cam);
+    this._radar(game, cam);
     this._floaters(cam, dt);
+  }
+
+  // Noise arrows around the crosshair: direction only (plus distance while sniffing).
+  _radar(game, cam) {
+    const layer = $('radar');
+    const marks = game.noiseMarkers();
+    this.radarEls ||= [];
+    while (this.radarEls.length < 6) {
+      const el = document.createElement('div');
+      el.className = 'noise';
+      el.innerHTML = '<i></i><span></span>';
+      layer.appendChild(el);
+      this.radarEls.push(el);
+    }
+    const yaw = this.input.yaw;
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    this.radarEls.forEach((el, i) => {
+      const m = marks[i];
+      if (!m) { el.style.display = 'none'; return; }
+      // skip enemies already plainly on screen (unless sniffing)
+      if (!m.sniff) {
+        const s = this._project(m.actor.center(_e), cam);
+        if (s && s.x > 0 && s.x < innerWidth && s.y > 0 && s.y < innerHeight && hasLineOfSight(cam.position, _e)) { el.style.display = 'none'; return; }
+      }
+      const dx = m.actor.pos.x - game.player.pos.x, dz = m.actor.pos.z - game.player.pos.z;
+      const ang = Math.atan2(dx * rx + dz * rz, dx * fx + dz * fz); // 0 = straight ahead
+      el.style.display = '';
+      el.style.transform = `rotate(${ang}rad)`;
+      el.style.opacity = String(0.35 + 0.65 * m.strength);
+      el.classList.toggle('sniff', m.sniff);
+      const span = el.querySelector('span');
+      span.textContent = m.sniff ? `${Math.round(m.dist)} m` : '';
+      span.style.transform = `rotate(${-ang}rad)`;
+    });
+    const sn = $('sniff');
+    const left = (game.sniffReadyAt || 0) - game.time;
+    const label = left > 0 ? `Sniff ${Math.ceil(left)}s` : (this.input.isTouch ? 'Sniff ready' : 'Sniff ready (B)');
+    if (sn.textContent !== label) sn.textContent = label;
+    sn.classList.toggle('ready', left <= 0);
+    const tb = document.getElementById('tSniff');
+    if (tb) tb.classList.toggle('cooling', left > 0);
   }
 
   _project(pos, cam) {
@@ -140,7 +182,9 @@ export class HUD {
         layer.appendChild(el);
         this.plates.set(a, el);
       }
-      const show = a.alive && a !== game.player && game.state !== 'menu';
+      // quiet Titans hiding in a bush keep their hiding spot: no floating name gives them away
+      const hidden = game.player && game.time - a.noiseAt > 1.5 && game.items.inBush(a) && a.pos.distanceTo(game.player.pos) > 8;
+      const show = a.alive && a !== game.player && game.state !== 'menu' && !hidden;
       let pos = null;
       if (show) {
         a.headPos(_e).y += 1.0;

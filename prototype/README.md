@@ -16,6 +16,15 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 - **Obstacles:** about 30 new ones.
 - **Phone fix:** the death-screen buttons now work.
 
+**Version 0.5:**
+
+- **Food bushes:** they replace the floating spawners. Stand in one and it hands you its food one piece at a time (one every 0.09 s) until it's empty, then it regrows in 12 s.
+- **Finding players without revealing hiding spots:** only Titans making noise can be located. Noise means throwing, dashing, double-jumping, sprinting or getting hit.
+  - Passive arrows around the crosshair point toward noisy enemies within 75 m that you can't see.
+  - **Sniff** (B, or the phone button) points at the 4 nearest noisy Titans anywhere, with distances, for 3 s, on a 10 s cooldown.
+  - Quiet Titans, and anyone hiding in a bush, never show up; their nameplates stay hidden too, and bots can't see them either.
+- **More optimization:** see the Performance section.
+
 ## What's in it
 
 | Area | Included |
@@ -88,6 +97,12 @@ The GDD asks for high fidelity that stays smooth (§11), so 0.2 added the follow
 | Dynamic resolution | Render scale drops (down to 55%) when the frame rate falls below 50 and recovers above 58 |
 | Distance culling for pickups | Food further than 130 m isn't drawn |
 | Bloom only on High | Glowing burners, honey and sunlight cost nothing on Low or Medium |
+| Instanced pickups and bushes (0.5) | Every pickup and every piece of food on a bush is drawn with one InstancedMesh per food part: 62 bushes plus all loot take about 25 draw calls |
+| Instanced launch pads and spice jars (0.5) | 41 draw calls become 4 |
+| Level of detail (0.5) | Bushes show 5 pieces of food up close, 1 at mid range and none far away; Titans beyond 70 m drop arms and feet |
+| Frozen matrices for scenery (0.5) | Static meshes skip the per-frame matrix update (`matrixAutoUpdate = false`) |
+| Shaders compiled at load (0.5) | `renderer.compileAsync` compiles every material in parallel up front, so first throws don't stutter |
+| 30 Hz shadow refresh on High (0.5) | Moving shadows update every other frame, halving the shadow cost |
 
 Measured from the same wide shot of the whole kitchen, old build (small map, 8 Titans) against new build (whole kitchen, 12 Titans), in a software-rendered test browser:
 
@@ -96,6 +111,10 @@ Measured from the same wide shot of the whole kitchen, old build (small map, 8 T
 | Low | 385 → 258 | 2.8 → 2.5 ms |
 | Medium | 601 → 289 | 4.6 → 2.9 ms |
 | High | 587 → 491 (now with bloom and every-frame shadows) | 4.7 → 3.7 ms |
+
+Version 0.5 (same wide shot, with 62 food bushes added): Medium 307 → 208 draw calls (−32%), Low 258 → 198. Titans went from 126 to 81 calls and the rest of the scenery from 91 to 50. Triangle count went up (about 107k → 131k) because of the bushes and the food growing on them, so software-rendered frame time in the test browser is similar to before; on a real GPU, draw calls are usually the bigger cost.
+
+Sources for the 0.5 techniques: [100 Three.js Tips That Actually Improve Performance](https://www.utsubo.com/blog/threejs-best-practices-100-tips), [Optimizing Three.js: Draw Calls, Instancing & Batching](https://bersus.io/insights/creative-dev/threejs-optimizing-instancing-and-batching/), [Three JS Performance Guide](https://gist.github.com/iErcann/2a9dfa51ed9fc44854375796c8c24d92), [The Big List of three.js Tips and Tricks](https://discoverthreejs.com/tips-and-tricks/). Lower shader precision on phones (mediump) was considered and rejected: with a kitchen hundreds of metres across, mediump vertex positions would wobble by tens of centimetres.
 
 The game shows its frame rate, draw calls and render scale in the bottom-left corner while you play.
 

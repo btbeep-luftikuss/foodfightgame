@@ -122,6 +122,15 @@ button { font: inherit; color: inherit; }
 .floater.crit { color: var(--butter); font-size: 30px; }
 .floater.immune { color: var(--glaze); font-size: 16px; }
 .floater.slip { color: var(--butter); font-size: 18px; }
+.radar { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+.noise { position: absolute; left: 0; top: 0; width: 0; height: 0; transition: opacity 0.2s; }
+.noise i { position: absolute; left: -12px; top: -150px; width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 20px solid var(--butter); filter: drop-shadow(0 1px 2px var(--ink)); }
+.noise.sniff i { border-bottom-color: var(--glaze); top: -170px; border-left-width: 15px; border-right-width: 15px; border-bottom-width: 26px; left: -15px; }
+.noise span { position: absolute; left: -30px; top: -198px; width: 60px; text-align: center; font-weight: 800; font-size: 12px; color: var(--glaze); text-shadow: 0 1px 2px var(--ink); }
+.sniff-chip { position: absolute; right: 16px; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: var(--ink-glass); color: var(--paper-dim); }
+.sniff-chip.ready { color: var(--glaze); border: 2px solid var(--glaze); }
+.tbtn.sniffb { width: 50px; height: 50px; right: 176px; bottom: calc(214px + env(safe-area-inset-bottom, 0px)); background: var(--glaze); font-size: 10px; }
+.tbtn.cooling { opacity: 0.45; }
 .fps { position: absolute; left: 16px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); font-size: 11px; color: var(--paper-dim); font-variant-numeric: tabular-nums; }
 .fx-overlay { position: absolute; inset: 0; transition: box-shadow 0.25s, background 0.25s; }
 .fx-overlay.juiced { box-shadow: inset 0 60px 50px -40px rgba(200, 20, 10, 0.55); }
@@ -143,6 +152,7 @@ button { font: inherit; color: inherit; }
 .tbtn.roll { width: 54px; height: 54px; right: 108px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
 .tbtn.alt { width: 54px; height: 54px; right: 36px; bottom: calc(196px + env(safe-area-inset-bottom, 0px)); background: var(--glaze); }
 @media (pointer: coarse) {
+  .sniff-chip { display: none; }
   .bottom { left: 16px; transform: none; width: min(300px, calc(100vw - 136px)); justify-items: start; }
   .slot { width: 48px; height: 48px; }
   .hotbar { gap: 6px; }
@@ -229,6 +239,8 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
   <div id="hitmarker" class="hitmarker"></div>
   <div id="fx-overlay" class="fx-overlay"></div>
   <div id="nameplates"></div>
+  <div id="radar" class="radar" aria-hidden="true"></div>
+  <div id="sniff" class="sniff-chip">Sniff ready (B)</div>
   <div id="floaters"></div>
   <div class="bottom">
     <div id="statuses" class="statuses"></div>
@@ -250,6 +262,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
   <button data-touch-btn id="tJump" class="tbtn jump" type="button">Jump</button>
   <button data-touch-btn id="tDash" class="tbtn roll" type="button">Dash</button>
   <button data-touch-btn id="tAlt" class="tbtn alt" type="button">Alt</button>
+  <button data-touch-btn id="tSniff" class="tbtn sniffb" type="button">Sniff</button>
 </div>
 
 <section id="menu" class="menu" aria-label="Main menu">
@@ -276,6 +289,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <dt><kbd>Space</kbd></dt><dd>Jump · press again in the air to double jump</dd>
       <dt><kbd>C</kbd></dt><dd>Dash (short cooldown, once in the air)</dd>
       <dt><kbd>1</kbd>–<kbd>5</kbd> <kbd>Wheel</kbd></dt><dd>Pick food</dd>
+      <dt><kbd>B</kbd></dt><dd>Sniff: point at Titans making noise (10 s cooldown)</dd>
       <dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd>Pause</dd>
     </dl>
     <dl class="keys touch-only">
@@ -284,10 +298,11 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <dt>Throw</dt><dd>Hold to charge, release to throw</dd>
       <dt>Jump · Dash</dt><dd>Tap Jump again in the air to double jump; Dash for a quick burst</dd>
       <dt>Plates</dt><dd>Tap a food plate to switch</dd>
+      <dt>Sniff</dt><dd>Points at Titans making noise; quiet ones stay hidden</dd>
     </dl>
     <h2>On the menu today</h2>
     <ul id="legend" class="legend"></ul>
-    <p class="foot">Hazards: the three burners cycle on (don't stand on them), the sink and spilled water make you Wet (cleanses sticky and fire, but freezes last longer), honey pools refill your Glaze shield, and the red spatula pads on the floor fling you up onto the counters and the table. Smash the giant tomato for extra ammo.</p>
+    <p class="foot">Hazards: the three burners cycle on (don't stand on them), the sink and spilled water make you Wet (cleanses sticky and fire, but freezes last longer), honey pools refill your Glaze shield, and the red spatula pads on the floor fling you up onto the counters and the table. Food grows on bushes: stand in one to scoop up its food one piece at a time, and hide in one to stay out of sight. Smash the giant tomato for extra ammo.</p>
     <p class="foot">Prototype of the Tiny Titans design document: 12 of 30 foods, the whole kitchen, 12 Titans, bots only.</p>
   </div>
   <p class="live">Bots are fighting live behind this menu</p>
