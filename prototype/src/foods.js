@@ -299,7 +299,7 @@ export const FOODS = {
   banana: {
     name: 'Banana', role: 'Boomerang · heal', maxStack: 2, give: 1, weight: 18,
     profile: 'return', charge: 0, speed: 28, recovery: 0.7, radius: 0.4, pierce: true, verb: 'boomeranged',
-    altLabel: 'Eat: +15 HP, keep the peel',
+    altLabel: 'Eat: +30 HP, keep the peel',
     hint: 'Curves out and comes back. Catch it to throw again (it bruises: 3 throws max).',
     release(a, c, game) {
       const dir = a.isBot ? a.aimDir.clone() : _v.subVectors(a.aimPoint, a.handPos()).normalize().clone();
@@ -333,7 +333,7 @@ export const FOODS = {
     },
     alt(a, game) {
       a.startEat(1.0, () => {
-        a.heal(15);
+        a.heal(30);
         a.consume(1);
         a.give('peel', 1);
         game.sfx.play('eat', a.pos);
@@ -494,7 +494,7 @@ export const FOODS = {
   grapes: {
     name: 'Grapes', role: 'Scatter shot · snack', maxStack: 2, give: 1, weight: 10,
     profile: 'spray', charge: 0, speed: 45, gravity: 0.6, recovery: 0.8, radius: 0.16, dmg: 7, verb: 'grape-shot',
-    altLabel: 'Eat the bunch: +20 HP',
+    altLabel: 'Eat the bunch: +40 HP',
     hint: 'Fires 8 bouncing grapes in a cone. Deadly up close.',
     release(a, c, game) {
       const from = a.handPos();
@@ -509,7 +509,7 @@ export const FOODS = {
       game.sfx.play('throw', a.pos, 1.1);
     },
     alt(a, game) {
-      a.startEat(1.0, () => { a.heal(20); a.consume(1); game.sfx.play('eat', a.pos); });
+      a.startEat(1.0, () => { a.heal(40); a.consume(1); game.sfx.play('eat', a.pos); });
     },
   },
   grape: { // a single grape pellet (not a pickup)
@@ -624,7 +624,7 @@ export const FOODS = {
   pineapple: {
     name: 'Pineapple', role: 'Sticky spike grenade', maxStack: 1, give: 1, weight: 6,
     profile: 'lob', charge: 0.4, speed: 26, recovery: 0.8, radius: 0.45, dmg: 35, verb: 'spiked',
-    hint: 'Sticks to whatever it hits, then bursts into a spike field. Roll or get wet to shake it off.',
+    hint: 'Sticks to whatever it hits, then bursts into a spike field. Dash or get wet to shake it off.',
     release(a, c, game) {
       game.projectiles.launch({ food: 'pineapple', owner: a, pos: a.handPos(), vel: lobVel(a, lobSpeed('pineapple', c)), spin: 7, fuse: 2 });
       a.consume(1);

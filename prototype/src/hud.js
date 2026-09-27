@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { hasLineOfSight } from './core.js';
 import { FOODS } from './foods.js';
+import { MAX_HP } from './actors.js';
 
 const $ = (id) => document.getElementById(id);
 const _p = new THREE.Vector3(), _e = new THREE.Vector3();
@@ -75,7 +76,7 @@ export class HUD {
     if (a) {
       $('kills').textContent = a.kills;
       const hp = Math.max(0, a.hp), gl = Math.max(0, a.glaze);
-      $('hpFill').style.transform = `scaleX(${hp / 100})`;
+      $('hpFill').style.transform = `scaleX(${hp / MAX_HP})`;
       $('glazeFill').style.transform = `scaleX(${gl / 100})`;
       $('hpText').textContent = Math.ceil(hp);
       $('glazeText').textContent = Math.ceil(gl);
@@ -110,7 +111,7 @@ export class HUD {
       o.classList.toggle('burning', a.isBurning());
       o.classList.toggle('juiced', game.time < a.juicedUntil);
       o.classList.toggle('wet', a.isWet());
-      o.classList.toggle('lowhp', a.alive && a.hp < 30);
+      o.classList.toggle('lowhp', a.alive && a.hp < MAX_HP * 0.3);
     }
 
     this.hitT -= dt; if (this.hitT <= 0) $('hitmarker').className = 'hitmarker';
@@ -150,7 +151,7 @@ export class HUD {
       el.style.display = '';
       el.style.transform = `translate(${pos.x}px, ${pos.y}px) translate(-50%, -100%)`;
       el.querySelector('.name').textContent = a.name;
-      el.querySelector('.h').style.width = `${Math.max(0, a.hp)}%`;
+      el.querySelector('.h').style.width = `${Math.max(0, a.hp) / MAX_HP * 100}%`;
       el.querySelector('.g').style.width = `${Math.max(0, a.glaze)}%`;
       el.style.setProperty('--c', a.color);
       el.classList.toggle('locked', a === game.lockCandidate);

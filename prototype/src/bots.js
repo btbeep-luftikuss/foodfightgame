@@ -5,6 +5,7 @@ import {
   G, FLOOR_Y, clamp, rand, pick, yawOf, forwardOf, hasLineOfSight, solveLob, groundHeight, raycastWorld,
 } from './core.js';
 import { FOODS } from './foods.js';
+import { MAX_HP } from './actors.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _aim = new THREE.Vector3(), _q = new THREE.Vector3();
 
@@ -29,7 +30,7 @@ export class BotBrain {
     this.foodLockUntil = 0; this.aimErr = new THREE.Vector3();
     this.pendingDodge = false; this.pendingAlt = false; this.pendingJump = false;
     this.aimYaw = 0;
-    this.detourUntil = 0; this.detourSide = 1;
+    this.detourUntil = 0; this.detourSide = 1; this.doubleJumpAt = 0;
   }
 
   think() {
@@ -85,7 +86,7 @@ export class BotBrain {
 
     // heal with a banana when hurt and not under pressure
     const bananaSlot = a.inv.findIndex((s) => s && (s.id === 'banana' || s.id === 'grapes'));
-    if (a.hp < 60 && bananaSlot >= 0 && (!this.target || bestD > 14) && !a.eat) {
+    if (a.hp < MAX_HP * 0.6 && bananaSlot >= 0 && (!this.target || bestD > 14) && !a.eat) {
       a.select(bananaSlot);
       this.pendingAlt = true;
       this.foodLockUntil = now + 1.4;
@@ -182,7 +183,7 @@ export class BotBrain {
       this.strafeT -= dt;
       if (this.strafeT <= 0) { this.strafeDir *= -1; this.strafeT = rand(0.8, 2.4); }
       mv.set(_w.x * approach - _w.z * this.strafeDir * 0.8, 0, _w.z * approach + _w.x * this.strafeDir * 0.8);
-      if (Math.random() < dt * 0.35) it.jump = true;
+      if (Math.random() < dt * 0.35) { it.jump = true; if (Math.random() < 0.35) this.doubleJumpAt = now + 0.4; }
     } else {
       // wander toward the middle of the tide circle
       const tide = g.tide;
@@ -278,7 +279,10 @@ export class BotBrain {
       this.pendingDodge = false;
     }
     if (this.pendingAlt) { it.alt = true; this.pendingAlt = false; }
-    if (this.pendingJump) { it.jump = true; this.pendingJump = false; }
+    if (this.pendingJump) { it.jump = true; this.pendingJump = false; this.doubleJumpAt = now + 0.35; } // hop over whatever is in the way
+    if (this.doubleJumpAt && now >= this.doubleJumpAt) { it.jump = true; this.doubleJumpAt = 0; }
+    // dash to cover long distances quickly
+    if (this.goal && !it.dodge && a.onGround && Math.hypot(this.goal.x - a.pos.x, this.goal.z - a.pos.z) > 25 && Math.random() < dt * 0.9) it.dodge = true;
     return it;
   }
 }

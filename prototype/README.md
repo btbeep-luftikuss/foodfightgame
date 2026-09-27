@@ -8,6 +8,14 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 **Version 0.3** tuned the feel: jumps reach 6 m (was 3.5), walking is 6.5 m/s and sprinting 10 m/s (were 4.6 and 7.2), and every food pickup holds a random 4–15 of that food, with stacks of up to 30.
 
+**Version 0.4:**
+
+- **Dash:** replaces the dodge-roll. It covers 11 m in half a second, has a 0.45 s cooldown, can be used once per jump in the air, and still shakes off sticky food.
+- **Double jump:** adds up to 5 m, for a reach of about 11 m.
+- **Health:** doubled to 200 (banana and grapes heal twice as much).
+- **Obstacles:** about 30 new ones.
+- **Phone fix:** the death-screen buttons now work.
+
 ## What's in it
 
 | Area | Included |
@@ -17,9 +25,9 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 | Statuses | Sticky (50% slow cap), Juiced drip trail, Slick, Frozen and Shatter, Tripped, Rooted (can still throw), Burning, Wet (cleanses; freezes last longer), Glaze shield |
 | Fairness rules | Shared hard-CC diminishing returns (2nd = 50%, 3rd = immune, max 2.5 s per 6 s), eating interrupted by 25+ damage, banana bruising |
 | Systems | Surface State Grid (ice rinks, soda puddles, melt pools), splat canvas (stains painted onto the counter), Fire + Ice = steam |
-| Map | The whole kitchen at 1:40 scale (about 480 × 340 m). The island (cereal boxes, jam jar, mug, toaster, hot plate, water spill, honey, giant tomato). A 440 m back counter with sink, stove burners, stock pot, coffee maker and fridge. A dining table with chairs, plates and glasses that you can stand on or hide under. The floor, with crumbs, a fallen cereal box and a wooden spoon. 12 spatula launch pads |
+| Map | The whole kitchen at 1:40 scale (about 480 × 340 m). The island (cereal boxes, jam jar, mug, toaster, hot plate, water spill, honey, giant tomato). A 440 m back counter with sink, stove burners, stock pot, coffee maker and fridge. A dining table with chairs, plates, glasses, a pepper mill and a napkin holder that you can stand on or hide under. The floor, with crumbs, bean cans, sugar-cube steps, a colander dome, a rolling pin, a plate stack, a milk carton, lemons, a fallen cereal box and a wooden spoon. 12 spatula launch pads |
 | Match | 12 Titans, napkin-glider drop, Soap Tide closing in 6 phases, grocery drops inside each new safe zone, kill feed, spectating, win screen |
-| Movement | Walk, sprint, jump, Duck & Roll, momentum skating on slick surfaces, no fall damage |
+| Movement | Walk, sprint, jump and double jump, dash (also once in the air), momentum skating on slick surfaces, jelly trampolines, no fall damage |
 | Bots | Pick targets, choose food by range, lead shots with the same ballistic math, dodge, strafe, loot, heal, hunt, walk around walls, use launch pads to reach the safe zone, avoid burners and ledges |
 | Presentation | Procedural textures, synthesized sound, pooled instanced particles, rim-lit characters, soft contact shadows, sunbeam and dust, bloom (High), hit markers, damage numbers, hit-stop, screen shake |
 | Platforms | Desktop (mouse and keyboard, pointer lock) and phones (touch joystick and buttons); Low, Medium and High graphics with automatic resolution scaling |
@@ -48,7 +56,7 @@ npm run dev          # http://localhost:5173
 | WASD move, Shift sprint | Drag on the left half to move |
 | Mouse aim; hold the left button to charge, release to throw | Drag on the right half to aim |
 | Right-click or Q: the food's alt action | Alt button |
-| Space jump, C Duck & Roll | Jump and Roll buttons |
+| Space jump (again in the air to double jump), C dash | Jump and Dash buttons |
 | 1–5 or mouse wheel: pick food | Tap a food plate |
 | Esc or P: pause | |
 

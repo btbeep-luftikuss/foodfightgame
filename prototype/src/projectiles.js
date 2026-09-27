@@ -129,7 +129,7 @@ export class Projectiles {
     if (!p.stuckAt) p.stuckAt = game.time;
     const a = p.attached;
     if (a) {
-      // Duck & Roll, getting Wet or being splatted shakes it off (GDD: sticky bombs are always removable)
+      // Dashing, getting Wet or being splatted shakes it off (GDD: sticky bombs are always removable)
       if (!a.alive || a.lastDodgeAt > p.stuckAt || a.isWet()) {
         p.attached = null; p.stuck = true;
         p.pos.y = groundHeight(p.pos.x, p.pos.z, p.pos.y + 0.5) + 0.4;

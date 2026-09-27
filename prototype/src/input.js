@@ -77,8 +77,12 @@ export class Input {
     const onStart = (e) => {
       if (!this.enabled) return;
       this.isTouchEvent = true;
+      // Taps on menus and overlay buttons (death screen, pause) must stay normal taps,
+      // so they are neither steering nor cancelled.
+      const ui = (t) => t.target.closest && t.target.closest('.overlay, .menu-panel, select, a, button:not([data-touch-btn])');
+      if ([...e.changedTouches].every(ui)) return;
       for (const t of e.changedTouches) {
-        if (t.target.closest && t.target.closest('[data-touch-btn]')) continue;
+        if (ui(t) || (t.target.closest && t.target.closest('[data-touch-btn]'))) continue;
         if (t.clientX < innerWidth * 0.45 && this.touch.moveId === null) {
           this.touch.moveId = t.identifier; this.touch.moveOrigin = { x: t.clientX, y: t.clientY };
           this.onStick?.('start', t.clientX, t.clientY);

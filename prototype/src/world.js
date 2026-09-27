@@ -166,6 +166,7 @@ export class World {
     this._island();
     this._backCounter();
     this._dining();
+    this._obstacles();
     this._floorClutter();
     this._pads();
     this._landmark();
@@ -427,6 +428,108 @@ export class World {
     this._honey(46, tTop, 106, 3);
   }
 
+  // ------------------------------------------------------------------ obstacles (0.4): cover and things to climb
+  // With the double jump a Titan reaches about 11 m, so sugar cubes, plates and the colander are climbable.
+  _obstacles() {
+    const m = this.mats;
+    const canLabel = canvasTex(512, 256, (x, w, h) => {
+      x.fillStyle = '#c8332a'; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#f6e7c8'; x.fillRect(0, h * 0.28, w, h * 0.44);
+      x.fillStyle = '#7a1d15'; x.font = `900 ${h * 0.3}px "Bagel Fat One", "Arial Black", sans-serif`; x.textAlign = 'center';
+      for (let i = 0; i < 2; i++) x.fillText('BEANS', w * (0.25 + i * 0.5), h * 0.62);
+    });
+    const canMat = new THREE.MeshStandardMaterial({ map: canLabel, metalness: 0.5, roughness: 0.35 });
+    const tin = new THREE.MeshStandardMaterial({ color: '#cfd3d8', metalness: 0.9, roughness: 0.25 });
+    const standingCan = (x, z) => {
+      this._mesh(new THREE.CylinderGeometry(6, 6, 15, 36, 1, true), canMat, x, F + 8, z);
+      this._mesh(new THREE.CylinderGeometry(6.1, 6.1, 0.6, 36), tin, x, F + 15.7, z);
+      this._mesh(new THREE.TorusGeometry(5.6, 0.35, 8, 36).rotateX(Math.PI / 2), tin, x, F + 16, z, { cast: false });
+      addCyl(x, z, 6, F, F + 16, { surface: 'steel' });
+    };
+    standingCan(-120, -60);
+    standingCan(170, 90);
+    // a can lying on its side
+    this._mesh(new THREE.CylinderGeometry(6, 6, 16, 36, 1, true).rotateZ(Math.PI / 2), canMat, 110, F + 6, -80);
+    for (const ex of [102, 118]) this._mesh(new THREE.CylinderGeometry(6, 6, 0.4, 36).rotateZ(Math.PI / 2), tin, ex, F + 6, -80);
+    addBox(102, 118, -86, -74, F, F + 12, { surface: 'steel' });
+
+    // rolling pin (low wall you can hop onto)
+    const pinWood = new THREE.MeshStandardMaterial({ color: '#e0b27a', roughness: 0.55 });
+    this._mesh(new THREE.CylinderGeometry(2.6, 2.6, 40, 24).rotateX(Math.PI / 2), pinWood, -150, F + 2.6, 120);
+    for (const hz of [95, 145]) this._mesh(new THREE.CylinderGeometry(1.1, 1.3, 10, 16).rotateX(Math.PI / 2), m.walnut, -150, F + 2.6, hz);
+    addBox(-152.6, -147.4, 92, 148, F, F + 5.2, { surface: 'wood' });
+
+    // colander dome
+    const colander = new THREE.MeshStandardMaterial({ color: '#dfe3e8', metalness: 0.85, roughness: 0.3, side: THREE.DoubleSide });
+    this._mesh(new THREE.SphereGeometry(10, 36, 14, 0, Math.PI * 2, 0, Math.PI / 2), colander, 180, F, -40);
+    this._mesh(new THREE.TorusGeometry(10.2, 0.6, 8, 40).rotateX(Math.PI / 2), tin, 180, F + 0.5, -40, { cast: false });
+    addCyl(180, -40, 9.6, F, F + 9, { surface: 'steel' });
+
+    // sugar cubes: stacked steps
+    const sugar = new THREE.MeshStandardMaterial({ color: '#fbfaf4', roughness: 0.95 });
+    const cube = (x, z, s, level = 0) => {
+      const y0 = F + level * s;
+      this._box(x - s / 2, x + s / 2, z - s / 2, z + s / 2, y0, y0 + s, sugar);
+      addBox(x - s / 2, x + s / 2, z - s / 2, z + s / 2, y0, y0 + s, { surface: 'sugar' });
+    };
+    cube(-100, -30, 4.5); cube(-100, -30, 4.5, 1); cube(-94, -24, 4.5); cube(-104.5, -20.5, 4.5);
+    cube(100, -20, 4.5); cube(100, -20, 4.5, 1); cube(106, -14, 4.5);
+    cube(30, 150, 4.5); cube(36, 146, 4.5);
+
+    // a stack of plates
+    for (let i = 0; i < 6; i++) this._mesh(new THREE.CylinderGeometry(9 - (i % 2) * 0.3, 8.4, 0.9, 40), m.ceramic, -190, F + 0.45 + i * 0.92, 20);
+    addCyl(-190, 20, 9, F, F + 5.5, { surface: 'ceramic' });
+
+    // milk carton (tall cover)
+    const milkLabel = canvasTex(256, 512, (x, w, h) => {
+      x.fillStyle = '#f7f7f2'; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#2d6fb7'; x.fillRect(0, h * 0.55, w, h * 0.45);
+      x.fillStyle = '#2d6fb7'; x.font = `900 ${w * 0.3}px "Bagel Fat One", "Arial Black", sans-serif`; x.textAlign = 'center';
+      x.fillText('MILK', w / 2, h * 0.42);
+      x.fillStyle = '#f7f7f2'; x.beginPath(); x.arc(w / 2, h * 0.75, w * 0.18, 0, Math.PI * 2); x.fill();
+    });
+    const milkMat = new THREE.MeshStandardMaterial({ map: milkLabel, roughness: 0.6 });
+    this._mesh(new THREE.BoxGeometry(12, 22, 12), milkMat, 200, F + 11, 140);
+    this._mesh(new THREE.CylinderGeometry(0.01, 8.5, 5, 4, 1).rotateY(Math.PI / 4), milkMat, 200, F + 24.5, 140);
+    addBox(194, 206, 134, 146, F, F + 26, { surface: 'cardboard' });
+
+    // lemons
+    const lemon = new THREE.MeshPhysicalMaterial({ color: '#f7d63a', roughness: 0.45, clearcoat: 0.5 });
+    for (const [x, z, a] of [[-75, 60, 0.4], [150, -10, 1.2]]) {
+      const l = this._mesh(new THREE.SphereGeometry(3.5, 28, 18).scale(1.3, 1, 1), lemon, x, F + 3.4, z);
+      l.rotation.y = a;
+      addCyl(x, z, 3.8, F, F + 6.8, { surface: 'fruit' });
+    }
+
+    // island: a stick of butter and a sugar cube
+    const butter = new THREE.MeshStandardMaterial({ color: '#fbe8a0', roughness: 0.35 });
+    this._box(-40, -33, 5, 8, 0, 2.5, butter);
+    addBox(-40, -33, 5, 8, 0, 2.5, { surface: 'butter' });
+    this._box(50.5, 53.5, 2.5, 5.5, 0, 3, sugar);
+    addBox(50.5, 53.5, 2.5, 5.5, 0, 3, { surface: 'sugar' });
+
+    // back counter: a stack of bowls and a row of spice jars
+    const bowl = new THREE.MeshPhysicalMaterial({ color: '#e98c5a', roughness: 0.25, clearcoat: 1 });
+    for (let i = 0; i < 3; i++) this._mesh(new THREE.CylinderGeometry(7 - i * 0.2, 4.5, 2.4, 36), bowl, -15, 1.2 + i * 1.6, -163);
+    addCyl(-15, -163, 7, 0, 5.5, { surface: 'ceramic' });
+    const spices = ['#b5471b', '#d9a21b', '#6b8e23', '#7a3b1b', '#c2410c'];
+    spices.forEach((col, i) => {
+      const x = 190 + i * 8;
+      this._mesh(new THREE.CylinderGeometry(1.6, 1.6, 5.2, 20), new THREE.MeshStandardMaterial({ color: col, roughness: 0.9 }), x, 2.6, -171);
+      this._mesh(new THREE.CylinderGeometry(1.8, 1.8, 6, 20, 1, true), m.glass, x, 3, -171, { cast: false });
+      this._mesh(new THREE.CylinderGeometry(1.9, 1.9, 1.2, 20), tin, x, 6.6, -171);
+      addCyl(x, -171, 1.9, 0, 7.2, { surface: 'glass' });
+    });
+
+    // table: a pepper mill and a napkin holder
+    this._mesh(new THREE.CylinderGeometry(1.6, 2, 9, 20), m.walnut, -8, -6 + 4.5, 124);
+    this._mesh(new THREE.SphereGeometry(1.5, 16, 10), m.chrome, -8, -6 + 9.6, 124);
+    addCyl(-8, 124, 2, -6, 4.5, { surface: 'wood' });
+    this._box(7, 13, 91, 93, -6, 1, m.chrome);
+    this._box(7.6, 12.4, 91.3, 92.7, -6, 2, m.white);
+    addBox(7, 13, 91, 93, -6, 1, { surface: 'steel' });
+  }
+
   // ------------------------------------------------------------------ floor cover
   _floorClutter() {
     const m = this.mats;
@@ -438,7 +541,8 @@ export class World {
         x = rand(-215, 215); z = rand(-120, 150);
         const inIsland = Math.abs(x) < 72 && Math.abs(z) < 44;
         const nearTable = Math.abs(x) < 80 && z > 55 && z < 155;
-        if (!inIsland && !nearTable && spots.every(([a, b]) => Math.hypot(a - x, b - z) > 18)) break;
+        const clear = groundHeight(x, z, 500, 0, 5) < F + 0.5; // keep clear of the bigger obstacles
+        if (!inIsland && !nearTable && clear && spots.every(([a, b]) => Math.hypot(a - x, b - z) > 18)) break;
       }
       spots.push([x, z]);
       const r = rand(1.4, 3.4);

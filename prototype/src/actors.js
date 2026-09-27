@@ -8,7 +8,10 @@ import {
 } from './core.js';
 import { FOODS, makeFoodMesh } from './foods.js';
 
-const JUMP_V = Math.sqrt(2 * G * 6); // 6 m jump: about three times a Titan's height
+const JUMP_V = Math.sqrt(2 * G * 6);   // 6 m jump: about three times a Titan's height
+const JUMP2_V = Math.sqrt(2 * G * 5);  // double jump adds another 5 m
+const DASH_SPEED = 28, DASH_TIME = 0.2, DASH_COOLDOWN = 0.45;
+export const MAX_HP = 200;
 const RADIUS = 0.45, HEIGHT = 1.95;
 const _v = new THREE.Vector3(), _f = new THREE.Vector3(), _r = new THREE.Vector3();
 
@@ -74,7 +77,8 @@ export class Actor {
   }
 
   reset() {
-    this.alive = true; this.hp = 100; this.glaze = 0; this.kills = 0;
+    this.alive = true; this.hp = MAX_HP; this.glaze = 0; this.kills = 0;
+    this.airJumps = 0; this.airDashes = 0; this.dashT = 0;
     this.vel.set(0, 0, 0); this.yaw = 0; this.onGround = false; this.gliding = false;
     this.inv = [null, null, null, null, null]; this.sel = 0;
     this.sticky = []; this.surfaceSlow = 0; this.surfaceSlowUntil = 0;
@@ -85,7 +89,7 @@ export class Actor {
     this.eat = null; this.shieldUp = false; this.shieldHp = 0;
     this.lastHitBy = null; this.lastHitFood = null; this.lastHitAt = -99;
     this.envAcc = 0; this.burnAcc = 0; this.tideAcc = 0; this.nextDrip = 0; this.honeySfxAt = 0;
-    this.fallTop = 0; this.armT = 0; this.rollT = 0; this.squash = 0; this.walkPhase = 0; this.hitFlash = 0;
+    this.fallTop = 0; this.armT = 0; this.squash = 0; this.walkPhase = 0; this.hitFlash = 0;
     this.placement = 0;
     this.root.visible = true;
     this._refreshHeld();
@@ -240,7 +244,7 @@ export class Actor {
     if (this.eat) this.eat.dmg += amount;
     return amount;
   }
-  heal(n) { this.hp = Math.min(100, this.hp + n); }
+  heal(n) { this.hp = Math.min(MAX_HP, this.hp + n); }
   addSticky(amt, dur) {
     if (this.isWet()) return;
     this.sticky.push({ amt, until: this.game.time + dur });
@@ -381,18 +385,32 @@ export class Actor {
     if (!control && this.onGround) { dx *= 0.3; dz *= 0.3; } // frozen/slipped: slide with little friction
     this.vel.x += dx; this.vel.z += dz;
 
-    if (control && it.jump && this.onGround) {
-      this.vel.y = JUMP_V; this.onGround = false;
+    if (this.onGround) { this.airJumps = 0; this.airDashes = 0; }
+    if (control && it.jump && !this.gliding) {
+      if (this.onGround) {
+        this.vel.y = JUMP_V; this.onGround = false;
+      } else if (this.airJumps < 1) { // double jump
+        this.vel.y = Math.max(this.vel.y, JUMP2_V);
+        this.airJumps++;
+        g.fx.burst('jump', this.pos);
+        g.sfx.play('boing', this.pos, 0.35);
+      }
     }
-    if (control && it.dodge && now >= this.dodgeReadyAt && !this.gliding) {
+    // Dash: a quick burst in the move direction on a short cooldown; one per jump in the air.
+    if (control && it.dodge && now >= this.dodgeReadyAt && !this.gliding && (this.onGround || this.airDashes < 1)) {
       const d = _v.set(it.moveX, 0, it.moveZ);
       if (d.lengthSq() < 0.01) forwardOf(this.yaw, d);
       d.normalize();
-      this.vel.x = d.x * 19; this.vel.z = d.z * 19;
-      if (this.onGround) this.vel.y = 3;
-      this.dodgeReadyAt = now + 1.5; this.knockUntil = now + 0.25; this.rollT = 0.4; this.lastDodgeAt = now;
-      for (const e of this.sticky) e.until -= 1; // Duck & Roll sheds 1 s of sticky
+      this.vel.x = d.x * DASH_SPEED; this.vel.z = d.z * DASH_SPEED;
+      if (!this.onGround) { this.vel.y = Math.max(this.vel.y, 2); this.airDashes++; }
+      this.dodgeReadyAt = now + DASH_COOLDOWN; this.knockUntil = now + DASH_TIME; this.dashT = DASH_TIME;
+      this.lastDodgeAt = now;
+      for (const e of this.sticky) e.until -= 1; // dashing sheds 1 s of sticky
       g.sfx.play('dodge', this.pos);
+    }
+    if (this.dashT > 0) {
+      this.dashT -= dt;
+      g.fx.burst('dash', this.center(_f));
     }
 
     this.vel.y -= G * dt;
@@ -506,9 +524,9 @@ export class Actor {
     const vf = (this.vel.x * fwd.x + this.vel.z * fwd.z) / 8, vr = (this.vel.x * right.x + this.vel.z * right.z) / 8;
     let tiltX = clamp(vf, -1, 1) * 0.18, tiltZ = -clamp(vr, -1, 1) * 0.15;
     if (this.isTripped()) tiltX = -1.45;
-    this.rollT = Math.max(0, this.rollT - dt);
-    if (this.rollT > 0) tiltX += (1 - this.rollT / 0.4) * Math.PI * 2;
-    this.body.rotation.x = damp(this.body.rotation.x, tiltX, this.rollT > 0 ? 60 : 12, dt);
+    if (this.dashT > 0) tiltX = 0.55; // lean hard into a dash
+    else if (this.airJumps > 0 && !this.onGround && this.vel.y > 0) tiltX = -0.6 + (JUMP2_V - this.vel.y) * 0.05; // flip-ish tuck
+    this.body.rotation.x = damp(this.body.rotation.x, tiltX, this.dashT > 0 ? 30 : 12, dt);
     this.body.rotation.z = damp(this.body.rotation.z, tiltZ, 12, dt);
     this.body.position.y += this.isTripped() ? 0.35 : 0;
 

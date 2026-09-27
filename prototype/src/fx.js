@@ -200,6 +200,12 @@ export class FX {
         this.spray('blobs', pos, 20, { speed: 5, up: 6, colors: P.fire, size: 0.14, life: 0.6, grav: -0.2 });
         this.spray('puffs', pos, 6, { speed: 2, up: 3, colors: [P.fire[1]], size: 0.6, life: 0.4, grav: -0.1, grow: 1.4 });
         break;
+      case 'dash':
+        this.spray('puffs', pos, 2, { speed: 0.6, up: 0.3, colors: P.foam, size: 0.35, life: 0.35, grav: 0, drag: 4, grow: 0.6 });
+        break;
+      case 'jump':
+        this.spray('puffs', pos, 12, { speed: 5, up: 0.2, spread: 1.4, colors: P.foam, size: 0.4, life: 0.4, grav: 0, drag: 5, grow: 1.2 });
+        break;
       case 'bubbles':
         this.spray('puffs', pos, 2, { speed: 0.8, up: 2, colors: P.foam, size: 0.5, life: 1.4, grav: -0.1, drag: 0.8 });
         break;

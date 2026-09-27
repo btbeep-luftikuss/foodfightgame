@@ -157,7 +157,7 @@ function boot() {
       $('end-kills').textContent = game.player.kills;
       $('end-place').textContent = `#${data.placement}`;
       $('spectate').hidden = false;
-      setTimeout(() => { end.hidden = false; input.exitLock(); }, 1400);
+      setTimeout(() => { end.hidden = false; touch.hidden = true; input.exitLock(); }, 1400);
     }
     if (type === 'over') {
       const won = data.winner && data.winner === game.player;
@@ -166,7 +166,7 @@ function boot() {
       $('end-kills').textContent = game.player.kills;
       $('end-place').textContent = `#${game.player.placement || 1}`;
       $('spectate').hidden = true;
-      setTimeout(() => { end.hidden = false; input.exitLock(); }, won ? 2600 : 1600);
+      setTimeout(() => { end.hidden = false; touch.hidden = true; input.exitLock(); }, won ? 2600 : 1600);
     }
   };
 
@@ -180,7 +180,7 @@ function boot() {
   };
   hold('tFire', () => { input.touch.fire = true; }, () => { input.touch.fire = false; });
   hold('tJump', () => { input.pressed.jump = true; });
-  hold('tRoll', () => { input.pressed.dodge = true; });
+  hold('tDash', () => { input.pressed.dodge = true; });
   hold('tAlt', () => { input.pressed.alt = true; });
   const stick = $('stick');
   input.onStick = (phase, x, y) => {

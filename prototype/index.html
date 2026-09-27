@@ -248,7 +248,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
   <div id="stick" class="stick"><div></div></div>
   <button data-touch-btn id="tFire" class="tbtn fire" type="button">Throw</button>
   <button data-touch-btn id="tJump" class="tbtn jump" type="button">Jump</button>
-  <button data-touch-btn id="tRoll" class="tbtn roll" type="button">Roll</button>
+  <button data-touch-btn id="tDash" class="tbtn roll" type="button">Dash</button>
   <button data-touch-btn id="tAlt" class="tbtn alt" type="button">Alt</button>
 </div>
 
@@ -256,7 +256,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
   <div class="menu-panel">
     <p class="eyebrow">Prototype 0.2 · The Grand Kitchen</p>
     <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
-    <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Drop in with 11 bots and be the last Titan standing when the Soap Tide closes in.</p>
+    <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Drop in with 11 bots, 200 health and a double jump, and be the last Titan standing when the Soap Tide closes in.</p>
     <div class="row">
       <button id="play" class="btn" type="button">Play</button>
       <label class="field" for="quality">Graphics
@@ -273,8 +273,8 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move · <kbd>Shift</kbd> sprint</dd>
       <dt><kbd>Mouse</kbd></dt><dd>Aim · hold left button to charge, release to throw</dd>
       <dt><kbd>Right-click</kbd> <kbd>Q</kbd></dt><dd>Food's alt action (eat, shield, fizz jump)</dd>
-      <dt><kbd>Space</kbd></dt><dd>Jump</dd>
-      <dt><kbd>C</kbd></dt><dd>Duck &amp; Roll dodge</dd>
+      <dt><kbd>Space</kbd></dt><dd>Jump · press again in the air to double jump</dd>
+      <dt><kbd>C</kbd></dt><dd>Dash (short cooldown, once in the air)</dd>
       <dt><kbd>1</kbd>–<kbd>5</kbd> <kbd>Wheel</kbd></dt><dd>Pick food</dd>
       <dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd>Pause</dd>
     </dl>
@@ -282,6 +282,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <dt>Left thumb</dt><dd>Drag anywhere on the left to move (push far to sprint)</dd>
       <dt>Right thumb</dt><dd>Drag on the right to aim</dd>
       <dt>Throw</dt><dd>Hold to charge, release to throw</dd>
+      <dt>Jump · Dash</dt><dd>Tap Jump again in the air to double jump; Dash for a quick burst</dd>
       <dt>Plates</dt><dd>Tap a food plate to switch</dd>
     </dl>
     <h2>On the menu today</h2>
