@@ -60,6 +60,7 @@ button { font: inherit; color: inherit; }
 .crosshair[data-profile="line"]::before { left: 50%; top: 18px; bottom: 18px; width: 2px; margin-left: -1px; clip-path: polygon(0 0,100% 0,100% 35%,0 35%,0 65%,100% 65%,100% 100%,0 100%); }
 .crosshair[data-profile="line"]::after { top: 50%; left: 18px; right: 18px; height: 2px; margin-top: -1px; clip-path: polygon(0 0,35% 0,35% 100%,0 100%,0 0,65% 0,100% 0,100% 100%,65% 100%); }
 .crosshair.cooldown .dot { background: var(--paper-dim); opacity: 0.6; }
+.lockhint { position: absolute; left: 50%; top: calc(50% + 48px); transform: translateX(-50%); font-size: 13px; font-weight: 800; padding: 5px 12px; border-radius: 999px; background: var(--ink-glass); color: var(--butter); border: 2px solid var(--butter); white-space: nowrap; }
 .hitmarker { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%) rotate(45deg); opacity: 0; }
 .hitmarker::before, .hitmarker::after { content: ""; position: absolute; background: var(--paper); border-radius: 2px; box-shadow: 0 0 0 1px var(--ink); }
 .hitmarker::before { left: 50%; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; clip-path: polygon(0 0,100% 0,100% 30%,0 30%,0 70%,100% 70%,100% 100%,0 100%); }
@@ -309,6 +310,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     <div class="dot"></div>
   </div>
   <div id="hitmarker" class="hitmarker"></div>
+  <div id="lockhint" class="lockhint" hidden>Click to lock the mouse and aim</div>
   <div id="fx-overlay" class="fx-overlay"></div>
   <div id="nameplates"></div>
   <div id="radar" class="radar" aria-hidden="true"></div>
@@ -342,7 +344,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 
 <section id="menu" class="menu" aria-label="Main menu">
   <div class="menu-panel">
-    <p class="eyebrow">Prototype 0.15 · The Grand Kitchen</p>
+    <p class="eyebrow">Prototype 0.16 · The Grand Kitchen</p>
     <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
     <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Play in first person against 11 bots until the Soap Tide closes in, or online against your friends. Blueberries fire like a machine gun.</p>
     <div class="row">
@@ -381,7 +383,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     <h2>Controls</h2>
     <dl class="keys desk-only">
       <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move · <kbd>Shift</kbd> sprint</dd>
-      <dt><kbd>Mouse</kbd></dt><dd>Aim · hold left button to charge, release to throw</dd>
+      <dt><kbd>Mouse</kbd></dt><dd>Aim · click the game to lock the mouse · hold left button to charge, release to throw</dd>
       <dt><kbd>Right-click</kbd> <kbd>Q</kbd></dt><dd>Food's alt action (eat, shield, fizz jump)</dd>
       <dt><kbd>Space</kbd></dt><dd>Jump · press again in the air to double jump</dd>
       <dt><kbd>C</kbd></dt><dd>Dash (short cooldown, once in the air)</dd>
@@ -401,9 +403,9 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     <h2>On the menu today</h2>
     <ul id="legend" class="legend"></ul>
     <h2>Support utensils</h2>
-    <p class="foot">Utensils float around the kitchen on coloured rings. Walk over one to carry it (one at a time; a new one swaps out the old). It boosts every food you throw, but the food is still the shot, and every boost has a cost. Knocked-out Titans drop theirs.</p>
+    <p class="foot">Utensils arrive in delivery boxes that parachute into the kitchen (follow the coloured light beams). Walk into a box to open it and carry the utensil, or splat it open with food from range. You carry one at a time; a new one swaps out the old, and knocked-out Titans drop theirs. A utensil boosts every food you throw, even the banana peel trap for some, but the food is still the shot, and every boost has a cost.</p>
     <ul id="ulegend" class="legend ulegend"></ul>
-    <p class="foot">Hazards: the three burners cycle on (don't stand on them), the sink and spilled water make you Wet (cleanses sticky and fire, but freezes last longer), honey pools refill your Glaze shield, and the red spatula pads on the floor fling you up onto the counters and the table. Smash the giant tomato for extra ammo.</p>
+    <p class="foot">Hazards: the three burners cycle on (don't stand on them), the sink and spilled water make you Wet (cleanses sticky and fire, but freezes last longer), honey pools refill your Glaze shield, and the red spatula pads on the floor fling you up onto the counters and the table. Smash the giant tomato for extra ammo. The floor is scattered with giant fallen food and knocked-over chairs to hide behind and climb, a pickle jar you can walk into, and a cracked egg whose white is slippery.</p>
     <p class="foot">Prototype of the Tiny Titans design document: 12 of 30 foods, the whole kitchen, 12 Titans, bots only.</p>
   </div>
   <p class="live">Bots are fighting live behind this menu</p>

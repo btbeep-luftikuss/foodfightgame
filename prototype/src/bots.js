@@ -68,6 +68,11 @@ export class BotBrain {
       const it = this._nearestItem(this.target ? 25 : 80);
       if (it) { this.goal = it.pos; this.goalKind = 'item'; }
     }
+    // No utensil yet: go open a delivery box (or grab a utensil lying on the floor).
+    if (!this.goal && !a.utensil && a.inv.some(Boolean) && (!this.target || bestD > 16)) {
+      const u = g.utensils.nearestFor(a, this.target ? 30 : 70);
+      if (u) { this.goal = u.pos.clone(); this.goalKind = 'item'; }
+    }
     // Nobody in sight: go hunting. Titans can hear the fighting across the kitchen.
     if (!this.goal && !this.target && a.inv.some(Boolean)) {
       let prey = null, pd = Infinity;

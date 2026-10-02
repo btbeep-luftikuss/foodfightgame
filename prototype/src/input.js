@@ -14,6 +14,8 @@ export class Input {
     this.pressed = { jump: false, dodge: false, alt: false, sniff: false, view: false };
     this.slot = -1; this.cycle = 0;
     this.locked = false;
+    this.lockFails = 0; // failed lock attempts since the mouse was last locked
+    this.wantLock = null; // set by main.js: is the game in a state where the mouse should be locked?
     this.enabled = false;
     this.touch = { active: false, moveId: null, moveOrigin: null, move: { x: 0, y: 0 }, lookId: null, lookLast: null, fire: false };
     this.isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -35,7 +37,13 @@ export class Input {
 
     canvas.addEventListener('mousedown', (e) => {
       if (!this.enabled || this.isTouchEvent) return;
-      if (!this.locked && !this.lockDenied) { this.requestLock(); return; } // first click only grabs the mouse
+      if (!this.locked) {
+        // The first click only grabs the mouse. If locking keeps failing (some app views don't
+        // allow it), clicks still throw, and every click tries to lock again.
+        const firstTry = this.lockFails === 0;
+        this.requestLock();
+        if (firstTry) return;
+      }
       if (e.button === 0) this.lmb = true;
       if (e.button === 2) this.pressed.alt = true;
     });
@@ -51,20 +59,30 @@ export class Input {
       e.preventDefault();
       this.cycle = e.deltaY > 0 ? 1 : -1;
     }, { passive: false });
-    document.addEventListener('pointerlockerror', () => { this.lockDenied = true; });
+    document.addEventListener('pointerlockerror', () => { const f = this._legacyFail; this._legacyFail = null; f?.(); });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
+      if (this.locked) this.lockFails = 0;
       this.onLockChange?.(this.locked);
     });
     this.zoomSens = 1;
   }
 
-  requestLock() {
+  // Lock the mouse to the game. Never gives up for good: a refused request (for example within
+  // about a second of pressing Esc, which Chrome blocks) is retried once that second has passed
+  // when `retry` is set, and the next click on the game tries again anyway.
+  requestLock(retry = false) {
+    if (this.locked) return;
+    const fail = () => {
+      this.lockFails++;
+      if (retry) setTimeout(() => { if (!this.locked && this.enabled && (this.wantLock?.() ?? true)) this.requestLock(false); }, 1150);
+    };
     try {
-      if (!this.canvas.requestPointerLock) { this.lockDenied = true; return; }
+      if (!this.canvas.requestPointerLock) { fail(); return; }
       const r = this.canvas.requestPointerLock();
-      if (r && r.catch) r.catch(() => { this.lockDenied = true; });
-    } catch { this.lockDenied = true; /* pointer lock unavailable: fallback look still works */ }
+      if (r && typeof r.then === 'function') r.catch(fail);
+      else this._legacyFail = fail; // browsers without the promise report through 'pointerlockerror'
+    } catch { fail(); /* pointer lock unavailable: the fallback mouse look still works */ }
   }
   exitLock() { try { document.exitPointerLock?.(); } catch { /* ignore */ } }
 

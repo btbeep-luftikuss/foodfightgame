@@ -140,6 +140,11 @@ export class HUD {
       const st = a.statusList().map(([k, label]) => `<span class="chip ${k}">${label}</span>`).join('');
       if (st !== this.lastStatus) { $('statuses').innerHTML = st; this.lastStatus = st; }
 
+      // mouse not locked (desktop): say how to get the aim back
+      const lh = $('lockhint');
+      const showLock = !this.input.isTouch && this.input.enabled && !this.input.locked && !game.paused && a.alive;
+      if (lh.hidden === showLock) lh.hidden = !showLock;
+
       // crosshair and charge ring
       const ch = $('crosshair');
       ch.dataset.profile = food ? food.profile : 'none';

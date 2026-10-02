@@ -95,7 +95,7 @@ export class Game {
   startOnline(net) {
     this.net = net; this.online = true; this.mode = 'classic';
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
-    this.world.resetRound(); this.hud.clearFeed(); this.brains.clear(); this.utensils.reset();
+    this.world.resetRound(); this.hud.clearFeed(); this.brains.clear(); this.utensils.reset(); this.slickAt = 0;
     for (const a of this.botActors.slice(1)) { a.alive = false; a.hide(); }
     this.actors = [this.botActors[0]];
     this.player = this.botActors[0];
@@ -245,6 +245,7 @@ export class Game {
     this.world.resetRound();
     this.hud.clearFeed();
     this.utensils.reset();
+    this.slickAt = 0;
     const names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
     const spots = [];
     this.brains.clear();
@@ -536,6 +537,10 @@ export class Game {
     this.projectiles.update(dt);
     this.items.update(dt);
     this.utensils.update(dt);
+    if (this.time >= (this.slickAt || 0)) { // permanent slippery patches (the cracked egg)
+      this.slickAt = this.time + 4;
+      for (const s of this.world.slickSpots) this.surface.stamp(s.x, s.y, s.z, s.r, 'slick', 5, this.time);
+    }
     this.surface.update(dt, this.time);
     this._spikeStep(dt);
     this.world.update(dt, this.time, this.fx, this.sfx);

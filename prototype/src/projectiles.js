@@ -87,8 +87,7 @@ export class Projectiles {
     p.life += dt;
     if (p.life > p.maxLife) {
       if (p.food === 'banana') game.items.drop('banana', 1, p.pos);
-      if (food.expire) food.expire(p, game);
-      if (p.u) game.utensils.expire(p);
+      this._scaled(p, () => { if (food.expire) food.expire(p, game); if (p.u) game.utensils.expire(p); });
       return this._end(p);
     }
     if (p.u) { game.utensils.step(p, dt); if (p.done) return; }
@@ -121,7 +120,7 @@ export class Projectiles {
       m.rotation.x += p.spin * dt; m.rotation.y += p.spin * 0.7 * dt;
     }
     if (p.roll && p.life > 0.3 && Math.hypot(p.vel.x, p.vel.z) < 2.5) {
-      if (food.expire) food.expire(p, game);
+      this._scaled(p, () => { if (food.expire) food.expire(p, game); if (p.u) game.utensils.expire(p); });
       this._end(p);
     }
   }
@@ -163,7 +162,7 @@ export class Projectiles {
     m.position.copy(p.pos);
     const s = 1 + Math.max(0, 0.6 - p.fuse) * 0.6 + Math.sin(game.time * (30 - p.fuse * 10)) * 0.06;
     m.scale.setScalar(s);
-    if (p.fuse <= 0) { m.scale.setScalar(1); food.detonate(p, game); this._end(p); }
+    if (p.fuse <= 0) { m.scale.setScalar(1); this._scaled(p, () => food.detonate(p, game)); this._end(p); }
   }
 
   // Banana: curve outward, then home back to the thrower's hand.
@@ -225,6 +224,13 @@ export class Projectiles {
     if (_c.z <= FLOOR_BOUNDS.minZ + 0.01 || _c.z >= FLOOR_BOUNDS.maxZ - 0.01) p.vel.z *= -0.7;
   }
 
+  // Run fn with the projectile's utensil damage multiplier applied (fuses, rolls that stop).
+  _scaled(p, fn) {
+    if (!p.u) return fn();
+    this.game.dmgScale = p.x.m ?? 1;
+    try { fn(); } finally { this.game.dmgScale = 1; }
+  }
+
   // A food's impact, with the thrower's utensil before and after it. Damage dealt inside is
   // scaled by the projectile's utensil multiplier (and crits / peel layers).
   _impact(p, food, hit) {
@@ -271,7 +277,8 @@ export class Projectiles {
       if (p.attached || p.stuck) return false;
       if (!food.pierce) return true;
     }
-    // 3) the landmark tomato
+    // 3) the landmark tomato (and utensil delivery boxes, which any food bursts open)
+    if (game.utensils.boxes.length) game.utensils.hitBox(_prev, p.pos, rad);
     const L = game.world.landmark;
     // 3a) any thrown food knocks enemy cookies out of the air (GDD Cookie counterplay)
     if (!p.shootable) {

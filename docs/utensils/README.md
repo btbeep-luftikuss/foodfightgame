@@ -30,6 +30,14 @@ the food stays the projectile, keeps its own look and effect, and the utensil ad
 | 19 | Oven Mitt | Power Throw | Carrot | Hurls your food far faster and makes it immune to status effects in flight. | Long cooldown between throws, and the mitt overheats if you push it. |
 | 20 | Pan | Alt-Ability Activator | Soda | Slams your food to trigger its special ability on demand. | Medium cooldown, and the slam roots you in place for a moment. |
 
+## In the game
+
+Since prototype 0.16 every utensil works with every food you can throw, including cheese
+wheels, watermelons, bananas, pineapples, grapes and blueberries (see the prototype README for
+how each kind of food is handled), and six of them also change the banana peel trap. Utensils
+arrive in parachuting delivery boxes. The in-game descriptions are slightly more precise than
+the one-liners above (they give the exact numbers).
+
 ## Art style
 
 Every asset uses the same rules so the set reads as one family: a deep plum outline (`#2b1633`),

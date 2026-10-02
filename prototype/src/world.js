@@ -141,6 +141,54 @@ function shaftTex(ctx, w, h) {
 
 export const SOFT_SPOT = () => canvasTex(64, 64, softSpot, { srgb: false });
 
+// Bake a colour (or a colour picked per vertex position) into a geometry for the vertex-coloured
+// giant-food materials, so every giant food merges into a couple of draw calls.
+const _col = new THREE.Color(), _col2 = new THREE.Color(), _gv = new THREE.Vector3();
+function paint(geo, color) {
+  const pos = geo.attributes.position, n = pos.count, arr = new Float32Array(n * 3);
+  const fn = typeof color === 'function' ? color : null;
+  if (!fn) _col.set(color);
+  for (let i = 0; i < n; i++) {
+    if (fn) fn(pos.getX(i), pos.getY(i), pos.getZ(i), _col);
+    arr[i * 3] = _col.r; arr[i * 3 + 1] = _col.g; arr[i * 3 + 2] = _col.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  return geo;
+}
+const mixHex = (a, b, t, out) => out.set(a).lerp(_col2.set(b), clamp(t, 0, 1));
+// Deterministic bumpiness from a position (same point, same bump), for lumpy fruit and florets.
+const bump = (x, y, z) => Math.sin(x * 3.1 + y * 1.7) * Math.sin(y * 2.3 - z * 2.9) * Math.sin(z * 1.9 + x * 2.2);
+function lumpy(geo, amount) {
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    _gv.fromBufferAttribute(p, i);
+    _gv.multiplyScalar(1 + amount * bump(_gv.x, _gv.y, _gv.z));
+    p.setXYZ(i, _gv.x, _gv.y, _gv.z);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+// A banana: a tube along a curve, tapered at both ends, yellow with brown tips.
+function bananaGeo(points, radius) {
+  const curve = new THREE.CatmullRomCurve3(points);
+  const segs = 36, radial = 14;
+  const g = new THREE.TubeGeometry(curve, segs, radius, radial, false);
+  const pos = g.attributes.position, cols = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const u = Math.floor(i / (radial + 1)) / segs;
+    const taper = 0.3 + 0.7 * Math.sin(Math.PI * clamp(u, 0, 1)) ** 0.6;
+    const c = curve.getPointAt(Math.min(1, u));
+    pos.setXYZ(i, c.x + (pos.getX(i) - c.x) * taper, c.y + (pos.getY(i) - c.y) * taper, c.z + (pos.getZ(i) - c.z) * taper);
+    const ridge = Math.abs(Math.sin((i % (radial + 1)) / radial * Math.PI * 5)) > 0.96;
+    if (u < 0.04 || u > 0.95) _col.set('#5a3a1e');
+    else mixHex('#ffd93b', '#e9b51c', ridge ? 1 : 0.15 + 0.2 * Math.sin(u * 9), _col);
+    cols[i * 3] = _col.r; cols[i * 3 + 1] = _col.g; cols[i * 3 + 2] = _col.b;
+  }
+  g.computeVertexNormals();
+  g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  return g;
+}
+
 // ---------------------------------------------------------------------------
 // The playable Grand Kitchen, all at 1:40 scale (GDD 2.2, 9.1). Walkable levels:
 //   floor (y -36), island counter and back counter (y 0), dining table (y -6).
@@ -168,6 +216,8 @@ export class World {
     this._backCounter();
     this._dining();
     this._obstacles();
+    this.slickSpots = []; // permanent slippery patches (the egg white), re-stamped by the game
+    this._giants();
     this._floorClutter();
     this._pads();
     this._landmark();
@@ -525,6 +575,307 @@ export class World {
     addBox(7, 13, 91, 93, -6, 1, { surface: 'steel' });
   }
 
+  // ------------------------------------------------------------------ giant foods and knocked-over chairs (0.16)
+  // More cover and more to climb, all over the kitchen. Giant foods are vertex-coloured with two
+  // shared materials, so all of them together cost two draw calls.
+  _giants() {
+    const m = this.mats;
+    m.food = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.4, clearcoat: 0.55, clearcoatRoughness: 0.3 });
+    m.foodMatte = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 });
+    m.lidGold = new THREE.MeshStandardMaterial({ color: '#d9b34a', metalness: 0.85, roughness: 0.3 });
+    const food = (geo, color, x, y, z, matte = false) => this._mesh(paint(geo, color), matte ? m.foodMatte : m.food, x, y, z);
+    const fruit = { surface: 'fruit' };
+
+    // --- floor: a bitten apple that rolled away
+    {
+      const x = 62, z = -88, R = 4.5;
+      const prof = [[0, -0.84], [0.28, -0.88], [0.62, -0.8], [0.9, -0.46], [1, -0.02], [0.96, 0.4], [0.8, 0.74], [0.5, 0.92], [0.22, 0.86], [0.06, 0.74], [0, 0.72]]
+        .map(([r, y]) => new THREE.Vector2(r * R, y * R));
+      const cy = F + 0.86 * R;
+      food(new THREE.LatheGeometry(prof, 40), (px, py, pz, c) => {
+        mixHex('#b51c17', '#e2483a', (0.5 + 0.5 * Math.sin(Math.atan2(pz, px) * 11 + py * 0.9)) * 0.6, c);
+        if (py > 0.55 * R) c.lerp(_col2.set('#e7b23c'), (py / R - 0.55) * 1.2); // yellow shoulder round the stem
+      }, x, cy, z);
+      food(new THREE.CylinderGeometry(0.22, 0.32, 1.8, 8).rotateZ(0.25), '#5a3a1e', x + 0.2, cy + R * 0.86, z, true);
+      food(new THREE.SphereGeometry(1, 12, 8).scale(1.4, 0.12, 0.6).rotateZ(-0.35).rotateY(0.6), '#4f9a3a', x + 1.2, cy + R * 0.95, z + 0.6, true);
+      food(new THREE.CircleGeometry(R * 0.5, 24).rotateY(Math.PI / 2), '#f6eccb', x + R * 0.9, cy + R * 0.05, z, true); // the bite
+      addCyl(x, z, R * 0.93, F, cy + R * 0.9, fruit);
+    }
+
+    // --- floor: a whole watermelon on its side
+    {
+      const x = -185, z = -80;
+      food(new THREE.SphereGeometry(1, 48, 32).scale(11, 7.4, 7.6), (px, py, pz, c) => {
+        const s = Math.sin(Math.atan2(pz, py) * 8 + Math.sin(px * 0.35) * 0.8);
+        mixHex('#4c9a3e', '#1f5a24', s > 0.25 ? 1 : s > -0.1 ? 0.5 : 0, c);
+        if (py < -5.8) c.lerp(_col2.set('#d9d27a'), 0.6); // the pale spot it grew on
+      }, x, F + 7.1, z);
+      addCyl(x, z, 7.4, F, F + 14.4, fruit);
+      addCyl(x - 6.5, z, 5.6, F, F + 12.2, fruit);
+      addCyl(x + 6.5, z, 5.6, F, F + 12.2, fruit);
+    }
+
+    // --- floor: a broccoli tree you can hide under
+    {
+      const x = -30, z = -92;
+      food(new THREE.CylinderGeometry(2.2, 3.2, 10, 16), (px, py, pz, c) => mixHex('#a7cf6a', '#7fae4a', (py + 5) / 10, c), x, F + 5, z);
+      for (let i = 0; i < 5; i++) {
+        const g = new THREE.CylinderGeometry(0.8, 1.3, 7, 10).translate(0, 3.5, 0).rotateZ(0.8).rotateY((i / 5) * Math.PI * 2);
+        food(g, '#8fbf5a', x, F + 8.5, z);
+      }
+      const florets = [[0, 1.4, 0, 4.4]];
+      for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; florets.push([Math.cos(a) * 4.4, 0.4, Math.sin(a) * 4.4, 3.4]); }
+      for (let i = 0; i < 9; i++) { const a = (i / 9) * Math.PI * 2 + 0.3; florets.push([Math.cos(a) * 7.4, -1.8, Math.sin(a) * 7.4, 2.8]); }
+      for (const [ox, oy, oz, s] of florets) {
+        food(lumpy(new THREE.IcosahedronGeometry(s, 2), 0.12), (px, py, pz, c) => mixHex('#2f7a2a', '#5aa83e', 0.5 + bump(px + ox, py, pz + oz) * 1.4, c), x + ox, F + 13 + oy, z + oz, true);
+      }
+      addCyl(x, z, 3.2, F, F + 10, fruit);
+      addCyl(x, z, 9.2, F + 9.4, F + 16.6, fruit);
+    }
+
+    // --- floor: a dropped donut (stand in the hole)
+    {
+      const x = 172, z = 122, R = 5.5, r = 2.3;
+      food(new THREE.TorusGeometry(R, r, 18, 44).rotateX(Math.PI / 2), (px, py, pz, c) => {
+        if (py > 0.35 + 0.25 * Math.sin(Math.atan2(pz, px) * 7)) c.set('#ff7eb6'); // icing with a wavy edge
+        else mixHex('#e0a45e', '#b8743a', -py / r, c);
+      }, x, F + r, z);
+      const sprinkle = ['#fff6e6', '#5fd3ff', '#ffd23a', '#7ae05a', '#b98cff'];
+      for (let i = 0; i < 50; i++) {
+        const a = (i / 50) * Math.PI * 2 + Math.sin(i * 7.3) * 0.3, off = Math.sin(i * 3.7) * r * 0.55;
+        const h = Math.sqrt(Math.max(0, r * r - off * off));
+        const g = new THREE.CapsuleGeometry(0.14, 0.75, 2, 6).rotateZ(Math.PI / 2).rotateY(i * 1.3);
+        food(g, sprinkle[i % sprinkle.length], x + Math.cos(a) * (R + off), F + r + h + 0.05, z + Math.sin(a) * (R + off), true);
+      }
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        addCyl(x + Math.cos(a) * R, z + Math.sin(a) * R, r * 0.95, F, F + r * 2 - 0.1, fruit);
+      }
+    }
+
+    // --- floor: a carrot lying along the back of the room
+    {
+      const x = 65, z = -118, L = 38, R = 3.3;
+      const cone = new THREE.ConeGeometry(R, L, 28, 10).rotateZ(-Math.PI / 2).rotateZ(-0.085); // tip toward +x, resting on the floor
+      food(cone, (px, py, pz, c) => mixHex('#f2761a', '#d0590c', (0.5 + 0.5 * Math.sin(px * 1.7)) * 0.55, c), x, F + R, z);
+      for (let i = 0; i < 6; i++) {
+        const g = new THREE.ConeGeometry(0.9, 9, 6).translate(0, 4.5, 0).rotateZ(Math.PI / 2 + Math.sin(i * 2.1) * 0.4).rotateY(Math.sin(i * 1.3) * 0.5);
+        food(g, '#3f8f2f', x - L / 2, F + R + 1.4, z + Math.sin(i * 4.1) * 1.2, true);
+      }
+      addBox(x - 19, x - 6.3, z - 3.2, z + 3.2, F, F + 6.4, fruit);
+      addBox(x - 6.3, x + 6.3, z - 2.4, z + 2.4, F, F + 4.6, fruit);
+      addBox(x + 6.3, x + 18, z - 1.4, z + 1.4, F, F + 2.6, fruit);
+    }
+
+    // --- floor: a giant banana curled on its side
+    {
+      const pts = [[-135, -114], [-126, -104], [-116, -100.5], [-106, -103.5], [-99, -112]].map(([px, pz]) => new THREE.Vector3(px, 0, pz));
+      this._mesh(bananaGeo(pts, 2.7), m.food, 0, F + 2.5, 0);
+      addBox(-137, -123, -118, -103, F, F + 4.8, fruit);
+      addBox(-124, -108, -106, -97, F, F + 5.2, fruit);
+      addBox(-109, -96, -116, -99, F, F + 4.8, fruit);
+    }
+
+    // --- floor: a red pepper and an orange
+    {
+      const x = 205, z = -100;
+      const pep = new THREE.SphereGeometry(4.4, 32, 24), p = pep.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        _gv.fromBufferAttribute(p, i);
+        const lobe = 1 + 0.1 * Math.cos(Math.atan2(_gv.z, _gv.x) * 4);
+        if (_gv.y > 2.8) _gv.y -= (_gv.y - 2.8) * 0.6; // dimple round the stem
+        p.setXYZ(i, _gv.x * lobe, _gv.y * 1.12, _gv.z * lobe);
+      }
+      pep.computeVertexNormals();
+      food(pep, (px, py, pz, c) => mixHex('#b80f0a', '#ec3a24', 0.5 + 0.5 * Math.cos(Math.atan2(pz, px) * 4), c), x, F + 4.6, z);
+      food(new THREE.CylinderGeometry(0.55, 0.9, 2.6, 10).rotateZ(0.3), '#3f8f2f', x + 0.3, F + 9.5, z, true);
+      food(new THREE.SphereGeometry(1.6, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.4, 1), '#4f9a3a', x, F + 8.4, z, true);
+      addCyl(x, z, 4.6, F, F + 9.4, fruit);
+    }
+    {
+      const x = 205, z = 32;
+      food(lumpy(new THREE.IcosahedronGeometry(4, 4), 0.012), (px, py, pz, c) => mixHex('#ff8c1a', '#f07510', 0.5 + bump(px * 3, py * 3, pz * 3), c), x, F + 3.9, z);
+      food(new THREE.CircleGeometry(0.7, 12).rotateX(-Math.PI / 2), '#b86f1a', x, F + 7.92, z, true); // the navel
+      addCyl(x, z, 3.9, F, F + 7.9, fruit);
+    }
+
+    // --- floor: a block of Swiss cheese
+    {
+      const x = -205, z = 118, w = 14, h = 9, d = 11;
+      food(new THREE.BoxGeometry(w, h, d), '#ffcc3a', x, F + h / 2, z, true);
+      const hole = (r, px, py, pz, rot) => {
+        const g = new THREE.CircleGeometry(r, 18);
+        if (rot === 'x') g.rotateY(Math.PI / 2);
+        if (rot === 'y') g.rotateX(-Math.PI / 2);
+        food(g, '#d99a14', px, py, pz, true);
+      };
+      for (const [r, oy, oz] of [[1.6, 2, -2], [1.1, -2.2, 2.6], [0.8, 1.4, 3.6], [1.3, -1.2, -3.4]]) hole(r, x + w / 2 + 0.03, F + h / 2 + oy, z + oz, 'x');
+      for (const [r, ox, oy] of [[1.4, -3, 1.6], [1, 3.4, -1.8], [0.7, 5, 2.4]]) { hole(r, x + ox, F + h / 2 + oy, z + d / 2 + 0.03, 'z'); hole(r * 0.9, x - ox, F + h / 2 - oy, z - d / 2 - 0.03, 'z'); }
+      for (const [r, ox, oz] of [[1.2, -3.5, -2], [0.9, 2.5, 2.4], [0.6, 4.8, -3.6]]) hole(r, x + ox, F + h + 0.03, z + oz, 'y');
+      addBox(x - w / 2, x + w / 2, z - d / 2, z + d / 2, F, F + h, { surface: 'cheese' });
+    }
+
+    // --- floor: a cracked egg, its slippery white spilling out
+    {
+      const x = 32, z = -98;
+      food(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2).scale(6.5, 1, 5), '#f7f3e8', x, F + 0.09, z);
+      this.slickSpots.push({ x, y: F, z, r: 5.2 });
+      food(new THREE.SphereGeometry(2.5, 28, 16).scale(1, 0.5, 1), (px, py, pz, c) => mixHex('#ff9f12', '#ffd23a', py / 1.25 + 0.4, c), x + 1, F + 0.7, z + 0.5);
+      addCyl(x + 1, z + 0.5, 2.4, F, F + 1.3, fruit);
+      // two half shells: a thick lathe profile with a jagged rim
+      const R = 3.2, H = 4.2, t = 0.28, prof = [];
+      for (let i = 0; i <= 10; i++) { const a = (i / 10) * Math.PI / 2; prof.push(new THREE.Vector2(R * Math.sin(a), -H * Math.cos(a))); }
+      for (let i = 10; i >= 0; i--) { const a = (i / 10) * Math.PI / 2; prof.push(new THREE.Vector2((R - t) * Math.sin(a), -(H - t) * Math.cos(a))); }
+      const shell = () => {
+        const g = new THREE.LatheGeometry(prof, 36), q = g.attributes.position;
+        for (let i = 0; i < q.count; i++) if (q.getY(i) > -0.05) q.setY(i, 0.55 * Math.sin(Math.atan2(q.getZ(i), q.getX(i)) * 9) ** 2);
+        g.computeVertexNormals();
+        return g;
+      };
+      food(shell(), '#f5efe2', x - 7, F + H, z + 2);                                 // a cup, open side up
+      food(shell().rotateX(Math.PI), '#f5efe2', x + 8, F, z - 3);                    // a cap, open side down
+      addCyl(x - 7, z + 2, R - 0.1, F, F + H, fruit);
+      addCyl(x + 8, z - 3, R - 0.1, F, F + H, fruit);
+    }
+
+    // --- floor: a glass pickle jar on its side: walk in at the open end
+    {
+      const x = -150, z = -10, R = 7, L = 26;
+      const jarGlass = new THREE.MeshPhysicalMaterial({ color: '#d6f0dc', roughness: 0.05, transparent: true, opacity: 0.42, clearcoat: 1, depthWrite: false, side: THREE.DoubleSide });
+      this._mesh(new THREE.CylinderGeometry(R, R, L, 40, 1, true).rotateZ(Math.PI / 2), jarGlass, x, F + R, z, { cast: false });
+      this._mesh(new THREE.TorusGeometry(R + 0.1, 0.45, 8, 40).rotateY(Math.PI / 2), jarGlass, x + L / 2 - 1.2, F + R, z, { cast: false });
+      const label = canvasTex(512, 128, (c, w, h) => {
+        c.fillStyle = '#f6efd8'; c.fillRect(0, 0, w, h);
+        c.fillStyle = '#3f7a2a'; c.fillRect(0, 0, w, 14); c.fillRect(0, h - 14, w, 14);
+        c.font = `900 ${h * 0.46}px "Bagel Fat One", "Arial Black", sans-serif`; c.textAlign = 'center';
+        for (const lx of [0.25, 0.75]) c.fillText('PICKLES', w * lx, h * 0.68);
+      });
+      this._mesh(new THREE.CylinderGeometry(R + 0.06, R + 0.06, 9, 40, 1, true).rotateZ(Math.PI / 2), new THREE.MeshStandardMaterial({ map: label, roughness: 0.7, side: THREE.DoubleSide }), x - 3, F + R, z);
+      this._mesh(new THREE.CylinderGeometry(R + 0.4, R + 0.4, 1.4, 40).rotateZ(Math.PI / 2), m.lidGold, x - L / 2 - 0.6, F + R, z);
+      for (const [px, pz, a] of [[-6, -2.4, 0.2], [-1, 2.2, -0.4], [4, -1, 1.2]]) {
+        food(lumpy(new THREE.CapsuleGeometry(1.1, 5, 6, 12), 0.03).rotateZ(Math.PI / 2).rotateY(a), (qx, qy, qz, c) => mixHex('#4f7a2a', '#7fa64a', 0.5 + bump(qx * 2, qy * 2, qz * 2), c), x + px, F + 1.1, z + pz);
+        addBox(x + px - 3, x + px + 3, z + pz - 1.4, z + pz + 1.4, F, F + 2.2, fruit);
+      }
+      addBox(x - L / 2 - 1.3, x + L / 2, z - R - 0.3, z - R + 1.4, F, F + 11, { surface: 'glass' });
+      addBox(x - L / 2 - 1.3, x + L / 2, z + R - 1.4, z + R + 0.3, F, F + 11, { surface: 'glass' });
+      addBox(x - L / 2 - 1.3, x + L / 2, z - R + 1.4, z + R - 1.4, F + 11, F + 2 * R + 0.2, { surface: 'glass' });
+      addBox(x - L / 2 - 1.3, x - L / 2 + 0.1, z - R, z + R, F, F + 2 * R, { surface: 'steel' });
+    }
+
+    // --- knocked-over dining chairs
+    this._fallenChair(-88, 66, 'side', 0);
+    this._fallenChair(98, 60, 'back', 1);
+    this._fallenChair(180, -82, 'back', 2);
+
+    // --- spilled cereal round the fallen cereal box
+    {
+      const n = 46;
+      const rings = new THREE.InstancedMesh(new THREE.TorusGeometry(1.1, 0.42, 8, 16), new THREE.MeshStandardMaterial({ roughness: 0.75 }), n);
+      const o = new THREE.Object3D(), tones = ['#f0a93b', '#e07b24', '#f7c85a'];
+      for (let i = 0, k = 0; i < n && k < 600; k++) {
+        const px = rand(106, 170), pz = rand(16, 58);
+        if (px > 117 && px < 155 && pz > 25 && pz < 47) continue; // not inside the box
+        o.position.set(px, F + 0.42, pz);
+        o.rotation.set(Math.PI / 2 + rand(-0.3, 0.3), rand(-0.3, 0.3), rand(0, Math.PI));
+        o.updateMatrix();
+        rings.setMatrixAt(i, o.matrix);
+        rings.setColorAt(i, new THREE.Color(tones[i % 3]));
+        i++;
+      }
+      rings.castShadow = rings.receiveShadow = true;
+      this.scene.add(rings);
+    }
+
+    // --- the dining table: fruit piled high in the bowl
+    {
+      const tTop = -6, bx = 0, bz = 106;
+      const apple = (x, y, z, r, a, b) => food(new THREE.SphereGeometry(r, 24, 16).scale(1, 0.92, 1), (px, py, pz, c) => mixHex(a, b, 0.5 + 0.5 * Math.sin(Math.atan2(pz, px) * 9 + py), c), x, y, z);
+      apple(bx - 3, tTop + 5.6, bz - 1.5, 2.7, '#b51c17', '#e2483a');
+      apple(bx + 0.5, tTop + 5.2, bz - 4.5, 2.5, '#7fbf3a', '#a8d65a');
+      food(lumpy(new THREE.IcosahedronGeometry(2.6, 3), 0.02), (px, py, pz, c) => mixHex('#ff8c1a', '#f07510', 0.5 + bump(px * 4, py * 4, pz * 4), c), bx + 2.8, tTop + 5.4, bz + 1.5);
+      for (const [dz, dy] of [[0, 0], [1.6, 0.5]]) {
+        this._mesh(bananaGeo([new THREE.Vector3(-6, 0.4, 4 + dz), new THREE.Vector3(-2, -0.6, 2.5 + dz), new THREE.Vector3(2.5, 0, 0.5 + dz), new THREE.Vector3(6, 1.4, -1.5 + dz)], 1.05), m.food, bx, tTop + 7.4 + dy, bz);
+      }
+      for (let i = 0; i < 12; i++) { // a bunch of grapes on top
+        const a = i * 2.39, r = 0.4 + (i % 4) * 0.45;
+        food(new THREE.SphereGeometry(0.85, 12, 10), (px, py, pz, c) => mixHex('#5a2276', '#8e3fae', 0.5 + py, c), bx - 1 + Math.cos(a) * r, tTop + 8.8 - (i % 4) * 0.55, bz + 3 + Math.sin(a) * r);
+      }
+      addCyl(bx, bz, 6.8, tTop, tTop + 8.8, fruit);
+    }
+
+    // --- the back counter: a loaf of bread, a pineapple and a bunch of bananas
+    {
+      const x = 40, z = -163;
+      food(new THREE.CapsuleGeometry(5.2, 14, 8, 20).rotateZ(Math.PI / 2).scale(1, 0.85, 1), (px, py, pz, c) => {
+        mixHex('#d68a3c', '#9a5520', clamp(py / 4.4, 0, 1), c);
+        if (py > 2.4 && Math.abs(Math.sin((px + pz * 0.6) * 0.75)) > 0.93) c.set('#f2d2a0'); // scored top
+      }, x, 4, z, true);
+      addBox(x - 12, x + 12, z - 5.2, z + 5.2, 0, 8.4, { surface: 'bread' });
+    }
+    {
+      const x = 146, z = -165;
+      food(new THREE.SphereGeometry(4.2, 28, 20).scale(1, 1.35, 1), (px, py, pz, c) => {
+        const a = Math.atan2(pz, px) * 4.2;
+        const d = Math.abs(Math.sin(a + py * 0.9)) * Math.abs(Math.sin(a - py * 0.9));
+        mixHex('#e0a12a', '#8a5a10', d > 0.55 ? 0.85 : d * 0.6, c);
+      }, x, 5.4, z);
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2, tilt = 0.25 + (i % 2) * 0.3;
+        const g = new THREE.ConeGeometry(0.8, 6 + (i % 3), 4).translate(0, 3, 0).rotateZ(tilt).rotateY(a);
+        food(g, i % 2 ? '#3f8f2f' : '#5aa83e', x, 10.6, z, true);
+      }
+      addCyl(x, z, 4.1, 0, 11, fruit);
+    }
+    {
+      const s = new THREE.Vector3(-36, 2.2, -164);
+      for (const tip of [[-53, 2.6, -170], [-55, 2.8, -163.5], [-53, 3, -158]]) {
+        const t = new THREE.Vector3(...tip);
+        const mid = s.clone().lerp(t, 0.5).setY(1.5);
+        this._mesh(bananaGeo([s.clone(), mid, t], 1.6), m.food, 0, 0, 0);
+      }
+      food(new THREE.CylinderGeometry(0.6, 0.8, 2.4, 8).rotateZ(Math.PI / 2), '#6b4a22', s.x + 1.2, s.y, s.z, true);
+      addBox(-56, -34, -171, -157, 0, 4.4, fruit);
+    }
+
+    // --- the island: a strawberry
+    {
+      const x = -4, z = -15;
+      const prof = [[0, 3.4], [1.2, 2.9], [2.3, 1.6], [2.9, -0.2], [2.8, -1.6], [2.1, -2.5], [0.9, -2.9], [0, -2.95]].map(([r, y]) => new THREE.Vector2(r, y)).reverse();
+      food(new THREE.LatheGeometry(prof, 28), (px, py, pz, c) => mixHex('#c4120c', '#e8321f', 0.5 + 0.5 * Math.sin(py * 1.3), c), x, 2.95, z);
+      for (let i = 0; i < 40; i++) { // seeds
+        const yy = -2.3 + (i / 40) * 5.2, a = i * 2.39;
+        const rr = yy > 1.6 ? 2.3 - (yy - 1.6) * 1.1 : yy < -1.6 ? 2.1 + (yy + 1.6) * 0.3 : 2.85;
+        food(new THREE.SphereGeometry(0.16, 6, 4).scale(1, 1.6, 1), '#ffe08a', x + Math.cos(a) * rr, 2.95 + yy, z + Math.sin(a) * rr, true);
+      }
+      for (let i = 0; i < 6; i++) {
+        const g = new THREE.ConeGeometry(0.7, 3, 4).scale(1, 1, 0.3).translate(0, 1.5, 0).rotateZ(1.2).rotateY((i / 6) * Math.PI * 2);
+        food(g, '#3f8f2f', x, 0.3, z, true);
+      }
+      addCyl(x, z, 2.8, 0, 6.3, fruit);
+    }
+  }
+
+  // A dining chair knocked over: 'side' (lying on its side) or 'back' (fallen backwards),
+  // turned by `q` quarter turns. Its seat, backrest and legs become walls, ledges and hurdles.
+  _fallenChair(x, z, mode, q) {
+    const seatTop = 17.5;
+    const R = mode === 'side' ? new THREE.Matrix4().makeRotationZ(Math.PI / 2) : new THREE.Matrix4().makeRotationX(Math.PI / 2);
+    const lift = mode === 'side' ? 9 : 8.5;
+    const M = new THREE.Matrix4().makeTranslation(x, F + lift, z).multiply(new THREE.Matrix4().makeRotationY((q * Math.PI) / 2)).multiply(R);
+    const part = (geo) => {
+      geo.applyMatrix4(M);
+      geo.computeBoundingBox();
+      const b = geo.boundingBox;
+      this._mesh(geo, this.mats.walnut, 0, 0, 0);
+      addBox(b.min.x, b.max.x, b.min.z, b.max.z, b.min.y, b.max.y, { surface: 'wood' });
+    };
+    part(new THREE.BoxGeometry(18, 2, 16).translate(0, seatTop - 1, 0));
+    part(new THREE.BoxGeometry(18, 20, 2).translate(0, seatTop + 10, 7.5));
+    for (const [lx, lz] of [[-7.5, -6.5], [7.5, -6.5], [-7.5, 6.5], [7.5, 6.5]]) {
+      part(new THREE.CylinderGeometry(0.9, 1, seatTop - 2, 10).translate(lx, (seatTop - 2) / 2, lz));
+    }
+  }
+
   // ------------------------------------------------------------------ floor cover
   _floorClutter() {
     const m = this.mats;
@@ -758,10 +1109,13 @@ export class World {
     }
     for (const list of groups.values()) {
       if (list.length < 2) continue;
+      const vc = !!list[0].material.vertexColors;
+      const keep = vc ? ['position', 'normal', 'uv', 'color'] : ['position', 'normal', 'uv'];
       const geos = list.map((o) => {
         const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone());
-        for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+        for (const name of Object.keys(g.attributes)) if (!keep.includes(name)) g.deleteAttribute(name);
         if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+        if (vc && !g.attributes.color) g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 3).fill(1), 3));
         g.morphAttributes = {};
         g.clearGroups();
         return g.applyMatrix4(o.matrixWorld);

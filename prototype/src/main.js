@@ -158,7 +158,7 @@ function boot() {
     menu.hidden = true; end.hidden = true; pause.hidden = true;
     hud.show(true);
     touch.hidden = !input.isTouch;
-    if (!input.isTouch) input.requestLock();
+    if (!input.isTouch) input.requestLock(true);
   }
   let matchOpts = {}; // what "Play again" repeats
   function start(opts = matchOpts) {
@@ -358,7 +358,8 @@ function boot() {
     } finally { btn.disabled = false; }
   });
   $('spectate').addEventListener('click', () => { end.hidden = true; });
-  $('resume').addEventListener('click', () => { pause.hidden = true; game.paused = false; input.requestLock(); });
+  $('resume').addEventListener('click', () => { pause.hidden = true; game.paused = false; input.requestLock(true); });
+  input.wantLock = () => playing && !game.paused && pause.hidden && end.hidden && !input.isTouch;
 
 
   input.onLockChange = (locked) => {

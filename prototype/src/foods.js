@@ -206,6 +206,23 @@ const MAKERS = {
     g.add(flesh);
     return g;
   },
+  // pieces that utensils cut whole foods into (Knife, Spoon, Grater, Blender, Popcorn Popper)
+  cheesechunk() { // a little wedge of Swiss
+    const side = once(mat, 'cheeseRind', () => new THREE.MeshStandardMaterial({ color: '#f2b52a', roughness: 0.6 }));
+    const face = once(mat, 'cheeseFace', () => new THREE.MeshStandardMaterial({ map: swissTex(), roughness: 0.55 }));
+    return new THREE.Mesh(once(geo, 'cheeseChunk', () => new THREE.CylinderGeometry(0.42, 0.42, 0.3, 10, 1, false, 0, Math.PI * 0.45)), [side, face, face]);
+  },
+  bananaslice() { // a coin of banana with a yellow rim
+    return new THREE.Mesh(once(geo, 'bananaSlice', () => new THREE.CylinderGeometry(0.24, 0.24, 0.1, 16)), [
+      once(mat, 'banana', () => new THREE.MeshStandardMaterial({ color: '#ffd93b', roughness: 0.45 })),
+      once(mat, 'bananaFlesh', () => new THREE.MeshStandardMaterial({ color: '#fff1bf', roughness: 0.5 })),
+      once(mat, 'bananaFlesh', () => new THREE.MeshStandardMaterial({ color: '#fff1bf', roughness: 0.5 })),
+    ]);
+  },
+  pinechunk() { // a juicy pineapple chunk
+    return new THREE.Mesh(once(geo, 'pineChunk', () => new THREE.BoxGeometry(0.36, 0.3, 0.3)),
+      once(mat, 'pineFlesh', () => new THREE.MeshPhysicalMaterial({ color: '#ffd23a', roughness: 0.3, clearcoat: 0.6, emissive: '#5a3a00', emissiveIntensity: 0.15 })));
+  },
   pineapple() {
     const g = new THREE.Group();
     const body = new THREE.Mesh(once(geo, 'pine', () => new THREE.SphereGeometry(0.38, 16, 12).scale(1, 1.35, 1)), once(mat, 'pine', () => {
@@ -372,8 +389,9 @@ export const FOODS = {
     hint: 'Click to drop it at your feet. Enemies who step on it slip.',
     release(a, c, game) {
       const f = forwardOf(a.yaw, _v);
-      const pos = a.pos.clone().addScaledVector(f, 1.6);
+      let pos = a.pos.clone().addScaledVector(f, 1.6);
       pos.y = groundHeight(pos.x, pos.z, a.pos.y + 0.6);
+      pos = game.utensils?.trap(a, pos) || pos; // a utensil may throw it further or add a zone
       game.items.addTrap(a, pos);
       a.consume(1);
       game.sfx.play('thud', pos, 0.4);
@@ -716,6 +734,58 @@ export const FOODS = {
       if (hit.actor) { game.damage(hit.actor, 15, p.owner, 'watermelon'); game.fx.burst('melon', hit.point, 0.4); return true; }
       if (hit.world && hit.top && p.bounces > 0) { p.bounces--; p.pos.y = hit.point.y + 0.4; p.vel.y = Math.abs(p.vel.y) * 0.45 + 2; return false; }
       game.fx.burst('melon', hit.point, 0.3);
+      return true;
+    },
+  },
+
+  cheesechunk: { // a utensil-cut piece of cheese wheel (not a pickup)
+    name: 'Cheese chunk', hidden: true, profile: 'lob', radius: 0.32, dmg: 14, verb: 'rolled over',
+    impact(p, hit, game) {
+      if (hit.actor) {
+        game.damage(hit.actor, 14, p.owner, 'cheese');
+        hit.actor.addSticky(0.15, 1.5);
+        game.fx.burst('cheese', hit.point, 0.5);
+        game.sfx.play('thud', hit.point, 0.6);
+        return true;
+      }
+      if (hit.world && hit.top) stampAtGround(game, hit.point, 1.6, 'sticky', 3, { slow: 0.25, visual: 'melt' });
+      game.world.paintSplat(hit.point.x, hit.point.y, hit.point.z, 1.2, 'cheese');
+      game.fx.burst('cheese', hit.point, 0.3);
+      return true;
+    },
+  },
+  bananaslice: { // a utensil-cut slice of banana (not a pickup)
+    name: 'Banana slice', hidden: true, profile: 'line', radius: 0.22, dmg: 9, verb: 'boomeranged',
+    impact(p, hit, game) {
+      if (hit.actor) {
+        game.damage(hit.actor, 9, p.owner, 'banana');
+        hit.actor.knock(_v2.copy(p.vel).setY(0).normalize().multiplyScalar(2.5).setY(1));
+        game.fx.burst('banana', hit.point, 0.4);
+        game.sfx.play('thud', hit.point, 0.5);
+        return true;
+      }
+      if (hit.world && hit.top) stampAtGround(game, hit.point, 1.3, 'slick', 3); // squashed banana is slippery
+      game.world.paintSplat(hit.point.x, hit.point.y, hit.point.z, 0.9, 'banana');
+      game.fx.burst('banana', hit.point, 0.3);
+      return true;
+    },
+  },
+  pinechunk: { // a utensil-cut chunk of pineapple (not a pickup)
+    name: 'Pineapple chunk', hidden: true, profile: 'lob', radius: 0.3, dmg: 12, verb: 'spiked',
+    impact(p, hit, game) {
+      if (hit.actor) {
+        game.damage(hit.actor, 12, p.owner, 'pineapple');
+        game.fx.burst('pine', hit.point, 0.5);
+        game.sfx.play('hit', hit.point, 0.5);
+        return true;
+      }
+      // every other chunk leaves a little patch of spikes
+      if (hit.world && hit.top && p.x?.sp) {
+        const gy = groundHeight(hit.point.x, hit.point.z, hit.point.y + 0.5);
+        game.addSpikeField(new THREE.Vector3(hit.point.x, gy, hit.point.z), 1.8, 3, 6, p.owner);
+      }
+      game.world.paintSplat(hit.point.x, hit.point.y, hit.point.z, 0.9, 'banana');
+      game.fx.burst('pine', hit.point, 0.4);
       return true;
     },
   },

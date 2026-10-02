@@ -63,6 +63,15 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.16: utensils for every food, delivery boxes and a busier kitchen** (`src/utensils.js`, `src/world.js`, `src/input.js`)
+
+- **Mouse lock is back for good.** A refused lock request (Chrome refuses for about a second after you press Esc, so clicking Resume or Play again quickly used to fail) no longer switches mouse lock off for the rest of the session: the game retries once the second has passed, every click on the game tries again, and a "Click to lock the mouse and aim" hint shows while it's unlocked. If a browser never allows the lock, clicks still throw.
+- **Utensils work with every food.** Splitting utensils (Knife, Spoon, Grater, Blender, Popcorn Popper) cut cheese wheels, watermelons, bananas and pineapples into proper pieces (cheese chunks, melon chunks, banana slices that leave a slippery splat, pineapple chunks that plant spikes) and split grapes and blueberries into more, smaller pellets. Rolled foods get the zone effects when they stop rolling, the Toaster makes a rolling wheel scorch the floor, and the Rolling Pin and Colander speed it up. For grapes and blueberries, zone and status effects ride on one pellet per throw (one berry in six) so a volley isn't eight vortexes; the Blow Torch lights blueberries after 3 s of steady fire and the Microwave turns one berry into a plasma orb every 1.5 s. The Mixer blends any two foods. The only "No effect" left is the Mortar with a boomerang banana and the peel with utensils that can't change it.
+- **The banana peel trap works with six utensils:** Ice Cream Machine (ice patch), Whisk (a vortex that drags enemies onto it), Deep Fryer (oil slick), Cotton Candy Machine (sticky web), Mortar & Pestle (lobbed onto your aim point) and Oven Mitt (hurled 18 m ahead).
+- **The Pan gives foods without an alt one:** smash a watermelon at your feet, plant a pineapple spike field, or fire a ring of 16 blueberries. With the cheese wheel it raises the shield at once, tired or not.
+- **Delivery boxes.** Utensils now arrive in cardboard boxes that parachute in on a striped napkin, with a coloured light beam and ring so you can find them; the utensil inside is on the label. Three are waiting at the start and a new one drops every 16 to 24 s (up to 6). Walk into a box to open it, or splat it open with any food from range and race for the utensil that falls out. Bots without a utensil go and open boxes.
+- **A busier kitchen.** New cover and things to climb: a bitten apple, a whole watermelon, a broccoli tree to hide under, a dropped donut you can stand in, a giant carrot and banana, a red pepper, an orange, a block of Swiss cheese, a cracked egg whose white is slippery, a pickle jar on its side you can walk into, spilled cereal, three knocked-over dining chairs (seats and backrests become walls, legs become hurdles), a pile of fruit in the table's bowl, and a loaf of bread, a pineapple and a bunch of bananas on the back counter, plus a strawberry on the island. All the giant food is vertex-coloured with two shared materials, so it adds only a few draw calls.
+
 **Version 0.15: support utensils** (`src/utensils.js`, art in `docs/utensils/`)
 
 - **20 utensils that boost your food.** They float around the kitchen on coloured rings (8 spots, a new random one 25 s after one is taken). Walk over one to carry it; you carry one at a time and a new one swaps out the old. Knocked-out Titans drop theirs. In Chef's Choice you can also pick a starting utensil, and bots may bring one.
@@ -150,7 +159,8 @@ npm run dev          # http://localhost:5173
 | Right-click or Q: the food's alt action | Alt button |
 | Space jump (again in the air to double jump), C dash | Jump and Dash buttons |
 | 1–5 or mouse wheel: pick food | Tap a food plate |
-| Walk over a utensil to carry it; with the Pan, Q slams | Same |
+| Walk into a delivery box (or over a loose utensil) to carry it; with the Pan, Q slams | Same |
+| Click the game to lock the mouse | |
 | Esc or P: pause | |
 
 ## Code map
@@ -158,7 +168,7 @@ npm run dev          # http://localhost:5173
 | File | What it does |
 |---|---|
 | `src/core.js` | Constants, collision (boxes and cylinders), ground queries, raycasts, lob solver |
-| `src/world.js` | The kitchen, countertop props, hazards, launch pads, landmark tomato, Soap Tide wall, splat canvas |
+| `src/world.js` | The kitchen, countertop props, giant foods and fallen chairs, hazards, launch pads, landmark tomato, Soap Tide wall |
 | `src/foods.js` | All food data and behaviour: meshes, throw, impact, alt actions |
 | `src/actors.js` | Titans: movement, statuses, diminishing returns, inventory; drives the rig each frame |
 | `src/human.js` | The human model: lofted, skinned body and face, hair and beards, palette shader, skeleton posing, first-person arm |
@@ -167,7 +177,7 @@ npm run dev          # http://localhost:5173
 | `src/net.js`, `src/viewmodel.js` | Online rooms; first-person arm and held food |
 | `src/projectiles.js` | Projectile flight, boomerang steering, rolling, hit detection (body capsule and head) |
 | `src/items.js` | Pickups and spawners, peel traps, stuck carrots |
-| `src/utensils.js`, `src/utensil-art.js` | The 20 support utensils: throw rewrites, impact effects, zones, pickups, badges; the art (generated by `docs/utensils/build.mjs`) |
+| `src/utensils.js`, `src/utensil-art.js` | The 20 support utensils: throw rewrites for every food, impact effects, zones, delivery boxes, loose utensils, badges; the art (generated by `docs/utensils/build.mjs`) |
 | `src/surface.js` | Surface State Grid and zone visuals |
 | `src/bots.js` | Bot AI |
 | `src/game.js` | Match flow, damage and kills, Soap Tide, camera, aim preview |
