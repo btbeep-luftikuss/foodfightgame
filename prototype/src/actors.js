@@ -70,7 +70,7 @@ export class Actor {
     this.envAcc = 0; this.burnAcc = 0; this.tideAcc = 0; this.nextDrip = 0; this.honeySfxAt = 0;
     this.fallTop = 0; this.armT = 0; this.squash = 0; this.walkPhase = 0; this.hitFlash = 0;
     this.placement = 0; this.altReadyAt = {}; this.speedBoostUntil = 0; this.shieldBrokenUntil = 0;
-    this.utensil = null; this.uState = Utensils.freshState(); this.uRel = null; this.chargeLen = 0; this.releaseQueued = false;
+    Utensils.emptyKit(this); this.uRel = null; this.chargeLen = 0; this.releaseQueued = false;
     this.root.visible = true;
     this._refreshHeld();
   }
@@ -473,6 +473,8 @@ export class Actor {
   _items(dt, it) {
     const g = this.game, now = g.time;
     if (it.slot >= 0) this.select(it.slot);
+    if (it.uslot >= 0) g.utensils.select(this, it.uslot);
+    if (it.ucycle) g.utensils.cycle(this, it.ucycle);
     if (it.cycle) {
       for (let k = 1; k <= 5; k++) {
         const i = (this.sel + it.cycle * k + 25) % 5;

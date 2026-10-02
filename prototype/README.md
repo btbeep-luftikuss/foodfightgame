@@ -59,9 +59,15 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 | Movement | Walk, sprint, jump and double jump, dash (also once in the air), momentum skating on slick surfaces, jelly trampolines, no fall damage |
 | Bots | Pick targets, choose food by range, lead shots with the same ballistic math, dodge, strafe, loot, heal, hunt, walk around walls, use launch pads to reach the safe zone, avoid burners and ledges |
 | Presentation | Procedural textures, synthesized sound, pooled instanced particles, rim-lit characters, soft contact shadows, sunbeam and dust, bloom (High), hit markers, damage numbers, hit-stop, screen shake |
-| Platforms | Desktop (mouse and keyboard, pointer lock) and phones (touch joystick and buttons); Low, Medium and High graphics with automatic resolution scaling |
+| Platforms | Desktop (mouse and keyboard, pointer lock) and phones (touch joystick, aim stick, buttons and plate dials for food and utensils); Low, Medium and High graphics with automatic resolution scaling |
 
 ## Run it
+
+**Version 0.17: a utensil kit, plate dials on phones and a cleaner HUD** (`src/utensils.js`, `src/dials.js`, `src/hud.js`)
+
+- **Carry three utensils.** New utensils go into an empty slot (straight into your hand if it's empty); with all three full, a new one swaps out the one in your hand. Switch with 6, 7 and 8 or R (the next utensil). Utensils in your pocket keep cooling down, switching cancels a charge in progress, the same utensil can't be carried twice, and a knocked-out Titan drops all of theirs. A swapped-out utensil can't be picked straight back up until you step away from it. Bots still carry one.
+- **Plate dials on phones.** The food and utensil bars are gone on phones. Instead a china plate sits in each bottom corner (food on the left, utensils on the right), and only the quarter with the item in your hand shows. Turn a plate with your thumb like a dial: it settles into each slot as you turn, clicks (with a buzz on phones that support it), and springs into place with a small overshoot when you let go. A tap steps to the next item. Empty food slots are skipped, the plate shows how much of the food you have left, the item's name pops up for a moment, and when a food runs out the plate turns to the next one by itself. The aim stick and buttons were moved around the plates for both upright and sideways phones, the Alt button says what it does (Eat, Shield, Vault…), and the Menu button is now a pause button that opens the pause card.
+- **Cleaner HUD (desktop and phone).** Health is in the top-left corner with a heart, the glaze shield as a thin blue bar over it (only when you have some) and stamina under it; status chips sit below in single words. The two tags and the Soap Tide banner became one small pill at the top: tide timer, Titans left, your splats (online: connection, players, splats). The kill feed keeps 3 short entries that fade after a few seconds, the frame counter is hidden (add `?fps` to the address to show it), the hint line is just the food's name and its alt key, the utensil card became three small utensil plates next to the food plates (with a heat ring for the Deep Fryer and Oven Mitt), and utensil messages only appear when something needs attention (overheated, cooling down, no effect, let go).
 
 **Version 0.16: utensils for every food, delivery boxes and a busier kitchen** (`src/utensils.js`, `src/world.js`, `src/input.js`)
 
@@ -74,7 +80,7 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 **Version 0.15: support utensils** (`src/utensils.js`, art in `docs/utensils/`)
 
-- **20 utensils that boost your food.** They float around the kitchen on coloured rings (8 spots, a new random one 25 s after one is taken). Walk over one to carry it; you carry one at a time and a new one swaps out the old. Knocked-out Titans drop theirs. In Chef's Choice you can also pick a starting utensil, and bots may bring one.
+- **20 utensils that boost your food.** They float around the kitchen on coloured rings (8 spots, a new random one 25 s after one is taken). Walk over one to carry it; you carry one at a time and a new one swaps out the old (since 0.17 you carry three). Knocked-out Titans drop theirs. In Chef's Choice you can also pick a starting utensil, and bots may bring one.
 - **The food is always the shot.** A utensil rewrites the throw (splits it, coats it, speeds it up, flattens it, adds a charge) and adds an effect before or after the food's own impact, so a tomato still splashes and slows and an ice cube still freezes. Each utensil lists which foods it works with; the HUD says "No effect on Banana" when it doesn't apply.
 - **Every boost has a cost:** extra food used, longer holds (Blow Torch 3 s, Microwave 1–2 s with an overcharge that pops on you, Ice Cream Machine and Mixer prep), heat that overheats (Deep Fryer, Oven Mitt), cooldowns (Oven Mitt, Peeler, Pan), recoil and self-slows (Colander, Blender), ricochets that can hit you (Rolling Pin), short range (Spoon, Grater) or a short random fuse (Popcorn Popper).
 - **Zones:** the Whisk leaves a vortex that pulls enemies in, the Mortar & Pestle a drifting cloud of the food's effect, the Deep Fryer a burning oil slick and the Cotton Candy Machine a sticky web that fire or water destroys.
@@ -158,7 +164,8 @@ npm run dev          # http://localhost:5173
 | Mouse aim; hold the left button to charge, release to throw | Drag on the right half to aim |
 | Right-click or Q: the food's alt action | Alt button |
 | Space jump (again in the air to double jump), C dash | Jump and Dash buttons |
-| 1–5 or mouse wheel: pick food | Tap a food plate |
+| 1–5 or mouse wheel: pick food | Turn or tap the food plate (bottom left) |
+| 6–8 or R: pick utensil (you carry up to 3) | Turn or tap the utensil plate (bottom right) |
 | Walk into a delivery box (or over a loose utensil) to carry it; with the Pan, Q slams | Same |
 | Click the game to lock the mouse | |
 | Esc or P: pause | |
@@ -181,7 +188,7 @@ npm run dev          # http://localhost:5173
 | `src/surface.js` | Surface State Grid and zone visuals |
 | `src/bots.js` | Bot AI |
 | `src/game.js` | Match flow, damage and kills, Soap Tide, camera, aim preview |
-| `src/hud.js`, `src/input.js`, `src/fx.js` | HUD, controls, particles, sound |
+| `src/hud.js`, `src/dials.js`, `src/input.js`, `src/fx.js` | HUD, the phone plate dials, controls, particles, sound |
 
 ## Performance
 

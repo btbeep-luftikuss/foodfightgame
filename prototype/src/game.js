@@ -498,7 +498,7 @@ export class Game {
       const intent = this.input.enabled ? this.input.intent() : null;
       for (let s = 0; s < steps; s++) {
         // edge-triggered presses only count once per frame
-        if (s === 1 && intent) Object.assign(intent, { jump: false, dodge: false, alt: false, sniff: false, view: false, slot: -1, cycle: 0 });
+        if (s === 1 && intent) Object.assign(intent, { jump: false, dodge: false, alt: false, sniff: false, view: false, slot: -1, cycle: 0, uslot: -1, ucycle: 0 });
         this._step(dt, intent);
       }
     }

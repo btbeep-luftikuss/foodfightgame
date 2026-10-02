@@ -362,6 +362,9 @@ export class Sfx {
       case 'pickup':
         this._tone(o, t, 0.12, { type: 'triangle', f0: 660, f1: 990, vol: 0.25 });
         break;
+      case 'tick': // a dial clicking past a slot
+        this._tone(o, t, 0.035, { type: 'triangle', f0: 1900, f1: 1300, vol: 0.14, attack: 0.002 });
+        break;
       case 'sizzle':
         this._noise(o, t, 0.6, { type: 'highpass', f0: 4000, f1: 5000, vol: 0.35 });
         break;

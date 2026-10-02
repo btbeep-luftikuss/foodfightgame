@@ -35,7 +35,8 @@ the food stays the projectile, keeps its own look and effect, and the utensil ad
 Since prototype 0.16 every utensil works with every food you can throw, including cheese
 wheels, watermelons, bananas, pineapples, grapes and blueberries (see the prototype README for
 how each kind of food is handled), and six of them also change the banana peel trap. Utensils
-arrive in parachuting delivery boxes. The in-game descriptions are slightly more precise than
+arrive in parachuting delivery boxes, and since 0.17 you can carry three and switch between them
+(6, 7, 8 or R on a keyboard; the utensil plate in the bottom-right corner on a phone). The in-game descriptions are slightly more precise than
 the one-liners above (they give the exact numbers).
 
 ## Art style

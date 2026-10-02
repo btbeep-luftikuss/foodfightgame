@@ -81,6 +81,8 @@ export const UTENSILS = [
 ];
 export const UTENSIL_BY_ID = Object.fromEntries(UTENSILS.map((u) => [u.id, u]));
 export const UTENSIL_IDS = UTENSILS.map((u) => u.id);
+export const KIT = 3; // utensils a Titan can carry
+export const utensilHeat = (id) => RULES[id]?.heat || null; // heat limits, for the HUD
 export const randomUtensilId = () => UTENSIL_IDS[(Math.random() * UTENSIL_IDS.length) | 0];
 
 // The art as an <img>-ready data URL (HUD, menus) and as a texture (pickups, badges, boxes).
@@ -576,13 +578,46 @@ export class Utensils {
     return { heat: 0, overUntil: 0, cdUntil: 0, fire: 0, autoAt: -9, shots: 0, lastOrb: 0, peel: { target: null, layer: 0, hits: 0, until: 0, cdUntil: 0 } };
   }
 
-  give(a, id) {
-    a.utensil = UTENSIL_BY_ID[id] ? id : null;
-    a.uState = Utensils.freshState();
-    if (a === this.game.player && a.utensil) {
-      const u = UTENSIL_BY_ID[id];
-      this.game.hud.toast(`${u.name}: ${u.role}`);
+  // A Titan carries up to KIT utensils; `a.utensil` / `a.uState` are always the one in hand.
+  static emptyKit(a) {
+    a.utensils = new Array(KIT).fill(null);
+    a.uStates = a.utensils.map(() => Utensils.freshState());
+    a.uSel = 0; a.utensil = null; a.uState = a.uStates[0];
+  }
+
+  // Take a utensil in hand (an empty slot just shows empty hands).
+  select(a, i) {
+    if (!a.utensils || i < 0 || i >= KIT || i === a.uSel) return;
+    const was = a.utensil;
+    a.uSel = i; a.utensil = a.utensils[i]; a.uState = a.uStates[i];
+    if (was !== a.utensil && a.charging) { a.charging = false; a.chargeT = 0; } // no carrying a charge over to another utensil
+  }
+  cycle(a, dir) {
+    if (!a.utensils) return;
+    for (let k = 1; k <= KIT; k++) {
+      const i = (a.uSel + dir * k + KIT * 4) % KIT;
+      if (a.utensils[i]) { this.select(a, i); return; }
     }
+  }
+
+  // Add a utensil to the kit: an empty slot first (taken in hand if the hand is empty), otherwise
+  // it swaps out the one in hand. Returns the swapped-out id, null, or false if already carried.
+  give(a, id) {
+    if (!UTENSIL_BY_ID[id]) return false;
+    if (!a.utensils) Utensils.emptyKit(a);
+    if (a.utensils.includes(id)) return false;
+    let i = a.utensils[a.uSel] ? a.utensils.indexOf(null) : a.uSel;
+    const swap = i < 0;
+    if (swap) i = a.uSel;
+    const old = a.utensils[i];
+    a.utensils[i] = id; a.uStates[i] = Utensils.freshState();
+    if (i === a.uSel) { a.utensil = id; a.uState = a.uStates[i]; a.charging = false; }
+    if (a === this.game.player) {
+      const u = UTENSIL_BY_ID[id];
+      const how = i === a.uSel ? u.role : this.game.input?.isTouch ? 'turn the utensil plate to use it' : `press ${i + 6} to use it`;
+      this.game.hud.toast(`${u.name}: ${how}`);
+    }
+    return swap ? old : null;
   }
 
   works(a, foodId) {
@@ -615,6 +650,27 @@ export class Utensils {
       return a.chargeT >= c.need ? 'Charged: let go' : `Charging ${a.chargeT.toFixed(1)} / ${c.need} s`;
     }
     return u.tip || u.role;
+  }
+
+  // The in-play HUD's short version: only what needs attention right now (null: nothing to say).
+  brief(a) {
+    const u = a.utensil && UTENSIL_BY_ID[a.utensil];
+    if (!u) return null;
+    const t = this.game.time, s = a.uState, slot = a.selected();
+    if (t < s.overUntil) return { text: `Overheated ${Math.ceil(s.overUntil - t)}`, warn: true };
+    if (u.id === 'pan') return t < s.cdUntil ? { text: `Slam ${Math.ceil(s.cdUntil - t)}` } : null;
+    if (!slot) return null;
+    if (!u.works.includes(slot.id)) return { text: 'No effect', warn: true };
+    const food = FOODS[slot.id];
+    if (food.auto && u.id === 'blow-torch' && t - s.autoAt < 0.3) return s.fire >= 3 ? { text: 'Ablaze!' } : { text: `Ignite ${'●'.repeat(Math.floor(s.fire))}${'○'.repeat(3 - Math.floor(s.fire))}` };
+    if (u.id === 'oven-mitt' && !food.auto && t < s.cdUntil) return { text: `Mitt ${Math.ceil(s.cdUntil - t)}` };
+    if (u.id === 'peeler' && t < s.peel.cdUntil) return { text: `Re-peel ${Math.ceil(s.peel.cdUntil - t)}` };
+    if (u.id === 'mixer' && this.mixSlot(a) < 0) return { text: 'Needs a 2nd food', warn: true };
+    const R = RULES[u.id];
+    if (R.heat && s.heat >= 0.5) return { text: `${'●'.repeat(Math.round(s.heat))}${'○'.repeat(Math.max(0, R.heat.max - Math.round(s.heat)))}`, warn: s.heat > R.heat.max - 1 };
+    const c = this.chargeRule(a, food);
+    if (c && a.charging && c.over && a.chargeT > c.over - 0.5) return { text: 'Let go!', warn: true };
+    return null;
   }
 
   // Extra hold time the utensil asks for (null: none).
@@ -1108,13 +1164,11 @@ export class Utensils {
     g.fx.spray('chunks', c, 18, { speed: 7, up: 6, colors: [col('#c8955a'), col('#a87240'), col('#e8c48a')], size: 0.35, life: 0.9 });
     g.fx.spray('puffs', c, 10, { speed: 4, up: 3, colors: [col(UTENSIL_BY_ID[b.id].color), col('#ffffff')], size: 0.5, life: 0.6, grav: 0.2, grow: 1 });
     g.sfx.play('thud', c, a === g.player ? 1 : 0.5);
-    if (a) {
-      const old = a.utensil;
-      this.give(a, b.id);
-      if (old) this.drop(old, a.pos, a); // swap: leave the old one behind
+    const got = a ? this.give(a, b.id) : false;
+    if (got === false) this.drop(b.id, c, a); // splatted open, or the opener already carries one
+    else {
+      if (got) this.drop(got, a.pos, a); // all slots full: leave the one in hand behind
       g.sfx.play('pickup', c, a === g.player ? 1.1 : 0.4);
-    } else {
-      this.drop(b.id, c);
     }
   }
 
@@ -1211,9 +1265,13 @@ export class Utensils {
 
   // A knocked-out Titan drops the utensil they carried.
   dropFrom(a) {
-    if (!a.utensil) return;
-    this.drop(a.utensil, a.pos);
-    a.utensil = null;
+    // (online, other players' kits aren't sent: only the one in their hand is known)
+    const ids = a.utensils && !a.isRemote ? a.utensils.filter(Boolean) : a.utensil ? [a.utensil] : [];
+    ids.forEach((id, i) => {
+      const ang = (i / ids.length) * Math.PI * 2 + a.yaw;
+      this.drop(id, ids.length > 1 ? _v.set(a.pos.x + Math.sin(ang) * 1.6, a.pos.y, a.pos.z + Math.cos(ang) * 1.6) : a.pos);
+    });
+    Utensils.emptyKit(a);
   }
 
   _pickups(dt) {
@@ -1226,17 +1284,18 @@ export class Utensils {
       it.ring.material.opacity = 0.6 + Math.sin(t * 4 + it.phase) * 0.3;
       for (const a of g.actors) {
         if (!a.alive || a.isRemote) continue;
-        if (a === it.noPick && t < it.noPickUntil) continue;
-        if (a.utensil === it.id) continue;
+        const dx = a.pos.x - it.pos.x, dz = a.pos.z - it.pos.z, near = dx * dx + dz * dz <= 2.3 * 2.3 && Math.abs(a.pos.y - it.pos.y) <= 2.2;
+        if (a === it.noPick) { // the Titan who left it there must step away first (no swapping back and forth)
+          if (near || t < it.noPickUntil) continue;
+          it.noPick = null;
+        }
+        if (!near || a.utensils?.includes(it.id) || a.utensil === it.id) continue;
         if (a.isBot && a.utensil) continue; // bots keep the first utensil they find
-        const dx = a.pos.x - it.pos.x, dz = a.pos.z - it.pos.z;
-        if (dx * dx + dz * dz > 2.3 * 2.3 || Math.abs(a.pos.y - it.pos.y) > 2.2) continue;
-        const old = a.utensil;
         g.scene.remove(it.sprite, it.ring);
         it.ring.geometry.dispose(); it.ring.material.dispose();
         this.pickups.splice(i, 1);
-        this.give(a, it.id);
-        if (old) this.drop(old, a.pos, a); // swap: leave the old one behind
+        const old = this.give(a, it.id);
+        if (old) this.drop(old, a.pos, a); // all slots full: leave the one in hand behind
         g.sfx.play('pickup', it.pos, a === g.player ? 1.1 : 0.4);
         g.fx.spray('puffs', _v.copy(it.pos).setY(it.pos.y + 1.4), 8, { speed: 3, up: 2, colors: [col(UTENSIL_BY_ID[it.id].color), col('#ffffff')], size: 0.4, life: 0.4, grav: 0, grow: 1 });
         break;
@@ -1265,10 +1324,14 @@ export class Utensils {
     this._zones(dt);
     this._deliveries(dt);
     this._pickups(dt);
-    for (const a of this.game.actors) { // heat cools down
-      if (!a.utensil || !a.uState?.heat) continue;
-      const h = RULES[a.utensil].heat;
-      if (h) a.uState.heat = Math.max(0, a.uState.heat - dt / h.decay);
+    for (const a of this.game.actors) { // heat cools down, in the hand and in the pocket
+      if (!a.utensils) continue;
+      for (let i = 0; i < KIT; i++) {
+        const id = a.utensils[i], s = a.uStates[i];
+        if (!id || !s.heat) continue;
+        const h = RULES[id].heat;
+        if (h) s.heat = Math.max(0, s.heat - dt / h.decay);
+      }
     }
   }
   // visuals that should follow the camera's view of the Titans (call after actor visuals)

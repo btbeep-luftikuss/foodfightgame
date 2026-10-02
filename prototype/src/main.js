@@ -133,7 +133,7 @@ function boot() {
   const sfx = new Sfx();
   const icons = renderIcons();
   setFoodShadows(quality.dynamicShadows);
-  const hud = new HUD(icons, input);
+  const hud = new HUD(icons, input, sfx);
   const game = new Game({ renderer, scene, camera, quality, hud, input, sfx });
   window.__game = game; // handy for debugging in the console
 
@@ -325,7 +325,10 @@ function boot() {
   $('chef-play').addEventListener('click', () => { if (chefPick.length === 3) start({ mode: 'chef', loadout: [...chefPick], utensil: chefUtensil || null }); });
   $('end-menu').addEventListener('click', toMenu);
   $('leave').addEventListener('click', toMenu);
-  $('hud-menu').addEventListener('click', toMenu);
+  $('hud-menu').addEventListener('click', () => { // the pause button on phones (online games keep running)
+    if (!playing || !end.hidden) return;
+    game.paused = !game.online; pause.hidden = false;
+  });
 
   // Online: join a room code; everyone with the same code plays together.
   const status = $('online-status');
@@ -358,7 +361,7 @@ function boot() {
     } finally { btn.disabled = false; }
   });
   $('spectate').addEventListener('click', () => { end.hidden = true; });
-  $('resume').addEventListener('click', () => { pause.hidden = true; game.paused = false; input.requestLock(true); });
+  $('resume').addEventListener('click', () => { pause.hidden = true; game.paused = false; if (!input.isTouch) input.requestLock(true); });
   input.wantLock = () => playing && !game.paused && pause.hidden && end.hidden && !input.isTouch;
 
 
@@ -371,7 +374,7 @@ function boot() {
   });
 
   game.onMatchEvent = (type, data) => {
-    if (!playing) {
+    if (!playing || !game.player) {
       if (type === 'over') setTimeout(() => { if (!playing) game.newMatch(false); }, 5000);
       return;
     }

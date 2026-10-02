@@ -12,7 +12,7 @@ export class Input {
     this.sens = 0.0024;
     this.lmb = false; this.rmbPressed = false;
     this.pressed = { jump: false, dodge: false, alt: false, sniff: false, view: false };
-    this.slot = -1; this.cycle = 0;
+    this.slot = -1; this.cycle = 0; this.uslot = -1; this.ucycle = 0;
     this.locked = false;
     this.lockFails = 0; // failed lock attempts since the mouse was last locked
     this.wantLock = null; // set by main.js: is the game in a state where the mouse should be locked?
@@ -31,6 +31,8 @@ export class Input {
       if (e.code === 'KeyB' || e.code === 'KeyE') this.pressed.sniff = true;
       if (e.code === 'KeyV') this.pressed.view = true;
       if (/^Digit[1-5]$/.test(e.code)) this.slot = Number(e.code.slice(5)) - 1;
+      if (/^Digit[6-8]$/.test(e.code)) this.uslot = Number(e.code.slice(5)) - 6;
+      if (e.code === 'KeyR') this.ucycle = 1;
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => { this.keys.clear(); this.lmb = false; });
@@ -160,10 +162,10 @@ export class Input {
     const it = {
       moveX: mx, moveZ: mz, sprint,
       jump: this.pressed.jump, dodge: this.pressed.dodge, alt: this.pressed.alt, sniff: this.pressed.sniff, view: this.pressed.view,
-      primary: this.lmb || this.touch.fire, slot: this.slot, cycle: this.cycle,
+      primary: this.lmb || this.touch.fire, slot: this.slot, cycle: this.cycle, uslot: this.uslot, ucycle: this.ucycle,
     };
     this.pressed.jump = this.pressed.dodge = this.pressed.alt = this.pressed.sniff = this.pressed.view = false;
-    this.slot = -1; this.cycle = 0;
+    this.slot = -1; this.cycle = 0; this.uslot = -1; this.ucycle = 0;
     return it;
   }
 }
