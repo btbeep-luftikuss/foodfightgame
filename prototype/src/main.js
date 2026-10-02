@@ -10,6 +10,7 @@ import { SKINS, SKIN_BY_ID, RARITY } from './skins.js';
 import { titanPreview } from './actors.js';
 import { TITANS } from './game.js';
 import { Net, roomAvailable, cleanRoom } from './net.js';
+import { UTENSILS, UTENSIL_BY_ID, utensilIcon } from './utensils.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -141,6 +142,9 @@ function boot() {
     const f = FOODS[id];
     return `<li><img src="${icons[id] || ''}" alt=""><div><b>${f.name}</b><span>${f.hint}</span></div></li>`;
   }).join('');
+
+  // ... and the support utensils, with the same art as the design sheet
+  $('ulegend').innerHTML = UTENSILS.map((u) => `<li><img src="${utensilIcon(u.id)}" alt=""><div><b>${u.name} · ${u.role}</b><span>${u.buff}</span><em>${u.trade}</em></div></li>`).join('');
 
   const menu = $('menu'), pause = $('pause'), end = $('end'), touch = $('touch');
   let playing = false;
@@ -303,7 +307,22 @@ function boot() {
     renderChef();
   });
   renderChef();
-  $('chef-play').addEventListener('click', () => { if (chefPick.length === 3) start({ mode: 'chef', loadout: [...chefPick] }); });
+  // Chef's Choice: an optional starting utensil
+  let chefUtensil = '';
+  try { chefUtensil = UTENSIL_BY_ID[localStorage.getItem('tt-utensil')] ? localStorage.getItem('tt-utensil') : ''; } catch { /* storage blocked */ }
+  const uGrid = $('chef-utensils');
+  uGrid.innerHTML = `<button type="button" data-id="" aria-pressed="false"><span>None</span><small>Find one on the map</small></button>`
+    + UTENSILS.map((u) => `<button type="button" data-id="${u.id}" aria-pressed="false" title="${u.buff} Trade-off: ${u.trade}"><img src="${utensilIcon(u.id)}" alt=""><span>${u.name}</span><small>${u.role}</small></button>`).join('');
+  const syncUtensils = () => { for (const b of uGrid.children) b.setAttribute('aria-pressed', String(b.dataset.id === chefUtensil)); };
+  uGrid.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    chefUtensil = b.dataset.id;
+    try { localStorage.setItem('tt-utensil', chefUtensil); } catch { /* storage blocked */ }
+    syncUtensils();
+  });
+  syncUtensils();
+  $('chef-play').addEventListener('click', () => { if (chefPick.length === 3) start({ mode: 'chef', loadout: [...chefPick], utensil: chefUtensil || null }); });
   $('end-menu').addEventListener('click', toMenu);
   $('leave').addEventListener('click', toMenu);
   $('hud-menu').addEventListener('click', toMenu);

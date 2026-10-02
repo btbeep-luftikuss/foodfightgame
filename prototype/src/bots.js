@@ -263,11 +263,12 @@ export class BotBrain {
         else if (inRange && now > this.nextShotAt) { this.burstEnd = now + rand(0.6, 1.2); it.primary = true; }
       } else if (slot.id === 'peel') {
         if (d < 7 && now > this.nextShotAt) { it.primary = true; this.nextShotAt = now + 2; }
-      } else if (food.charge > 0) {
+      } else if (food.charge > 0 || this.game.utensils.botHold(a, food) > 0) {
         if (a.charging) it.primary = now < this.holdUntil;
         else if (inRange && now > this.nextShotAt && now >= a.recoverUntil) {
           it.primary = true;
-          this.holdUntil = now + food.charge * rand(1.02, 1.15); // full charge matches the aim solution
+          // full charge matches the aim solution; a utensil that needs a longer hold gets it
+          this.holdUntil = now + Math.max(food.charge * rand(1.02, 1.15), this.game.utensils.botHold(a, food));
           this.nextShotAt = now + food.recovery + rand(0.5, 1.4) * (1.4 - this.skill);
         }
       } else if (inRange && now > this.nextShotAt) {

@@ -37,6 +37,19 @@ export class Projectiles {
   releaseMesh(food, m) { m.visible = false; this.pool[food].push(m); }
 
   launch(o) {
+    // a carried utensil may rewrite the throw (split it, speed it up, flatten it ...)
+    const U = this.game.utensils;
+    if (U && o.u === undefined) {
+      const list = U.transform(o);
+      if (list) {
+        let first = null;
+        for (const q of list) {
+          if (q.delay > 0) U.schedule(q);
+          else { const p = this.launch(q); first ||= p; }
+        }
+        return first;
+      }
+    }
     const food = FOODS[o.food];
     const p = {
       food: o.food, owner: o.owner, pos: o.pos.clone(), vel: o.vel.clone(),
@@ -46,8 +59,10 @@ export class Projectiles {
       bounces: o.bounces ?? 0, seek: o.seek ?? null, turn: o.turn ?? 0, retarget: o.retarget ?? 0, shootable: !!o.shootable,
       fuse: o.fuse ?? 0, attached: null, stuck: false, stuckAt: 0, speed: o.vel.length(),
       mesh: this.getMesh(o.food),
+      u: o.u || '', x: o.x || {},
     };
     p.mesh.position.copy(p.pos);
+    if (p.u) U?.onLaunch(p);
     this.list.push(p);
     const net = this.game.net;
     if (net && o.owner === this.game.player && !o.remote && !o.local) net.sendThrow(o);
@@ -60,6 +75,7 @@ export class Projectiles {
       const p = this.list[i];
       if (!p.done) continue;
       if (!p.keepMesh) this.releaseMesh(p.food, p.mesh);
+      if (p.u) this.game.utensils.end(p);
       this.list.splice(i, 1);
     }
   }
@@ -72,8 +88,10 @@ export class Projectiles {
     if (p.life > p.maxLife) {
       if (p.food === 'banana') game.items.drop('banana', 1, p.pos);
       if (food.expire) food.expire(p, game);
+      if (p.u) game.utensils.expire(p);
       return this._end(p);
     }
+    if (p.u) { game.utensils.step(p, dt); if (p.done) return; }
     if (p.food === 'banana' && this._bananaSteer(p, dt)) return;
     if (p.attached || p.stuck) return this._fuseStep(p, food, dt);
     if (p.seek !== null || p.retarget) this._seekSteer(p, dt);
@@ -207,24 +225,39 @@ export class Projectiles {
     if (_c.z <= FLOOR_BOUNDS.minZ + 0.01 || _c.z >= FLOOR_BOUNDS.maxZ - 0.01) p.vel.z *= -0.7;
   }
 
+  // A food's impact, with the thrower's utensil before and after it. Damage dealt inside is
+  // scaled by the projectile's utensil multiplier (and crits / peel layers).
+  _impact(p, food, hit) {
+    if (!p.u) return food.impact(p, hit, this.game);
+    const game = this.game, U = game.utensils;
+    game.dmgScale = p.x.m ?? 1;
+    let done;
+    try {
+      if (U.pre(p, hit)) done = false;
+      else { done = food.impact(p, hit, game); U.post(p, hit); }
+    } finally { game.dmgScale = 1; }
+    return done;
+  }
+
   // Returns true if the projectile is finished.
   _collide(p, food) {
     const game = this.game;
     const rad = p.radius;
     // 1) cheese shields block projectiles from the front
     for (const a of game.actors) {
-      if (!a.alive || !a.shieldUp || a === p.owner || p.roll) continue;
+      if (!a.alive || !a.shieldUp || a === p.owner || p.roll || p.u === 'oven-mitt') continue; // a power throw goes straight through
       forwardOf(a.yaw, _f);
       _c.copy(a.pos).addScaledVector(_f, 1.45).setY(a.pos.y + 1.0);
       if (segPointDist2(_prev, p.pos, _c) < (1.5 + rad) ** 2 && (p.vel.x * _f.x + p.vel.z * _f.z) < 0) {
         game.damageShield(a, food.dmg || 25, p.owner);
         if (p.food === 'banana') { game.items.drop('banana', 1, p.pos); return true; }
-        return food.impact(p, { point: p.pos.clone(), blockedBy: a, world: false }, game);
+        return this._impact(p, food, { point: p.pos.clone(), blockedBy: a, world: false });
       }
     }
     // 2) actors: body capsule plus a head sphere for face hits
     for (const a of game.actors) {
-      if (!a.alive || a === p.owner || p.hitSet.has(a)) continue;
+      if (!a.alive || p.hitSet.has(a)) continue;
+      if (a === p.owner && !(p.selfOk && p.life > p.selfAfter)) continue; // a ricochet can come back at you
       _a.set(a.pos.x, a.pos.y + 0.5, a.pos.z); _b.set(a.pos.x, a.pos.y + 1.0, a.pos.z);
       _h.set(a.pos.x, a.pos.y + 1.74, a.pos.z);
       const headHit = segPointDist2(_prev, p.pos, _h) < (0.3 + rad) ** 2; // human head (0.22 m) with a little slack
@@ -232,7 +265,8 @@ export class Projectiles {
       if (!headHit && !bodyHit) continue;
       p.hitSet.add(a);
       const head = headHit && food.profile === 'line';
-      const done = food.impact(p, { point: p.pos.clone(), actor: a, head, world: false }, game);
+      const done = this._impact(p, food, { point: p.pos.clone(), actor: a, head, world: false });
+      if (p.x.pc > 0 && !p.attached && !p.stuck) { p.x.pc--; continue; } // Colander: pierces on through
       if (done) return true;
       if (p.attached || p.stuck) return false;
       if (!food.pierce) return true;
@@ -255,7 +289,7 @@ export class Projectiles {
       if (p.pos.distanceTo(_c) < L.r * L.group.scale.x * 0.95 + rad) {
         game.hitLandmark(food.dmg || 20, p.owner, p.pos);
         if (p.food === 'banana') { game.items.drop('banana', 1, p.pos); return true; }
-        food.impact(p, { point: p.pos.clone(), world: true, top: false }, game);
+        this._impact(p, food, { point: p.pos.clone(), world: true, top: false });
         return !(p.stuck || p.attached);
       }
     }
@@ -264,14 +298,23 @@ export class Projectiles {
     const s = solidAt(p.pos, rad * 0.5);
     if (s) {
       const top = _prev.y >= s.groundY - 0.05;
+      if (!top && p.x.wb > 0) { // Rolling Pin / Spatula: ricochet off the wall
+        p.x.wb--;
+        _c.set(p.pos.x, _prev.y, _prev.z);
+        if (solidAt(_c, rad * 0.5)) p.vel.x = -p.vel.x; else p.vel.z = -p.vel.z;
+        p.pos.copy(_prev);
+        p.hitSet.clear();
+        game.utensils.bounced(p);
+        return false;
+      }
       const point = top ? p.pos.clone().setY(s.groundY) : _prev.clone();
-      return food.impact(p, { point, world: true, top }, game);
+      return this._impact(p, food, { point, world: true, top });
     }
     return false;
   }
 
   reset() {
-    for (const p of this.list) this.releaseMesh(p.food, p.mesh);
+    for (const p of this.list) { this.releaseMesh(p.food, p.mesh); if (p.u) this.game.utensils.end(p); }
     this.list.length = 0;
   }
 }

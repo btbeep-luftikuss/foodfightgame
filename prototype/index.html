@@ -105,6 +105,16 @@ button { font: inherit; color: inherit; }
 .slot .key { position: absolute; left: -2px; top: -4px; font-size: 11px; font-weight: 800; background: var(--ink); color: var(--paper-dim); border-radius: 6px; padding: 1px 5px; }
 .slot .count { position: absolute; right: -2px; bottom: -4px; min-width: 20px; font-family: var(--display); font-size: 16px; background: var(--tomato); color: var(--paper); border-radius: 10px; padding: 0 5px; line-height: 20px; }
 .slot .count:empty { display: none; }
+.utensil { display: flex; align-items: center; gap: 8px; max-width: 100%; padding: 3px 12px 3px 3px; border-radius: 999px; background: var(--ink-glass); border: 2px solid var(--uc, var(--butter)); }
+.utensil img { width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; background: radial-gradient(circle, #fffaf2 0 62%, #e9dccb 63%); }
+.utensil div { display: grid; line-height: 1.15; min-width: 0; }
+.utensil b { font-size: 13px; color: var(--butter); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.utensil span { font-size: 11.5px; color: var(--paper-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.utensil.off span { color: #ff9a8a; }
+.ulegend li img { background: radial-gradient(circle, #fffaf2 0 62%, #e9dccb 63%); border-radius: 50%; }
+.ulegend em { display: block; font-style: normal; color: #ffb4a8; font-size: 12px; margin-top: 2px; }
+.uchoice { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)) !important; }
+.uchoice img { background: radial-gradient(circle, #fffaf2 0 62%, #e9dccb 63%) !important; }
 .hint { font-size: 13px; background: var(--ink-glass); padding: 5px 12px; border-radius: 999px; text-align: center; max-width: 100%; }
 .hint b { color: var(--butter); }
 .hint .alt { color: var(--glaze); margin-left: 6px; white-space: nowrap; }
@@ -311,6 +321,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <div class="bar hp"><div id="hpFill"></div><span id="hpText">100</span></div>
       <div id="stam" class="bar stam"><div id="stamFill"></div></div>
     </div>
+    <div id="utensil" class="utensil" hidden><img alt=""><div><b></b><span></span></div></div>
     <div id="hotbar" class="hotbar"></div>
     <div id="hint" class="hint"></div>
   </div>
@@ -331,7 +342,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 
 <section id="menu" class="menu" aria-label="Main menu">
   <div class="menu-panel">
-    <p class="eyebrow">Prototype 0.14 · The Grand Kitchen</p>
+    <p class="eyebrow">Prototype 0.15 · The Grand Kitchen</p>
     <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
     <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Play in first person against 11 bots until the Soap Tide closes in, or online against your friends. Blueberries fire like a machine gun.</p>
     <div class="row">
@@ -356,6 +367,8 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <div id="chef" class="chef" hidden>
         <p>Pick 3 foods. Bots bring 3 random foods each.</p>
         <div id="chef-grid" class="chef-grid" role="group" aria-label="Pick 3 foods"></div>
+        <p>Start with a utensil (optional). Bots may bring one too.</p>
+        <div id="chef-utensils" class="chef-grid uchoice" role="group" aria-label="Pick a starting utensil"></div>
         <div class="row"><button id="chef-play" class="btn" type="button" disabled>Pick 3 foods</button></div>
       </div>
     </div>
@@ -387,6 +400,9 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     </dl>
     <h2>On the menu today</h2>
     <ul id="legend" class="legend"></ul>
+    <h2>Support utensils</h2>
+    <p class="foot">Utensils float around the kitchen on coloured rings. Walk over one to carry it (one at a time; a new one swaps out the old). It boosts every food you throw, but the food is still the shot, and every boost has a cost. Knocked-out Titans drop theirs.</p>
+    <ul id="ulegend" class="legend ulegend"></ul>
     <p class="foot">Hazards: the three burners cycle on (don't stand on them), the sink and spilled water make you Wet (cleanses sticky and fire, but freezes last longer), honey pools refill your Glaze shield, and the red spatula pads on the floor fling you up onto the counters and the table. Smash the giant tomato for extra ammo.</p>
     <p class="foot">Prototype of the Tiny Titans design document: 12 of 30 foods, the whole kitchen, 12 Titans, bots only.</p>
   </div>

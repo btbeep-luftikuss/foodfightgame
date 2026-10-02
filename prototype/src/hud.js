@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { hasLineOfSight } from './core.js';
 import { FOODS } from './foods.js';
 import { MAX_HP } from './actors.js';
+import { UTENSIL_BY_ID, utensilIcon } from './utensils.js';
 
 const $ = (id) => document.getElementById(id);
 const _p = new THREE.Vector3(), _e = new THREE.Vector3();
@@ -112,6 +113,29 @@ export class HUD {
         }
       }
 
+      // the carried utensil and what it is doing right now
+      const uc = $('utensil');
+      const uid = a.utensil || '';
+      if (uc.dataset.id !== uid) {
+        uc.dataset.id = uid;
+        uc.hidden = !uid;
+        if (uid) {
+          const u = UTENSIL_BY_ID[uid];
+          uc.querySelector('img').src = utensilIcon(uid);
+          uc.querySelector('b').textContent = `${u.name} · ${u.role}`;
+          uc.style.setProperty('--uc', u.color);
+          uc.title = `${u.buff} Trade-off: ${u.trade}`;
+        }
+      }
+      if (uid) {
+        const txt = game.utensils.status(a);
+        if (txt !== this.lastUStatus) {
+          this.lastUStatus = txt;
+          uc.querySelector('span').textContent = txt;
+          uc.classList.toggle('off', /^(No effect|Overheated|Carry)/.test(txt));
+        }
+      }
+
       // statuses
       const st = a.statusList().map(([k, label]) => `<span class="chip ${k}">${label}</span>`).join('');
       if (st !== this.lastStatus) { $('statuses').innerHTML = st; this.lastStatus = st; }
@@ -119,7 +143,7 @@ export class HUD {
       // crosshair and charge ring
       const ch = $('crosshair');
       ch.dataset.profile = food ? food.profile : 'none';
-      const c = a.charging && food ? Math.min(1, a.chargeT / food.charge) : 0;
+      const c = a.charging && food ? Math.min(1, a.chargeT / Math.max(0.01, a.chargeLen || food.charge)) : 0;
       $('chargeRing').style.strokeDashoffset = String(176 * (1 - c));
       ch.classList.toggle('charging', a.charging);
       ch.classList.toggle('full', c >= 1);

@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { clamp, rand, FLOOR_BOUNDS } from './core.js';
 import { FOODS } from './foods.js';
 import { Actor } from './actors.js';
+import { UTENSIL_BY_ID } from './utensils.js';
 
 const COLORS = ['#ff9a1f', '#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5', '#f2f2f2'];
 const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048 };
@@ -120,6 +121,7 @@ export class Net {
     this.event('t', {
       f: o.food, p: q(o.pos), v: q(o.vel), g: o.gravity, r: o.radius, l: o.life, o: o.orient ? 1 : 0, rl: o.roll ? 1 : 0,
       c: o.charge, cv: o.curve, b: o.bounces, fu: o.fuse, sk: seekPeer, tu: o.turn, rt: o.retarget, sh: o.shootable ? 1 : 0, br: o.bruise, sp: o.spin,
+      ...(o.u ? { u: o.u, x: o.x || {} } : {}), // utensil-boosted throw
     });
   }
 
@@ -152,7 +154,7 @@ export class Net {
     if (t < p.juicedUntil) f |= FLAG.juiced;
     if (p.onGround) f |= FLAG.ground;
     const s = [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.vel.x), r2(p.vel.y), r2(p.vel.z), r2(p.yaw), r2(this.game.input.pitch),
-      Math.round(p.hp), Math.round(p.glaze), p.alive ? 1 : 0, p.selected()?.id || '', f, p.kills, r2(Math.min(99, t - p.noiseAt))];
+      Math.round(p.hp), Math.round(p.glaze), p.alive ? 1 : 0, p.selected()?.id || '', f, p.kills, r2(Math.min(99, t - p.noiseAt)), p.utensil || ''];
     this.room.presence({ n: this.name, c: this.color, k: this.game.playerSkin, s, e: this.log.map((e) => e.slice(0, -1)) }).catch(() => {});
   }
 
@@ -255,6 +257,7 @@ export class Net {
     a.eat = f & FLAG.eating ? (a.eat || { end: Infinity, done: () => {}, dmg: 0 }) : null;
     a.kills = num(s[13], 0, 9999) | 0;
     a.noiseAt = now - num(s[14], 0, 99, 99);
+    a.utensil = typeof s[15] === 'string' && UTENSIL_BY_ID[s[15]] ? s[15] : null; // shown as a badge over their shoulder
 
     // events we haven't seen yet
     const ev = Array.isArray(pres.e) ? pres.e : [];
@@ -282,7 +285,9 @@ export class Net {
       pr.throws.push(now);
       const v3 = (arr, lo, hi) => new THREE.Vector3(num(arr?.[0], lo, hi), num(arr?.[1], lo, hi), num(arr?.[2], lo, hi));
       const seek = o.sk ? this._actorOf(String(o.sk)) : null;
+      const ux = o.u ? game.utensils.sanitize(String(o.u), o.x) : null;
       game.projectiles.launch({
+        ...(ux ? { u: String(o.u), x: ux } : { u: '' }),
         food: o.f, owner: a, remote: true, pos: v3(o.p, -300, 300), vel: v3(o.v, -150, 150),
         gravity: num(o.g, -1, 3, 1), radius: num(o.r, 0.05, 1.5, 0.35), life: num(o.l, 0.1, 12, 6),
         orient: !!o.o, roll: !!o.rl, charge: num(o.c, 0, 1, 1), curve: num(o.cv, -5, 5), bounces: num(o.b, 0, 6) | 0,

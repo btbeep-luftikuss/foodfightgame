@@ -10,6 +10,7 @@ import { FX } from './fx.js';
 import { Actor } from './actors.js';
 import { Projectiles } from './projectiles.js';
 import { Items } from './items.js';
+import { Utensils, randomUtensilId } from './utensils.js';
 import { BotBrain, BOT_NAMES } from './bots.js';
 import { ViewModel } from './viewmodel.js';
 import { randomSkinId } from './skins.js';
@@ -43,6 +44,8 @@ export class Game {
     this.fx = new FX(scene, quality);
     this.projectiles = new Projectiles(this);
     this.items = new Items(this);
+    this.utensils = new Utensils(this);
+    this.dmgScale = 1; // set while a utensil-boosted projectile's impact runs
     this.actors = [];
     for (let i = 0; i < TITANS; i++) {
       this.actors.push(new Actor(this, { id: i, name: i === 0 ? 'You' : BOT_NAMES[i], color: i === 0 ? PLAYER_COLOR : BOT_COLORS[i - 1], isBot: i > 0 }));
@@ -92,7 +95,7 @@ export class Game {
   startOnline(net) {
     this.net = net; this.online = true; this.mode = 'classic';
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
-    this.world.resetRound(); this.hud.clearFeed(); this.brains.clear();
+    this.world.resetRound(); this.hud.clearFeed(); this.brains.clear(); this.utensils.reset();
     for (const a of this.botActors.slice(1)) { a.alive = false; a.hide(); }
     this.actors = [this.botActors[0]];
     this.player = this.botActors[0];
@@ -241,6 +244,7 @@ export class Game {
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
     this.world.resetRound();
     this.hud.clearFeed();
+    this.utensils.reset();
     const names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
     const spots = [];
     this.brains.clear();
@@ -261,6 +265,8 @@ export class Game {
       if (!chef) a.give('tomato', 2);
       else if (!a.isBot && opts.loadout?.length) a.giveLoadout(opts.loadout);
       else a.giveLoadout([...FOOD_IDS].sort(() => Math.random() - 0.5).slice(0, 3));
+      if (!a.isBot && opts.utensil) this.utensils.give(a, opts.utensil);
+      else if (a.isBot && chef && Math.random() < 0.6) this.utensils.give(a, randomUtensilId());
       if (a.isBot) this.brains.set(a, new BotBrain(a, this, rand(0.3, 0.75)));
     });
     this.player = withPlayer ? this.actors[0] : null;
@@ -282,6 +288,7 @@ export class Game {
   // ------------------------------------------------------------------ combat API used by foods
   damage(target, amount, attacker, foodId, opts = {}) {
     if (!target.alive || amount <= 0 || this.state === 'over') return 0;
+    amount *= this.dmgScale;
     if (target.isRemote) { // online: that player's own game decides; we only show our hit
       if (attacker === this.player) {
         this.hud.float(target.headPos(_c).setY(target.pos.y + 2.3), Math.round(amount), opts.head ? 'crit' : 'dmg');
@@ -363,7 +370,7 @@ export class Game {
       if (!a.alive) continue;
       _d.subVectors(c, point); _d.y = Math.max(_d.y, 0.1);
       _d.normalize(); _d.y = Math.max(_d.y, 0.45); _d.normalize();
-      a.knock(_d.multiplyScalar(force * k * (a === owner ? 0.9 : 1)));
+      a.knock(_d.multiplyScalar(force * k * (a === owner ? 0.9 : 1) * Math.min(1, Math.sqrt(this.dmgScale)))); // small utensil pieces push less
     }
     const camD = this.camera.position.distanceTo(point);
     this.fx.shake(clamp(0.6 - camD / 60, 0, 0.6));
@@ -412,6 +419,7 @@ export class Game {
       this.items.drop(s.id, s.count, c, _v.set(Math.cos(a) * 5, 8, Math.sin(a) * 5));
     });
     victim.inv = [null, null, null, null, null];
+    this.utensils.dropFrom(victim);
     victim.hide();
 
     const food = foodId === 'burning' ? 'burner' : foodId;
@@ -495,6 +503,7 @@ export class Game {
     }
     if (this.net) this.net.tick(realDt);
     for (const a of this.actors) a.updateVisual(realDt, this.camera);
+    this.utensils.updateVisual();
     this._camera(realDt);
     this._preview();
     this._blobShadows();
@@ -526,6 +535,7 @@ export class Game {
     }
     this.projectiles.update(dt);
     this.items.update(dt);
+    this.utensils.update(dt);
     this.surface.update(dt, this.time);
     this._spikeStep(dt);
     this.world.update(dt, this.time, this.fx, this.sfx);

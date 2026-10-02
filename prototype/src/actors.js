@@ -7,6 +7,7 @@ import {
 } from './core.js';
 import { FOODS, makeFoodMesh } from './foods.js';
 import { dress } from './skins.js';
+import { Utensils } from './utensils.js';
 import { HumanRig, SKIN_TONES, HAIR_COLORS, HAIR_STYLES, IRIS_COLORS, SHOE_COLORS, BEARDS, pick } from './human.js';
 
 const JUMP_V = Math.sqrt(2 * G * 6);   // 6 m jump: about three times a Titan's height
@@ -69,6 +70,7 @@ export class Actor {
     this.envAcc = 0; this.burnAcc = 0; this.tideAcc = 0; this.nextDrip = 0; this.honeySfxAt = 0;
     this.fallTop = 0; this.armT = 0; this.squash = 0; this.walkPhase = 0; this.hitFlash = 0;
     this.placement = 0; this.altReadyAt = {}; this.speedBoostUntil = 0; this.shieldBrokenUntil = 0;
+    this.utensil = null; this.uState = Utensils.freshState(); this.uRel = null; this.chargeLen = 0; this.releaseQueued = false;
     this.root.visible = true;
     this._refreshHeld();
   }
@@ -373,6 +375,7 @@ export class Actor {
     else if (this.heavy()) speed *= 0.85; // lugging a watermelon
     if (this.eat) speed *= 0.5;
     if (this.charging && this.selected()?.id === 'carrot') speed *= 0.6;
+    if (this.charging && this.chargeRule?.slow && this.chargeT > 0.25) speed *= this.chargeRule.slow; // Blow Torch: exposed while it heats up
     let accel = this.onGround ? 55 : 10;
     if (this.onSlick) { accel = 5; speed *= 1.3; }
     if (this.gliding) accel = 14;
@@ -487,19 +490,28 @@ export class Actor {
     }
     const ready = this.canControl() && now >= this.recoverUntil && now >= this.swapLockUntil;
     if (!food || !this.canControl()) { this.charging = false; this.primaryPrev = it.primary; return; }
-    if (it.alt && food.alt && ready) {
+    if (it.alt && ready && !g.utensils.panAlt(this, food, slot) && food.alt) { // the Pan fires the alt on its own cooldown
       const readyAt = food.altCd ? this.altReadyAt[slot.id] || 0 : 0;
       if (now < readyAt) { if (!this.isBot) g.hud.toast(`${food.altName || 'Alt'} ready in ${Math.ceil(readyAt - now)} s`); }
       else if (food.alt(this, g) !== false && food.altCd) this.altReadyAt[slot.id] = now + food.altCd;
     }
     if (!ready) { this.primaryPrev = it.primary; return; }
+    // a utensil can ask for a longer hold (Blow Torch, Microwave, Ice Cream Machine, Mixer)
+    const rule = this.chargeRule = g.utensils.chargeRule(this, food);
+    const chargeLen = this.chargeLen = Math.max(food.charge, rule ? rule.need : 0);
     if (food.auto) { // rapid fire: keeps firing while held
       if (it.primary) this._release(food, 1);
-    } else if (food.charge > 0) {
-      if (it.primary && !this.charging && !this.primaryPrev) { this.charging = true; this.chargeT = 0; }
+    } else if (chargeLen > 0) {
+      if (it.primary && !this.charging && !this.primaryPrev) { this.charging = true; this.chargeT = 0; this.releaseQueued = false; }
       if (this.charging) {
         this.chargeT += dt;
-        if (!it.primary) this._release(food, clamp(this.chargeT / food.charge, 0, 1));
+        if (g.utensils.whileCharging(this, food, rule)) { this.primaryPrev = it.primary; return; }
+        const c = food.charge > 0 ? clamp(this.chargeT / food.charge, 0, 1) : 1;
+        if (!it.primary || this.releaseQueued) {
+          // churn-style utensils finish their prep on their own once you let go
+          if (rule?.auto && this.chargeT < rule.need) this.releaseQueued = true;
+          else this._release(food, c);
+        }
       }
     } else if (it.primary && !this.primaryPrev) {
       this._release(food, 1);
@@ -508,9 +520,12 @@ export class Actor {
   }
 
   _release(food, c) {
+    const U = this.game.utensils;
+    U.beginRelease(this, food, this.chargeT);
     food.release(this, c, this.game);
-    this.charging = false; this.chargeT = 0;
-    this.recoverUntil = this.game.time + food.recovery;
+    const rec = U.endRelease(this);
+    this.charging = false; this.chargeT = 0; this.releaseQueued = false;
+    this.recoverUntil = this.game.time + food.recovery * rec;
     this.noiseAt = this.game.time; // throwing is loud
     this.armT = 0.3;
   }
