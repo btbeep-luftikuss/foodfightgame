@@ -180,6 +180,13 @@ button { font: inherit; color: inherit; }
 .gfx .field select { width: 100%; }
 .gfx .gfx-note { grid-column: 1 / -1; margin: 0; font-size: 12px; line-height: 1.4; color: var(--paper-dim); }
 @media (max-width: 420px) { .gfx { grid-template-columns: 1fr; } }
+.botlevel-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.botlevel { display: inline-flex; padding: 3px; gap: 3px; border-radius: 999px; background: var(--ink); border: 2px solid var(--paper-dim); }
+.botlevel button { border: 0; border-radius: 999px; padding: 7px 16px; font: inherit; font-weight: 800; font-size: 14px; color: var(--paper-dim); background: transparent; cursor: pointer; }
+.botlevel button[aria-pressed="true"] { background: var(--butter); color: var(--ink); }
+.botlevel button[data-level="easy"][aria-pressed="true"] { background: var(--basil); }
+.botlevel button[data-level="hard"][aria-pressed="true"] { background: var(--tomato); color: var(--paper); }
+.online p.botlevel-note { font-size: 12px; margin-top: -4px; }
 .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .mode { display: grid; gap: 4px; align-content: start; text-align: left; padding: 12px; border-radius: 14px; border: 2px solid var(--paper-dim); background: var(--ink); color: var(--paper); font: inherit; cursor: pointer; }
 .mode b { font-size: 17px; color: var(--butter); }
@@ -408,7 +415,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 
 <section id="menu" class="menu" aria-label="Main menu">
   <div class="menu-panel">
-    <p class="eyebrow">Prototype 0.19 · The Grand Kitchen</p>
+    <p class="eyebrow">Prototype 0.20 · The Grand Kitchen</p>
     <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
     <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Play in first person against 11 bots until the Soap Tide closes in, or online against your friends. Blueberries fire like a machine gun.</p>
     <div class="row">
@@ -425,6 +432,14 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <div id="locker-grid" class="locker-grid" role="group" aria-label="Skins"></div>
     </div>
     <div id="modes" class="online" hidden>
+      <div class="botlevel-row"><b>Bots</b>
+        <div id="botlevel" class="botlevel" role="group" aria-label="Bot difficulty">
+          <button type="button" data-level="easy" aria-pressed="false">Easy</button>
+          <button type="button" data-level="medium" aria-pressed="true">Medium</button>
+          <button type="button" data-level="hard" aria-pressed="false">Hard</button>
+        </div>
+      </div>
+      <p id="botlevel-note" class="botlevel-note">Easy bots aim loosely, react slowly and rarely dodge. Hard bots lead their shots, throw faster and dodge often.</p>
       <p><b>Choose a mode</b></p>
       <div class="modes">
         <button id="mode-classic" class="mode" type="button"><b>Classic</b><span>Grab food as you go. Food floats all over the kitchen and bananas and grapes heal.</span></button>

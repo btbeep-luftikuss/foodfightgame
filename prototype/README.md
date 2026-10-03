@@ -63,6 +63,10 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.20: bot difficulty** (`src/bots.js`)
+
+- **Easy, Medium and Hard bots,** picked on the menu above the game modes (remembered for next time). Easy bots aim loosely (skill 0.1 to 0.35), think every 0.45 s, only notice enemies within 45 m, wait 0.9 s before throwing at a new target, throw 60% less often and dodge half as much. Medium is the bots as they were (skill 0.3 to 0.75). Hard bots (skill 0.75 to 0.95) lead their shots almost perfectly, think every 0.15 s, see 80 m, react in 0.1 s, throw 25% more often and dodge 50% more. In a test where three bots attacked a Titan standing still for 40 s, it took about 110 damage on Easy, 290 on Medium and 660 on Hard.
+
 **Version 0.19: slower Titans, shorter jumps, splats on every surface, and plates that fit what you carry** (`src/stains.js`, `src/dials.js`, `src/actors.js`)
 
 - **A bit slower and lower.** Walking is 5.6 m/s (was 6.5), sprinting 8.5 m/s (was 10) and the dash 24 m/s (was 28). A jump reaches 5 m (was 6) and the double jump adds 4.5 m (was 5), about 9.5 m in all: still enough for the sugar-cube steps and the colander dome.

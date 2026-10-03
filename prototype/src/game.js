@@ -45,6 +45,7 @@ export class Game {
     this.projectiles = new Projectiles(this);
     this.items = new Items(this);
     this.utensils = new Utensils(this);
+    this.botLevel = 'medium'; // easy | medium | hard (set from the menu)
     this.dmgScale = 1; // set while a utensil-boosted projectile's impact runs
     this.actors = [];
     for (let i = 0; i < TITANS; i++) {
@@ -268,7 +269,7 @@ export class Game {
       else a.giveLoadout([...FOOD_IDS].sort(() => Math.random() - 0.5).slice(0, 3));
       if (!a.isBot && opts.utensil) this.utensils.give(a, opts.utensil);
       else if (a.isBot && chef && Math.random() < 0.6) this.utensils.give(a, randomUtensilId());
-      if (a.isBot) this.brains.set(a, new BotBrain(a, this, rand(0.3, 0.75)));
+      if (a.isBot) this.brains.set(a, new BotBrain(a, this)); // skill from the bot difficulty (botLevel)
     });
     this.player = withPlayer ? this.actors[0] : null;
     if (this.player) {

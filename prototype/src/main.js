@@ -9,6 +9,7 @@ import { FOODS, FOOD_IDS, makeFoodMesh, setFoodShadows } from './foods.js';
 import { SKINS, SKIN_BY_ID, RARITY } from './skins.js';
 import { titanPreview } from './actors.js';
 import { TITANS } from './game.js';
+import { BOT_LEVELS } from './bots.js';
 import { Net, roomAvailable, cleanRoom } from './net.js';
 import { UTENSILS, UTENSIL_BY_ID, UTENSIL_IDS, utensilIcon, setUtensilIcons } from './utensils.js';
 import { makeUtensilMesh } from './utensil-models.js';
@@ -176,7 +177,20 @@ function boot() {
     if (!input.isTouch) input.requestLock(true);
   }
   let matchOpts = {}; // what "Play again" repeats
+  // Bot difficulty: remembered between visits, applied to the next match
+  let botLevel = 'medium';
+  try { const v = localStorage.getItem('tt-bots'); if (BOT_LEVELS[v]) botLevel = v; } catch { /* storage blocked */ }
+  const syncLevel = () => document.querySelectorAll('#botlevel button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.level === botLevel)));
+  $('botlevel').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-level]');
+    if (!b) return;
+    botLevel = b.dataset.level;
+    try { localStorage.setItem('tt-bots', botLevel); } catch { /* storage blocked */ }
+    syncLevel();
+  });
+  syncLevel();
   function start(opts = matchOpts) {
+    game.botLevel = botLevel;
     sfx.unlock();
     matchOpts = opts;
     game.newMatch(true, opts);

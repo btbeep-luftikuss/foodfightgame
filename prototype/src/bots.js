@@ -19,9 +19,18 @@ const RANGE = {
   pineapple: [6, 24, 2.4], jelly: [5, 22, 2.1], blueberry: [2, 35, 2.7],
 };
 
+// Bot difficulty (picked on the menu): how sharp, quick, far-sighted, trigger-happy and nimble bots are.
+export const BOT_LEVELS = {
+  easy: { name: 'Easy', skill: [0.1, 0.35], think: 0.45, sight: 45, react: 0.9, fire: 1.6, dodge: 0.5 },
+  medium: { name: 'Medium', skill: [0.3, 0.75], think: 0.25, sight: 65, react: 0.3, fire: 1, dodge: 1 },
+  hard: { name: 'Hard', skill: [0.75, 0.95], think: 0.15, sight: 80, react: 0.1, fire: 0.75, dodge: 1.5 },
+};
+
 export class BotBrain {
   constructor(actor, game, skill) {
-    this.a = actor; this.game = game; this.skill = skill;
+    this.a = actor; this.game = game;
+    this.lv = BOT_LEVELS[game.botLevel] || BOT_LEVELS.medium;
+    this.skill = skill ?? rand(...this.lv.skill);
     this.thinkT = rand(0, 0.3);
     this.target = null; this.goal = null; this.goalKind = null;
     this.strafeDir = pick([-1, 1]); this.strafeT = 0;
@@ -36,7 +45,7 @@ export class BotBrain {
   think() {
     const a = this.a, g = this.game, now = g.time;
     // choose target: whoever hit me recently, else the nearest visible enemy
-    let best = null, bestD = 65;
+    let best = null, bestD = this.lv.sight;
     const eye = a.headPos(_v);
     for (const o of g.actors) {
       if (o === a || !o.alive) continue;
@@ -44,6 +53,7 @@ export class BotBrain {
       const bias = o === a.lastHitBy && now - a.lastHitAt < 4 ? 15 : 0;
       if (d - bias < bestD && hasLineOfSight(eye, o.headPos(_w))) { best = o; bestD = d - bias; }
     }
+    if (best && best !== this.target) this.nextShotAt = Math.max(this.nextShotAt, now + this.lv.react); // a moment to react
     this.target = best;
 
     // goals, most urgent first
@@ -108,7 +118,7 @@ export class BotBrain {
       const d = _w.length();
       if (d > 10 || d < 0.5) continue;
       const along = _w.dot(p.vel) / (d * (p.vel.length() || 1));
-      if (along > 0.85 && Math.random() < this.skill * 0.55) { this.pendingDodge = true; break; }
+      if (along > 0.85 && Math.random() < Math.min(0.95, this.skill * 0.55 * this.lv.dodge)) { this.pendingDodge = true; break; }
     }
 
     // stuck detection
@@ -170,7 +180,7 @@ export class BotBrain {
   intent(dt) {
     const a = this.a, g = this.game, now = g.time;
     this.thinkT -= dt;
-    if (this.thinkT <= 0) { this.think(); this.thinkT = 0.25; }
+    if (this.thinkT <= 0) { this.think(); this.thinkT = this.lv.think; }
     const it = { moveX: 0, moveZ: 0, sprint: false, jump: false, dodge: false, primary: false, alt: false, slot: -1, cycle: 0 };
     const t = this.target && this.target.alive ? this.target : null;
     const slot = a.selected();
@@ -263,7 +273,7 @@ export class BotBrain {
         if (!a.shieldUp && d > 12 && now > this.nextShotAt) { this.pendingAlt = true; this.nextShotAt = now + 1; }
         else if (d < 13 && now > this.nextShotAt) { it.primary = true; this.nextShotAt = now + rand(0.6, 1.2); }
       } else if (food.auto) { // blueberries: fire in bursts
-        if (this.burstEnd && now > this.burstEnd) { this.burstEnd = 0; this.nextShotAt = now + rand(0.4, 0.9) * (1.4 - this.skill); }
+        if (this.burstEnd && now > this.burstEnd) { this.burstEnd = 0; this.nextShotAt = now + rand(0.4, 0.9) * (1.4 - this.skill) * this.lv.fire; }
         else if (this.burstEnd) it.primary = true;
         else if (inRange && now > this.nextShotAt) { this.burstEnd = now + rand(0.6, 1.2); it.primary = true; }
       } else if (slot.id === 'peel') {
@@ -274,11 +284,11 @@ export class BotBrain {
           it.primary = true;
           // full charge matches the aim solution; a utensil that needs a longer hold gets it
           this.holdUntil = now + Math.max(food.charge * rand(1.02, 1.15), this.game.utensils.botHold(a, food));
-          this.nextShotAt = now + food.recovery + rand(0.5, 1.4) * (1.4 - this.skill);
+          this.nextShotAt = now + food.recovery + rand(0.5, 1.4) * (1.4 - this.skill) * this.lv.fire;
         }
       } else if (inRange && now > this.nextShotAt) {
         it.primary = true;
-        this.nextShotAt = now + food.recovery + rand(0.5, 1.4) * (1.4 - this.skill);
+        this.nextShotAt = now + food.recovery + rand(0.5, 1.4) * (1.4 - this.skill) * this.lv.fire;
       }
     } else {
       if (mv.lengthSq() > 0.01) a.yaw = yawOf(mv.x, mv.z);
