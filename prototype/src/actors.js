@@ -11,9 +11,9 @@ import { Utensils } from './utensils.js';
 import { makeUtensilMesh } from './utensil-models.js';
 import { HumanRig, SKIN_TONES, HAIR_COLORS, HAIR_STYLES, IRIS_COLORS, SHOE_COLORS, BEARDS, pick } from './human.js';
 
-const JUMP_V = Math.sqrt(2 * G * 6);   // 6 m jump: about three times a Titan's height
-const JUMP2_V = Math.sqrt(2 * G * 5);  // double jump adds another 5 m
-const DASH_SPEED = 28, DASH_TIME = 0.2, DASH_COOLDOWN = 0.45;
+const JUMP_V = Math.sqrt(2 * G * 5);   // 5 m jump: clears a sugar-cube step
+const JUMP2_V = Math.sqrt(2 * G * 4.5); // double jump adds another 4.5 m (about 9.5 m in all)
+const DASH_SPEED = 24, DASH_TIME = 0.2, DASH_COOLDOWN = 0.45;
 // Stamina: jumping and dashing cost it; it refills after a short pause.
 export const STAMINA_MAX = 100;
 const COST_JUMP = 18, COST_DOUBLE = 24, COST_DASH = 30, REGEN = 30, REGEN_DELAY = 0.6;
@@ -382,7 +382,7 @@ export class Actor {
 
     const control = this.canControl() && !this.isRooted();
     const slow = this.slowAmount();
-    let speed = (it.sprint && !this.heavy() ? 10 : 6.5) * (1 - slow); // walk 6.5 m/s, sprint 10 m/s
+    let speed = (it.sprint && !this.heavy() ? 8.5 : 5.6) * (1 - slow); // walk 5.6 m/s, sprint 8.5 m/s
     if (now < this.speedBoostUntil) speed *= 1.35; // Hot Feet
     if (this.shieldUp) speed *= 0.75;
     else if (this.heavy()) speed *= 0.85; // lugging a watermelon
@@ -580,7 +580,7 @@ export class Actor {
     const pitch = this.isRemote ? (this.lookPitch || 0) : Math.asin(clamp(this.aimDir.y, -1, 1));
     if (d2 < 140 * 140 || this === this.game.player) {
       this.rig.pose({
-        t, phase: this.walkPhase, stride: moving ? clamp(speed / 9, 0, 1.3) : 0, sprint: speed > 8.5, onGround: this.onGround, vy: this.vel.y,
+        t, phase: this.walkPhase, stride: moving ? clamp(speed / 7.7, 0, 1.3) : 0, sprint: speed > 7.3, onGround: this.onGround, vy: this.vel.y,
         gliding: this.gliding, dashing: this.dashT > 0, tripped: this.isTripped(), frozen: this.isFrozen(),
         charging: this.charging, charge: this.charging && food ? clamp(this.chargeT / Math.max(0.2, food.charge || 1), 0, 1) : 0,
         throwK: this.armT / 0.3, auto: !!(food && food.auto && this.armT > 0), eating: !!this.eat, shield: this.shieldUp,

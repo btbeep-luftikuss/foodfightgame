@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { hasLineOfSight } from './core.js';
 import { FOODS } from './foods.js';
 import { MAX_HP } from './actors.js';
-import { UTENSIL_BY_ID, utensilHeat, utensilIcon, KIT } from './utensils.js';
+import { UTENSIL_BY_ID, utensilHeat, utensilIcon } from './utensils.js';
 import { Dial } from './dials.js';
 
 const $ = (id) => document.getElementById(id);
@@ -42,8 +42,8 @@ export class HUD {
     // phones: the food plate and the utensil plate in the bottom corners
     if (input.isTouch) {
       const tick = () => this.sfx?.play('tick', null, 0.7);
-      this.foodDial = new Dial($('foodDial'), { side: 'left', n: 5, onPick: (i) => { input.slot = i; }, onTick: tick });
-      this.utDial = new Dial($('utDial'), { side: 'right', n: KIT, onPick: (i) => { input.uslot = i; }, onTick: tick });
+      this.foodDial = new Dial($('foodDial'), { side: 'left', onPick: (i) => { input.slot = i; }, onTick: tick });
+      this.utDial = new Dial($('utDial'), { side: 'right', onPick: (i) => { input.uslot = i; }, onTick: tick });
     }
   }
 
@@ -92,10 +92,9 @@ export class HUD {
   _renderDials(a) {
     const foods = a.inv.map((s) => s && { id: s.id, icon: this.icons[s.id] || '', name: FOODS[s.id].name, count: s.inf ? '∞' : FOODS[s.id].maxStack > 1 ? s.count : null });
     this.foodDial.sync(foods, a.sel);
-    this.foodDial.autoAdvance();
+    this.foodDial.autoAdvance(a.sel);
     const uts = (a.utensils || [null, null, null]).map((id) => id && { id, icon: utensilIcon(id), name: UTENSIL_BY_ID[id].name });
     this.utDial.sync(uts, a.uSel);
-    $('utDial').classList.toggle('none', !uts.some(Boolean));
   }
 
   update(game, dt) {

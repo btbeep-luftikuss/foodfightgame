@@ -471,7 +471,7 @@ export class World {
   }
 
   // ------------------------------------------------------------------ obstacles (0.4): cover and things to climb
-  // With the double jump a Titan reaches about 11 m, so sugar cubes, plates and the colander are climbable.
+  // With the double jump a Titan reaches about 9.5 m, so sugar cubes, plates and the colander are climbable.
   _obstacles() {
     const m = this.mats;
     const canLabel = canvasTex(512, 256, (x, w, h) => {

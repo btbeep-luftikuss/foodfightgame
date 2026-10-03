@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.19: slower Titans, shorter jumps, splats on every surface, and plates that fit what you carry** (`src/stains.js`, `src/dials.js`, `src/actors.js`)
+
+- **A bit slower and lower.** Walking is 5.6 m/s (was 6.5), sprinting 8.5 m/s (was 10) and the dash 24 m/s (was 28). A jump reaches 5 m (was 6) and the double jump adds 4.5 m (was 5), about 9.5 m in all: still enough for the sugar-cube steps and the colander dome.
+- **Splats wrap around things and land everywhere.** Stains used to be painted onto flat rectangles (counter tops, box sides, floor and walls), so they stopped dead at every edge and never appeared on round things. Now each splat is a decal cut out of the real scenery triangles around where it lands: it runs over the lip of a counter and down its front, curls round the giant apple, bean cans, colander, fallen chairs and table legs, and splashes up walls. Splats on a table top don't leak onto the legs underneath (anything hidden under the surface that was hit is skipped). The pictures come from one atlas and every stain in the kitchen sits in one buffer, so all of them together are a single draw call; when it's full, the oldest stains are painted over. A big splat costs about 3 ms, a blueberry splat a few hundredths of a millisecond.
+- **Phone plates fit what you carry.** A plate now has one place for each food (or utensil) you carry, spaced evenly round it: two foods sit half a turn apart, four a quarter turn. Every notch is something you can use, the plate turns either way, and the same short thumb movement (about 60 degrees) brings the next item round whether you carry two things or five. With one thing it just spins and settles back.
+
 **Version 0.18: 3D utensils, held in your left hand** (`src/utensil-models.js`, `src/viewmodel.js`, `src/human.js`)
 
 - **The utensils are 3D models now,** built like the food: simple rounded shapes in glossy plastic, polished steel and wood, without the outlines and cartoon faces of the design sheet. All 20 are new: a red-handled chef's knife, a soft-serve gun with a swirl and a cherry, a spoon, a blow torch with a blue pilot flame, a balloon whisk, a smoothie blender, a rolling pin, a pocket microwave with a glowing window, a box grater, a slotted spatula, a fry basket full of fries, a mortar and pestle, a chrome toaster with toast, a colander full of holes, a cotton candy tub, a striped popcorn bucket, a Y-peeler, a hand mixer, a quilted oven mitt and a frying pan. Each is merged into one shape per material (at most four draw calls).
@@ -171,7 +177,7 @@ npm run dev          # http://localhost:5173
 | Mouse aim; hold the left button to charge, release to throw | Drag on the right half to aim |
 | Right-click or Q: the food's alt action | Alt button |
 | Space jump (again in the air to double jump), C dash | Jump and Dash buttons |
-| 1–5 or mouse wheel: pick food | Turn or tap the food plate (bottom left) |
+| 1–5 or mouse wheel: pick food | Turn (either way) or tap the food plate (bottom left) |
 | 6–8 or R: pick utensil (you carry up to 3) | Turn or tap the utensil plate (bottom right) |
 | Walk into a delivery box (or over a loose utensil) to carry it; with the Pan, Q slams | Same |
 | Click the game to lock the mouse | |
@@ -187,7 +193,7 @@ npm run dev          # http://localhost:5173
 | `src/actors.js` | Titans: movement, statuses, diminishing returns, inventory; drives the rig each frame |
 | `src/human.js` | The human model: lofted, skinned body and face, hair and beards, palette shader, skeleton posing, first-person arm |
 | `src/skins.js` | Skins: rarity, clothing palettes, costume pieces on the head, chest and hip bones |
-| `src/stains.js` | Food stains on every surface (lazily created tiles) |
+| `src/stains.js` | Food stains on every surface: decals cut from the scenery triangles, one atlas, one draw call |
 | `src/net.js`, `src/viewmodel.js` | Online rooms; first-person arm and held food |
 | `src/projectiles.js` | Projectile flight, boomerang steering, rolling, hit detection (body capsule and head) |
 | `src/items.js` | Pickups and spawners, peel traps, stuck carrots |
