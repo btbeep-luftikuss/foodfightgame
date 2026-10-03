@@ -36,7 +36,8 @@ Since prototype 0.16 every utensil works with every food you can throw, includin
 wheels, watermelons, bananas, pineapples, grapes and blueberries (see the prototype README for
 how each kind of food is handled), and six of them also change the banana peel trap. Utensils
 arrive in parachuting delivery boxes, and since 0.17 you can carry three and switch between them
-(6, 7, 8 or R on a keyboard; the utensil plate in the bottom-right corner on a phone). The in-game descriptions are slightly more precise than
+(6, 7, 8 or R on a keyboard; the utensil plate in the bottom-right corner on a phone). In the game the utensils are 3D models (`prototype/src/utensil-models.js`) in the food's
+style rather than this flat art, and the one in use is held in the Titan's left hand. The in-game descriptions are slightly more precise than
 the one-liners above (they give the exact numbers).
 
 ## Art style

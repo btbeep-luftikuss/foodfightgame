@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { clamp, damp } from './core.js';
 import { makeFoodMesh } from './foods.js';
 import { fpArmGeometry, FP_ARM_UP, FP_PALM_N } from './human.js';
+import { makeUtensilMesh } from './utensil-models.js';
 
 const HELD_SCALE = { cheese: 0.55, watermelon: 0.5, carrot: 0.75, banana: 0.8, grapes: 0.7, blueberry: 0.8, pineapple: 0.7 };
 
@@ -29,6 +30,22 @@ export class ViewModel {
     this._grip(0.06);
     this.heldId = null; this.held = null;
     this.kick = 0; this.t = 0;
+    // Your left arm, a mirror image of the right, holding the utensil in hand (only while you have one).
+    this.rootL = new THREE.Group();
+    this.rootL.position.set(-0.5, -0.44, -0.92);
+    camera.add(this.rootL);
+    this.swayL = new THREE.Group();
+    this.rootL.add(this.swayL);
+    this.armL = new THREE.Mesh(fpArmGeometry(1.25, 1.15), this.arm.material); // fingers wrapped around the handle
+    this.armL.frustumCulled = false;
+    this.armL.scale.set(-1.3, 1.3, 1.3); // mirrored (three.js flips the face winding for a negative scale)
+    this.swayL.add(this.armL);
+    this.handL = new THREE.Group();
+    this.swayL.add(this.handL);
+    const m = (v) => v.clone().setX(-v.x);
+    // the fist closes around the handle: wrist just below and behind the grip
+    this.armL.position.copy(this.handL.position).addScaledVector(m(this.palmN), -(this.gripR = 0.045)).addScaledVector(m(this.armUp), 0.095);
+    this.toolId = null; this.tool = null; this.kickL = 0; this.toolIn = 0;
     this.root.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
   }
 
@@ -41,8 +58,10 @@ export class ViewModel {
 
   update(dt, player, visible) {
     this.root.visible = visible;
+    this.rootL.visible = visible && !!this.tool && this.toolIn > 0.02;
     if (!visible) return;
-    if (player.rig && this.arm.material !== player.rig.material) this.arm.material = player.rig.material; // your skin's colours
+    if (player.rig && this.arm.material !== player.rig.material) this.arm.material = this.armL.material = player.rig.material; // your skin's colours
+    this._left(dt, player);
     const slot = player.selected();
     const id = slot ? slot.id : null;
     if (id !== this.heldId) {
@@ -79,5 +98,34 @@ export class ViewModel {
     this.sway.rotation.x = damp(this.sway.rotation.x, rx, 16, dt);
     this.sway.rotation.z = damp(this.sway.rotation.z, rz, 10, dt);
     if (this.held) this.held.rotation.y += dt * (id === 'blueberry' ? 0 : 0.3);
+  }
+
+  // The left hand: swaps utensils by dipping out of view and back, kicks forward when the utensil fires.
+  _left(dt, player) {
+    const id = player.alive ? player.utensil : null;
+    if (id !== this.toolId) {
+      if (this.toolIn > 0.05 && this.tool) { this.toolIn = Math.max(0, this.toolIn - dt * 7); } // lower the old one first
+      else {
+        if (this.tool) this.handL.remove(this.tool);
+        this.tool = id ? makeUtensilMesh(id) : null;
+        if (this.tool) {
+          this.tool.scale.setScalar(0.5);
+          this.tool.rotation.set(-0.35, 0.5, -0.32); // up, leaning in toward the middle of the view and away from you
+          this.tool.position.set(0.0, -0.02, 0.0);
+          this.handL.add(this.tool);
+        }
+        this.toolId = id;
+      }
+    } else this.toolIn = Math.min(1, this.toolIn + dt * (this.tool ? 5 : -7));
+    if (!this.tool) { this.toolIn = 0; return; }
+    if (player.armT > 0.25 && player.uRel?.used !== false) this.kickL = Math.min(1, this.kickL + 0.7);
+    this.kickL = damp(this.kickL, 0, 9, dt);
+    const speed = Math.hypot(player.vel.x, player.vel.z);
+    const bob = player.onGround && speed > 0.5 ? Math.sin(player.walkPhase + Math.PI) * 0.02 * Math.min(1.5, speed / 6) : Math.sin(this.t * 1.5 + 1) * 0.004;
+    const y = bob - (1 - this.toolIn) * 0.45 + (player.charging ? -0.03 : 0);
+    const z = -0.16 * this.kickL;
+    this.swayL.position.set(damp(this.swayL.position.x, 0, 16, dt), damp(this.swayL.position.y, y, 16, dt), damp(this.swayL.position.z, z, 16, dt));
+    this.swayL.rotation.x = damp(this.swayL.rotation.x, -0.5 * this.kickL, 16, dt);
+    this.swayL.rotation.z = damp(this.swayL.rotation.z, player.dashT > 0 ? 0.25 : 0, 10, dt);
   }
 }

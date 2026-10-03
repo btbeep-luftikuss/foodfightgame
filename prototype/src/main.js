@@ -10,7 +10,8 @@ import { SKINS, SKIN_BY_ID, RARITY } from './skins.js';
 import { titanPreview } from './actors.js';
 import { TITANS } from './game.js';
 import { Net, roomAvailable, cleanRoom } from './net.js';
-import { UTENSILS, UTENSIL_BY_ID, utensilIcon } from './utensils.js';
+import { UTENSILS, UTENSIL_BY_ID, UTENSIL_IDS, utensilIcon, setUtensilIcons } from './utensils.js';
+import { makeUtensilMesh } from './utensil-models.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -83,6 +84,20 @@ function renderIcons() {
     icons[id] = r.domElement.toDataURL('image/png');
     scene.remove(m);
   }
+  // Utensil icons from the 3D models, tilted a little so they read as objects
+  const uicons = {};
+  for (const id of UTENSIL_IDS) {
+    const m = makeUtensilMesh(id);
+    m.rotation.set(0.25, -0.5, -0.5);
+    scene.add(m);
+    const sph = new THREE.Box3().setFromObject(m).getBoundingSphere(new THREE.Sphere());
+    cam.position.set(sph.center.x, sph.center.y + sph.radius * 0.3, sph.center.z + sph.radius * 3.7);
+    cam.lookAt(sph.center);
+    r.render(scene, cam);
+    uicons[id] = r.domElement.toDataURL('image/png');
+    scene.remove(m);
+  }
+  setUtensilIcons(uicons);
   // Locker thumbnails: each skin on a standing Titan, turned a little toward the light (2x for sharp cards).
   r.setSize(192, 192, false);
   const rim = new THREE.DirectionalLight('#bfe0ff', 1.4);

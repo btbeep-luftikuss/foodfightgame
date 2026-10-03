@@ -22,6 +22,7 @@ import * as THREE from 'three';
 import { G, groundHeight, rand, clamp, forwardOf, raycastWorld, segPointDist2 } from './core.js';
 import { FOODS, makeFoodMesh } from './foods.js';
 import { UTENSIL_ART } from './utensil-art.js';
+import { makeUtensilMesh } from './utensil-models.js';
 
 const SINGLE = ['tomato', 'carrot', 'ice', 'soda', 'chili', 'jelly', 'cookie', 'pineapple', 'banana'];
 const ROLL = ['cheese', 'watermelon'];
@@ -85,8 +86,10 @@ export const KIT = 3; // utensils a Titan can carry
 export const utensilHeat = (id) => RULES[id]?.heat || null; // heat limits, for the HUD
 export const randomUtensilId = () => UTENSIL_IDS[(Math.random() * UTENSIL_IDS.length) | 0];
 
-// The art as an <img>-ready data URL (HUD, menus) and as a texture (pickups, badges, boxes).
+// The art as an <img>-ready data URL (HUD, menus, box labels): snapshots of the 3D models when
+// main.js could render them (setUtensilIcons), the flat design-sheet art otherwise.
 const urlCache = {};
+export function setUtensilIcons(map) { for (const [id, url] of Object.entries(map)) if (url) urlCache[id] = url; }
 export function utensilIcon(id) {
   return (urlCache[id] ||= `data:image/svg+xml;charset=utf-8,${encodeURIComponent(UTENSIL_ART[id] || '')}`);
 }
@@ -100,19 +103,6 @@ function withArt(id, draw) { // draws the utensil art once it has loaded
   }
   if (e.ready) draw(e.img); else e.waiting.push(draw);
 }
-const texCache = {};
-function utensilTexture(id) {
-  if (texCache[id]) return texCache[id];
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  withArt(id, (img) => { c.getContext('2d').drawImage(img, 0, 0, 256, 256); tex.needsUpdate = true; });
-  return (texCache[id] = tex);
-}
-const spriteMats = {};
-const spriteMat = (id) => (spriteMats[id] ||= new THREE.SpriteMaterial({ map: utensilTexture(id), transparent: true, depthWrite: false }));
-
 // ---------------------------------------------------------------------------- shared visuals
 const SPHERE = new THREE.SphereGeometry(1, 16, 12);
 const TORUS = new THREE.TorusGeometry(1, 0.32, 8, 22);
@@ -569,7 +559,6 @@ export class Utensils {
     this.game = game;
     this.pickups = []; this.zones = []; this.pending = []; this.boxes = [];
     this.nextDrop = 0;
-    this.badges = new Map(); // actor -> sprite showing the utensil they carry
     this.attachPool = {};
   }
 
@@ -1236,7 +1225,7 @@ export class Utensils {
   // ------------------------------------------------------------------ loose utensils on the floor
   reset() {
     const g = this.game;
-    for (const it of this.pickups) g.scene.remove(it.sprite, it.ring);
+    for (const it of this.pickups) g.scene.remove(it.model, it.ring);
     this.pickups.length = 0;
     for (const z of this.zones) this._dropZone(z);
     this.zones.length = 0;
@@ -1249,16 +1238,15 @@ export class Utensils {
 
   drop(id, pos, from = null) {
     const g = this.game;
-    const sprite = new THREE.Sprite(spriteMat(id));
-    sprite.scale.setScalar(2.1);
-    sprite.renderOrder = 5;
+    const model = makeUtensilMesh(id); // the real thing, big enough to spot, spinning over its ring
+    model.scale.setScalar(2.2);
     const ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.25, 40).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({ color: UTENSIL_BY_ID[id].color, transparent: true, opacity: 0.9, depthWrite: false }));
     const p = pos.clone();
     p.y = groundHeight(p.x, p.z, p.y + 1);
     ring.position.copy(p).setY(p.y + 0.07);
-    g.scene.add(sprite, ring);
-    const it = { id, pos: p, sprite, ring, phase: rand(0, 6), noPick: from, noPickUntil: g.time + 4 };
+    g.scene.add(model, ring);
+    const it = { id, pos: p, model, ring, phase: rand(0, 6), noPick: from, noPickUntil: g.time + 4 };
     this.pickups.push(it);
     return it;
   }
@@ -1279,7 +1267,8 @@ export class Utensils {
     for (let i = this.pickups.length - 1; i >= 0; i--) {
       const it = this.pickups[i];
       const bob = Math.sin(t * 2.4 + it.phase) * 0.18;
-      it.sprite.position.set(it.pos.x, it.pos.y + 1.7 + bob, it.pos.z);
+      it.model.position.set(it.pos.x, it.pos.y + 0.55 + bob, it.pos.z);
+      it.model.rotation.set(0.25, t * 1.6 + it.phase, 0.15);
       it.ring.rotation.y += dt;
       it.ring.material.opacity = 0.6 + Math.sin(t * 4 + it.phase) * 0.3;
       for (const a of g.actors) {
@@ -1291,7 +1280,7 @@ export class Utensils {
         }
         if (!near || a.utensils?.includes(it.id) || a.utensil === it.id) continue;
         if (a.isBot && a.utensil) continue; // bots keep the first utensil they find
-        g.scene.remove(it.sprite, it.ring);
+        g.scene.remove(it.model, it.ring);
         it.ring.geometry.dispose(); it.ring.material.dispose();
         this.pickups.splice(i, 1);
         const old = this.give(a, it.id);
@@ -1301,22 +1290,6 @@ export class Utensils {
         break;
       }
     }
-  }
-
-  // Badges: the utensil a Titan carries floats over their shoulder.
-  _badges() {
-    const g = this.game;
-    for (const a of g.actors) {
-      let b = this.badges.get(a);
-      const show = a.alive && a.utensil && a.root.visible && !(a === g.player && g.firstPerson);
-      if (!show) { if (b) b.visible = false; continue; }
-      if (!b) { b = new THREE.Sprite(spriteMat(a.utensil)); b.scale.setScalar(0.75); b.renderOrder = 6; g.scene.add(b); this.badges.set(a, b); }
-      if (b.material !== spriteMat(a.utensil)) b.material = spriteMat(a.utensil);
-      forwardOf(a.yaw, _w);
-      b.position.set(a.pos.x + _w.z * 0.55, a.pos.y + 2.05, a.pos.z - _w.x * 0.55);
-      b.visible = true;
-    }
-    for (const [a, b] of this.badges) if (!g.actors.includes(a)) { b.visible = false; }
   }
 
   update(dt) {
@@ -1334,6 +1307,6 @@ export class Utensils {
       }
     }
   }
-  // visuals that should follow the camera's view of the Titans (call after actor visuals)
-  updateVisual() { this._badges(); }
+  // (the utensil a Titan carries is drawn in their left hand: Actor._refreshUtensil)
+  updateVisual() {}
 }

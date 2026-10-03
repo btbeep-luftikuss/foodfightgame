@@ -8,6 +8,7 @@ import {
 import { FOODS, makeFoodMesh } from './foods.js';
 import { dress } from './skins.js';
 import { Utensils } from './utensils.js';
+import { makeUtensilMesh } from './utensil-models.js';
 import { HumanRig, SKIN_TONES, HAIR_COLORS, HAIR_STYLES, IRIS_COLORS, SHOE_COLORS, BEARDS, pick } from './human.js';
 
 const JUMP_V = Math.sqrt(2 * G * 6);   // 6 m jump: about three times a Titan's height
@@ -170,6 +171,18 @@ export class Actor {
       this.rig.handAnchorR.add(this.heldMesh);
       this.heldMesh.traverse((o) => { if (o.isMesh) o.castShadow = !!this.game.quality.dynamicShadows; });
     }
+  }
+
+  // The utensil in hand, as a 3D model in the left fist (remote players' too, from their presence).
+  _refreshUtensil() {
+    const id = this.alive ? this.utensil : null;
+    if (id === this.uMeshId) return;
+    if (this.uMesh) this.uMesh.parent?.remove(this.uMesh);
+    this.uMesh = null; this.uMeshId = id;
+    if (!id) return;
+    this.uMesh = makeUtensilMesh(id, !!this.game.quality.dynamicShadows);
+    this.uMesh.scale.setScalar(0.75);
+    this.rig.handAnchorL.add(this.uMesh);
   }
 
   // ------------------------------------------------------------------ queries
@@ -538,6 +551,7 @@ export class Actor {
     const r = this.root;
     r.position.copy(this.pos);
     r.rotation.y = angleLerp(r.rotation.y, this.yaw + Math.PI, 1 - Math.exp(-18 * dt));
+    this._refreshUtensil();
     if (!this.alive) return;
     const speed = Math.hypot(this.vel.x, this.vel.z);
     const moving = this.onGround && speed > 0.5 && !this.isFrozen();
@@ -570,7 +584,7 @@ export class Actor {
         gliding: this.gliding, dashing: this.dashT > 0, tripped: this.isTripped(), frozen: this.isFrozen(),
         charging: this.charging, charge: this.charging && food ? clamp(this.chargeT / Math.max(0.2, food.charge || 1), 0, 1) : 0,
         throwK: this.armT / 0.3, auto: !!(food && food.auto && this.armT > 0), eating: !!this.eat, shield: this.shieldUp,
-        heavy: this.heavy() && !this.shieldUp, holding: !!this.heldMesh, pitch: clamp(pitch, -1, 1), hit: this.hitFlash,
+        heavy: this.heavy() && !this.shieldUp, holding: !!this.heldMesh, tool: !!this.uMesh, pitch: clamp(pitch, -1, 1), hit: this.hitFlash,
       }, dt);
     }
     this.napkin.visible = this.gliding;

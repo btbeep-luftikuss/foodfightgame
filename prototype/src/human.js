@@ -534,10 +534,10 @@ export function bodyGeometry(hi) {
 // The forearm runs back toward the lower right of the screen; the palm faces up and left, under the food.
 export const FP_ARM_UP = V(0.32, -0.5, 0.8).normalize();
 export const FP_PALM_N = (() => { const n = V(-0.3, 1, 0.05); return n.addScaledVector(FP_ARM_UP, -n.dot(FP_ARM_UP)).normalize(); })();
-export function fpArmGeometry() {
+export function fpArmGeometry(curl = 0.62, thumbCurl = 0.35) { // (a fist around a handle: curl about 1.2)
   const B = new Builder();
   arm(B, -1, true, 0.1);
-  hand(B, -1, true, 0.62, 0.35, 0);
+  hand(B, -1, true, curl, thumbCurl, 0);
   const g = B.geometry();
   const f = AR, W = f.S.clone().addScaledVector(f.d, 0.55);
   const rest = new THREE.Matrix4().makeBasis(f.ex.clone().negate(), f.d.clone().negate(), V(0, 0, 1)).setPosition(W);
@@ -862,6 +862,11 @@ export class HumanRig {
     this.handAnchorR = new THREE.Group();
     this.handAnchorR.position.copy(AR.d).multiplyScalar(0.075).addScaledVector(AR.ex, -0.035);
     this.bones.handR.add(this.handAnchorR);
+    // ... and the utensil in the left fist: the tool points forward out of the fist (up when the forearm is raised)
+    this.handAnchorL = new THREE.Group();
+    this.handAnchorL.position.copy(AL.d).multiplyScalar(0.07).addScaledVector(AL.ex, -0.02).add(V(0, 0, 0.012));
+    this.handAnchorL.rotation.x = Math.PI / 2;
+    this.bones.handL.add(this.handAnchorL);
     this.outfit = [];
     this.blinkT = 1 + Math.random() * 3; this.blinkK = 0;
     this.near = true;
@@ -924,6 +929,11 @@ export class HumanRig {
     T.thighR[0] = tR - 0.03; T.thighR[2] = -0.015; T.shinR[0] = kR;
     T.footL[0] = -(tL + kL) * 0.85 + (sn < 0 ? -sn * 0.35 * a : 0);
     T.footR[0] = -(tR + kR) * 0.85 + (sn > 0 ? sn * 0.35 * a : 0);
+    // --- a utensil in the left hand: forearm raised so it's held out in front, swinging a little less
+    if (s.tool) {
+      T.upperArmL[0] = sn * 0.2 * a - 0.32; T.upperArmL[2] = 0.18;
+      T.foreArmL[0] = -1.15; T.foreArmL[1] = -0.25; T.handL[0] = -0.1; T.handL[2] = 0.15;
+    }
     // --- airborne
     if (!s.onGround && !s.gliding && !s.tripped) {
       const up = (s.vy || 0) > 1;
