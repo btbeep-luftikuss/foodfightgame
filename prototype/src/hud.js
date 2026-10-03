@@ -112,12 +112,11 @@ export class HUD {
     // the top pill: Soap Tide timer (or online status), Titans left, your splats
     const T = game.tide;
     let tt, urgent = false, ico = 'bubble', tip = 'Soap Tide';
-    if (game.online && game.net) {
-      ico = 'online'; tip = `Online in room ${game.net.roomName}`;
-      tt = game.net.connected ? 'Online' : 'Reconnecting';
-      urgent = !game.net.connected;
-      this._scoreboard(game);
-    } else if (game.state === 'drop') tt = 'Drop in';
+    if (game.online && game.net) this._scoreboard(game);
+    if (game.online && game.net && !game.net.connected) { ico = 'online'; tt = 'Reconnecting'; urgent = true; tip = `Room ${game.net.roomName}`; }
+    else if (game.state === 'lobby') { ico = 'online'; tt = 'Joining'; tip = `Room ${game.net?.roomName || ''}`; }
+    else if (game.state === 'over') { tt = 'Next round'; tip = 'The next round starts in a few seconds'; }
+    else if (game.state === 'drop') tt = 'Drop in';
     else if (T.phase >= T.phases.length) { tt = 'Final'; urgent = true; tip = 'Final circle'; }
     else if (T.mode === 'wait') { const s = Math.ceil(T.t); tt = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; tip = 'The Soap Tide moves in'; }
     else { tt = 'Tide!'; urgent = true; tip = 'The Soap Tide is closing in'; }
@@ -128,9 +127,9 @@ export class HUD {
       $('tideIco').className = `ico ${ico}`;
       $('tideSeg').title = tip;
       $('tide').classList.toggle('urgent', urgent);
-      $('aliveSeg').title = game.online ? 'Players in the room' : 'Titans left';
+      $('aliveSeg').title = 'Titans left';
     }
-    const alive = String(game.online && game.net ? game.net.playerCount() : game.aliveCount());
+    const alive = String(game.aliveCount());
     if ($('alive').textContent !== alive) $('alive').textContent = alive;
 
     if (a) {
@@ -222,7 +221,7 @@ export class HUD {
     if (this.sbT % 20) return;
     const el = $('scores');
     el.hidden = false;
-    const rows = game.actors.filter((a) => a === game.player || a.isRemote)
+    const rows = game.actors.filter((a) => a === game.player || a.isRemote || a.isBot)
       .sort((a, b) => b.kills - a.kills).slice(0, 8);
     el.replaceChildren(...rows.map((a) => {
       const li = document.createElement('li');

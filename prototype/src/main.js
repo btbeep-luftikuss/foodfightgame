@@ -10,6 +10,7 @@ import { SKINS, SKIN_BY_ID, RARITY } from './skins.js';
 import { titanPreview } from './actors.js';
 import { TITANS } from './game.js';
 import { BOT_LEVELS } from './bots.js';
+import { MAPS } from './world.js';
 import { Net, roomAvailable, cleanRoom } from './net.js';
 import { UTENSILS, UTENSIL_BY_ID, UTENSIL_IDS, utensilIcon, setUtensilIcons } from './utensils.js';
 import { makeUtensilMesh } from './utensil-models.js';
@@ -150,7 +151,9 @@ function boot() {
   const icons = renderIcons();
   setFoodShadows(quality.dynamicShadows);
   const hud = new HUD(icons, input, sfx);
-  const game = new Game({ renderer, scene, camera, quality, hud, input, sfx });
+  let mapId = 'kitchen'; // the arena (see MAPS in world.js), remembered between visits
+  try { const v = localStorage.getItem('tt-map'); if (MAPS[v]) mapId = v; } catch { /* storage blocked */ }
+  const game = new Game({ renderer, scene, camera, quality, hud, input, sfx, map: mapId });
   window.__game = game; // handy for debugging in the console
 
   // Menu food legend, using the same rendered icons.
@@ -178,19 +181,56 @@ function boot() {
   }
   let matchOpts = {}; // what "Play again" repeats
   // Bot difficulty: remembered between visits, applied to the next match
-  let botLevel = 'medium';
-  try { const v = localStorage.getItem('tt-bots'); if (BOT_LEVELS[v]) botLevel = v; } catch { /* storage blocked */ }
-  const syncLevel = () => document.querySelectorAll('#botlevel button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.level === botLevel)));
+  // (online rooms can also have no bots: onlineBots 'off')
+  let botLevel = 'medium', onlineBots = 'medium', onlineMode = 'classic';
+  try {
+    const v = localStorage.getItem('tt-bots'); if (BOT_LEVELS[v]) botLevel = v;
+    const o = localStorage.getItem('tt-online-bots'); if (BOT_LEVELS[o] || o === 'off') onlineBots = o;
+    if (localStorage.getItem('tt-online-mode') === 'chef') onlineMode = 'chef';
+  } catch { /* storage blocked */ }
+  const settings = $('match-settings');
+  const forOnline = () => settings.classList.contains('online');
+  const syncLevel = () => {
+    const lv = forOnline() ? onlineBots : botLevel;
+    document.querySelectorAll('#botlevel button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.level === lv)));
+    document.querySelectorAll('#mappick button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.map === mapId)));
+    document.querySelectorAll('#onlinemode button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === onlineMode)));
+    $('map-note').textContent = MAPS[mapId].blurb;
+  };
   $('botlevel').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-level]');
     if (!b) return;
-    botLevel = b.dataset.level;
-    try { localStorage.setItem('tt-bots', botLevel); } catch { /* storage blocked */ }
+    if (forOnline()) { onlineBots = b.dataset.level; try { localStorage.setItem('tt-online-bots', onlineBots); } catch { /* storage blocked */ } }
+    else { botLevel = b.dataset.level; try { localStorage.setItem('tt-bots', botLevel); } catch { /* storage blocked */ } }
     syncLevel();
   });
+  $('onlinemode').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-mode]');
+    if (!b) return;
+    onlineMode = b.dataset.mode;
+    try { localStorage.setItem('tt-online-mode', onlineMode); } catch { /* storage blocked */ }
+    syncLevel();
+  });
+  // Picking a map rebuilds the kitchen (or the yard) right away: the bots behind the menu move there too.
+  $('mappick').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-map]');
+    if (!b || b.dataset.map === mapId) return;
+    mapId = b.dataset.map;
+    try { localStorage.setItem('tt-map', mapId); } catch { /* storage blocked */ }
+    syncLevel();
+    if (!playing && game.setMap(mapId)) game.newMatch(false);
+  });
   syncLevel();
+  // The settings block lives in whichever panel is open: Play vs bots or Play online.
+  const placeSettings = (online) => {
+    if (online) $('online-settings').appendChild(settings); else $('modes').insertBefore(settings, $('modes').firstChild);
+    settings.classList.toggle('online', online);
+    syncLevel();
+  };
+  game.onMapChange = () => applyQuality(qKey); // fog distance, shadows and atmosphere for the new map
   function start(opts = matchOpts) {
     game.botLevel = botLevel;
+    game.setMap(mapId);
     sfx.unlock();
     matchOpts = opts;
     game.newMatch(true, opts);
@@ -201,12 +241,14 @@ function boot() {
     playing = false; input.enabled = false; end.hidden = true; pause.hidden = true; hud.show(false); touch.hidden = true;
     menu.hidden = false; input.exitLock();
     $('modes').hidden = true; $('chef').hidden = true; $('mode-chef').setAttribute('aria-expanded', 'false');
+    game.setMap(mapId); // an online room may have played the other map
     game.newMatch(false);
   }
   // Play opens the mode chooser: Classic starts right away, Chef's Choice opens the food picker.
   const reveal = (el) => requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
   $('play').addEventListener('click', () => {
     $('modes').hidden = false; $('online').hidden = true; $('locker').hidden = true; closeStage();
+    placeSettings(false);
     reveal($('modes'));
   });
   $('mode-classic').addEventListener('click', () => start({}));
@@ -362,7 +404,10 @@ function boot() {
   // Online: join a room code; everyone with the same code plays together.
   const status = $('online-status');
   try { $('nick').value = localStorage.getItem('tt-nick') || ''; } catch { /* storage blocked */ }
-  $('online-open').addEventListener('click', () => { $('online').hidden = !$('online').hidden; $('modes').hidden = true; $('locker').hidden = true; closeStage(); if (!$('online').hidden) $('nick').focus(); });
+  $('online-open').addEventListener('click', () => {
+    $('online').hidden = !$('online').hidden; $('modes').hidden = true; $('locker').hidden = true; closeStage();
+    if (!$('online').hidden) { placeSettings(true); $('nick').focus(); }
+  });
   $('online').addEventListener('submit', async (e) => {
     e.preventDefault();
     sfx.unlock();
@@ -379,7 +424,8 @@ function boot() {
     try {
       const net = new Net(game);
       const nick = $('nick').value || 'Titan';
-      await net.connect(lobby, cleanRoom($('roomcode').value), nick);
+      // what I'd host with (if the room has no host yet); joiners take the room's settings
+      await net.connect(lobby, cleanRoom($('roomcode').value), nick, { map: mapId, mode: onlineMode, bots: onlineBots, loadout: chefPick.length === 3 ? [...chefPick] : null });
       try { localStorage.setItem('tt-nick', nick); } catch { /* storage blocked */ }
       game.startOnline(net);
       status.textContent = '';

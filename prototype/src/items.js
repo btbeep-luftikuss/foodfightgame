@@ -88,7 +88,8 @@ export class Items {
     mesh.rotation.y = rand(0, 6.28);
     this.game.scene.add(mesh);
     this.traps.push({ owner, pos: pos.clone(), mesh, until: this.game.time + 40 });
-    if (this.game.net && owner === this.game.player) this.game.net.event('p', +pos.x.toFixed(2), +pos.y.toFixed(2), +pos.z.toFixed(2));
+    const net = this.game.net;
+    if (net && (owner === this.game.player || (owner.isBot && !owner.isRemote && net.isHost))) net.event('p', +pos.x.toFixed(2), +pos.y.toFixed(2), +pos.z.toFixed(2), ...(owner.isBot ? [owner.id] : []));
   }
   _removeTrap(t) {
     this.game.scene.remove(t.mesh);
@@ -104,7 +105,8 @@ export class Items {
     mesh.position.copy(pos).setY(pos.y + 0.35);
     this.game.scene.add(mesh);
     this.tramps.push({ owner, pos: pos.clone(), mesh, until: this.game.time + 30, squish: 0 });
-    if (this.game.net && owner === this.game.player) this.game.net.event('r', +pos.x.toFixed(2), +pos.y.toFixed(2), +pos.z.toFixed(2));
+    const net = this.game.net;
+    if (net && (owner === this.game.player || (owner.isBot && !owner.isRemote && net.isHost))) net.event('r', +pos.x.toFixed(2), +pos.y.toFixed(2), +pos.z.toFixed(2), ...(owner.isBot ? [owner.id] : []));
   }
   _removeTramp(t) {
     this.game.scene.remove(t.mesh);

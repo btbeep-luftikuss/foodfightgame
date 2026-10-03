@@ -9,7 +9,7 @@ the food stays the projectile, keeps its own look and effect, and the utensil ad
 
 | # | Utensil | Role | Shown with | Buff | Trade-off |
 |---|---------|------|------------|------|-----------|
-| 01 | Knife | Rapid-Fire Chopper | Tomato | Chops your food into a rapid stream of bite-size pieces; back-to-back hits stack the food's own effect. | Burns through ammo fast, and each piece hits softer than a whole food. |
+| 01 | Knife | Rapid-Fire Chopper | Tomato | Slices your food into a fan of quick pieces (in the game: a cheese wheel or watermelon is diced into mini balls that roll out); back-to-back hits stack the food's own effect. | Burns through ammo fast, and each piece hits softer than a whole food. |
 | 02 | Ice Cream Machine | Cryo Converter | Banana | Coats your food in soft-serve: it arcs slowly, freezes on hit and leaves a frost zone with the food's effect. | Takes a moment to churn, and the frozen shot flies slowly enough to dodge. |
 | 03 | Spoon | Shotgun Burst | Blueberries | Scoops a heap of your food and flings it as a tight cone of pellets. | Each fling uses a big scoop of ammo, and the pellets spread wide at range. |
 | 04 | Blow Torch | Incendiary Charge | Pineapple | Hold for 3 seconds to set your food ablaze for heavy burn damage over 3 seconds. | You stand exposed while charging, and the torched food is used up on impact. |

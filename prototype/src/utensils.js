@@ -39,8 +39,8 @@ const TINT = { tomato: '#e8321f', carrot: '#ff8a1c', ice: '#bfe9ff', soda: '#8a4
 const MIX_IMPACT = { tomato: 'tomato', carrot: 'carrot', ice: 'ice', soda: 'soda', chili: 'chili', cookie: 'cookie', jelly: 'jelly', grapes: 'grape', blueberry: 'berry', watermelon: 'melonchunk', cheese: 'cheesechunk', banana: 'bananaslice', pineapple: 'pinechunk' };
 
 export const UTENSILS = [
-  { id: 'knife', tip: '3 pieces per throw · uses 1 extra', name: 'Knife', role: 'Rapid-Fire Chopper', color: '#ff5a3c', works: THROWN,
-    buff: 'Chops your food into 3 quick pieces (wheels and melons into chunks, grapes and berries in two); back-to-back hits stack its effect.', trade: 'Uses 1 extra food per throw, and each piece hits softer.' },
+  { id: 'knife', tip: 'A fan of 3 slices · uses 1 extra', name: 'Knife', role: 'Rapid-Fire Chopper', color: '#ff5a3c', works: THROWN,
+    buff: 'Slices your food into a fan of 3 that sweeps side to side; a cheese wheel or watermelon is diced into 5 mini balls that roll out in a spread (grapes and berries split in two).', trade: 'Uses 1 extra food per throw, and each slice or mini ball hits softer.' },
   { id: 'ice-cream-machine', tip: 'Freezes on hit · leaves an ice patch', peelTip: 'Your peel lands on an ice patch', name: 'Ice Cream Machine', role: 'Cryo Converter', color: '#7fe3cf', works: WITH_PEEL,
     buff: 'Coats your food in soft-serve: it freezes whoever it hits and leaves an ice patch. A dropped peel gets an ice patch too.', trade: 'Takes half a second to churn, and the frozen shot flies slowly.' },
   { id: 'spoon', tip: '5-pellet cone · short range', name: 'Spoon', role: 'Shotgun Burst', color: '#8f9cff', works: THROWN,
@@ -117,7 +117,7 @@ const MAT = {
   vortex: new THREE.MeshBasicMaterial({ color: '#b98cff', transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide }),
 };
 const col = (hex) => new THREE.Color(hex);
-const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _c = new THREE.Vector3();
+const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _c = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
 
 function webTexture() {
   const c = document.createElement('canvas');
@@ -212,7 +212,18 @@ const RULES = {
     cost: 1, rec: 0.8,
     launch(o, a, rel, I) {
       if (I.kind === 'pellet') return [0, 1].map(() => ({ ...clone(o), vel: jitter(o.vel.clone(), 0.035), x: { m: 0.6, sc: 0.8 } }));
-      return pieces(o, a, 3, { m: 0.45, sc: 0.62, delay: 0.07 });
+      if (I.kind === 'roll') { // diced: a spread of mini cheese balls or mini melons rolling out along the floor
+        const n = 5;
+        return Array.from({ length: n }, (_, i) => {
+          const q = clone(o), ang = (i - (n - 1) / 2) * 0.17;
+          q.vel.applyAxisAngle(_up, ang).multiplyScalar(rand(0.95, 1.12));
+          q.radius = (o.radius ?? 0.75) * 0.42; q.life = 4.5; q.delay = Math.abs(i - (n - 1) / 2) * 0.04;
+          q.x = { m: 0.32, sc: 0.42, mb: 1 };
+          return q;
+        });
+      }
+      // sliced: three pieces fanned out side to side (the Blender fires a straight jet instead)
+      return pieces(o, a, 3, { m: 0.45, sc: 0.62, delay: 0.03 }).map((q, i) => { q.vel.applyAxisAngle(_up, (i - 1) * 0.11); return q; });
     },
   },
   'ice-cream-machine': {
@@ -780,7 +791,7 @@ export class Utensils {
     else if (x.sc !== undefined) out.sc = n(x.sc, 0.2, 2);
     for (const k of ['wb', 'fb', 'pc']) if (x[k] !== undefined) out[k] = n(x[k], 0, 5) | 0;
     if (x.pa !== undefined) out.pa = n(x.pa, 0, 2);
-    for (const k of ['fl', 'pi', 'pp', 'nf', 'ns', 'sl', 'sp', 'sm', 'kb', 'tr', 'ps', 'pe']) if (x[k]) out[k] = 1;
+    for (const k of ['fl', 'pi', 'pp', 'nf', 'ns', 'sl', 'sp', 'sm', 'kb', 'tr', 'ps', 'pe', 'mb']) if (x[k]) out[k] = 1;
     if (typeof x.mx === 'string' && Object.values(MIX_IMPACT).includes(x.mx)) out.mx = x.mx;
     return out;
   }

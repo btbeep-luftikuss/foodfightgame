@@ -180,6 +180,10 @@ button { font: inherit; color: inherit; }
 .gfx .field select { width: 100%; }
 .gfx .gfx-note { grid-column: 1 / -1; margin: 0; font-size: 12px; line-height: 1.4; color: var(--paper-dim); }
 @media (max-width: 420px) { .gfx { grid-template-columns: 1fr; } }
+.match-settings { display: grid; gap: 10px; }
+.match-settings .online-only { display: none; }
+.match-settings.online .online-only { display: revert; }
+.match-settings.online .botlevel-row.online-only { display: flex; }
 .botlevel-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .botlevel { display: inline-flex; padding: 3px; gap: 3px; border-radius: 999px; background: var(--ink); border: 2px solid var(--paper-dim); }
 .botlevel button { border: 0; border-radius: 999px; padding: 7px 16px; font: inherit; font-weight: 800; font-size: 14px; color: var(--paper-dim); background: transparent; cursor: pointer; }
@@ -415,9 +419,9 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 
 <section id="menu" class="menu" aria-label="Main menu">
   <div class="menu-panel">
-    <p class="eyebrow">Prototype 0.20 · The Grand Kitchen</p>
+    <p class="eyebrow">Prototype 0.21 · The Grand Kitchen & the Backyard BBQ</p>
     <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
-    <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Play in first person against 11 bots until the Soap Tide closes in, or online against your friends. Blueberries fire like a machine gun.</p>
+    <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Play in first person against 11 bots until the Soap Tide closes in, or online against your friends (with bots too). Two maps: the kitchen and the Backyard BBQ. Blueberries fire like a machine gun.</p>
     <div class="row">
       <button id="play" class="btn" type="button">Play vs bots</button>
       <button id="online-open" class="btn ghost" type="button">Play online</button>
@@ -432,14 +436,31 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <div id="locker-grid" class="locker-grid" role="group" aria-label="Skins"></div>
     </div>
     <div id="modes" class="online" hidden>
-      <div class="botlevel-row"><b>Bots</b>
-        <div id="botlevel" class="botlevel" role="group" aria-label="Bot difficulty">
-          <button type="button" data-level="easy" aria-pressed="false">Easy</button>
-          <button type="button" data-level="medium" aria-pressed="true">Medium</button>
-          <button type="button" data-level="hard" aria-pressed="false">Hard</button>
+      <div id="match-settings" class="match-settings">
+        <div class="botlevel-row"><b>Map</b>
+          <div id="mappick" class="botlevel" role="group" aria-label="Map">
+            <button type="button" data-map="kitchen" aria-pressed="true">Grand Kitchen</button>
+            <button type="button" data-map="backyard" aria-pressed="false">Backyard BBQ</button>
+          </div>
         </div>
+        <p id="map-note" class="botlevel-note"></p>
+        <div class="botlevel-row"><b>Bots</b>
+          <div id="botlevel" class="botlevel" role="group" aria-label="Bot difficulty">
+            <button type="button" data-level="off" aria-pressed="false" class="online-only">None</button>
+            <button type="button" data-level="easy" aria-pressed="false">Easy</button>
+            <button type="button" data-level="medium" aria-pressed="true">Medium</button>
+            <button type="button" data-level="hard" aria-pressed="false">Hard</button>
+          </div>
+        </div>
+        <p id="botlevel-note" class="botlevel-note">Easy bots aim loosely, react slowly and rarely dodge. Hard bots lead their shots, throw faster and dodge often.</p>
+        <div class="botlevel-row online-only"><b>Mode</b>
+          <div id="onlinemode" class="botlevel" role="group" aria-label="Online mode">
+            <button type="button" data-mode="classic" aria-pressed="true">Classic</button>
+            <button type="button" data-mode="chef" aria-pressed="false">Chef's Choice</button>
+          </div>
+        </div>
+        <p class="botlevel-note online-only">The first player in a room sets its map, mode and bots; everyone who joins plays by the room's settings. Chef's Choice uses your 3 foods from Play vs bots (or 3 random ones).</p>
       </div>
-      <p id="botlevel-note" class="botlevel-note">Easy bots aim loosely, react slowly and rarely dodge. Hard bots lead their shots, throw faster and dodge often.</p>
       <p><b>Choose a mode</b></p>
       <div class="modes">
         <button id="mode-classic" class="mode" type="button"><b>Classic</b><span>Grab food as you go. Food floats all over the kitchen and bananas and grapes heal.</span></button>
@@ -456,8 +477,9 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     <form id="online" class="online" hidden>
       <label for="nick">Your name<input id="nick" maxlength="16" autocomplete="nickname" value=""></label>
       <label for="roomcode">Room code (friends type the same one)<input id="roomcode" maxlength="40" value="kitchen" autocapitalize="off" spellcheck="false"></label>
+      <div id="online-settings"></div>
       <div class="row"><button id="online-join" class="btn" type="submit">Join room</button></div>
-      <p id="online-status">Everyone who opens this game and types the same room code plays together. To invite friends, share this page with them from the Share menu; they need to be signed in to Claude.</p>
+      <p id="online-status">Everyone who opens this game and types the same room code plays together, in Soap Tide rounds like Play vs bots (if you arrive mid-round, you drop in at the next one). To invite friends, share this page with them from the Share menu; they need to be signed in to Claude.</p>
     </form>
     <h2>Controls</h2>
     <dl class="keys desk-only">

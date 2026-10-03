@@ -532,7 +532,8 @@ export const FOODS = {
     impact(p, hit, game) {
       if (hit.actor) {
         game.damage(hit.actor, 40, p.owner, 'cheese');
-        const k = _v2.copy(p.vel).setY(0).normalize().multiplyScalar(14).setY(6);
+        const s = p.x?.mb ? 0.35 : 1; // a Knife-diced cheese ball
+        const k = _v2.copy(p.vel).setY(0).normalize().multiplyScalar(14 * s).setY(6 * s);
         hit.actor.knock(k);
         game.fx.burst('cheese', hit.point, 0.6);
         game.sfx.play('thud', hit.point, 1.3);
@@ -541,9 +542,10 @@ export const FOODS = {
       return false;
     },
     expire(p, game) {
-      game.fx.burst('cheese', p.pos, 1);
-      stampAtGround(game, p.pos, 2.5, 'sticky', 4, { slow: 0.35, visual: 'melt' });
-      game.world.paintSplat(p.pos.x, p.pos.y - 0.75, p.pos.z, 2, 'cheese');
+      const s = p.x?.mb ? 0.45 : 1; // a Knife-diced cheese ball melts a smaller puddle
+      game.fx.burst('cheese', p.pos, s);
+      stampAtGround(game, p.pos, 2.5 * s, 'sticky', 4, { slow: 0.35, visual: 'melt' });
+      game.world.paintSplat(p.pos.x, p.pos.y - 0.75 * s, p.pos.z, 2 * s, 'cheese');
       game.sfx.play('thud', p.pos, 0.6);
     },
     alt(a, game) {
@@ -668,7 +670,7 @@ export const FOODS = {
 
   cookie: {
     name: 'Cookie', role: 'Auto-seeker', maxStack: 3, give: 2, weight: 9,
-    profile: 'seek', charge: 0, speed: 18, recovery: 1.1, radius: 0.4, dmg: 18, verb: 'cookied',
+    profile: 'seek', charge: 0, speed: 11, recovery: 1.1, radius: 0.4, dmg: 18, verb: 'cookied',
     hint: 'Hunts the nearest enemy on its own. Any food thrown at it knocks it out of the air.',
     altName: 'Sugar Rush', altLabel: 'Sugar Rush: refill your stamina (uses 1, 12 s)', altCd: 12,
     alt(a, game) {
@@ -712,16 +714,20 @@ export const FOODS = {
       if (!hit.actor) return false;
       const sp = Math.hypot(p.vel.x, p.vel.z);
       game.damage(hit.actor, sp > 6 ? 50 : 25, p.owner, 'watermelon');
-      hit.actor.knock(_v2.copy(p.vel).setY(0).normalize().multiplyScalar(16).setY(7));
+      const k = p.x?.mb ? 0.35 : 1; // a Knife-diced mini melon
+      hit.actor.knock(_v2.copy(p.vel).setY(0).normalize().multiplyScalar(16 * k).setY(7 * k));
       this.split(p, game);
       return true;
     },
     expire(p, game) { this.split(p, game); },
     split(p, game) {
-      game.fx.burst('melon', p.pos, 1.4);
-      game.world.paintSplat(p.pos.x, p.pos.y - 0.8, p.pos.z, 5.5, 'melon');
-      stampAtGround(game, p.pos, 3, 'slick', 5);
-      game.sfx.play('splat', p.pos, 1.5); game.sfx.play('thud', p.pos, 1.2);
+      const mini = !!p.x?.mb; // a Knife-diced mini melon just bursts
+      game.fx.burst('melon', p.pos, mini ? 0.5 : 1.4);
+      game.world.paintSplat(p.pos.x, p.pos.y - 0.8 * (mini ? 0.4 : 1), p.pos.z, mini ? 2 : 5.5, 'melon');
+      stampAtGround(game, p.pos, mini ? 1.3 : 3, 'slick', 5);
+      game.sfx.play('splat', p.pos, mini ? 0.7 : 1.5);
+      if (mini) return;
+      game.sfx.play('thud', p.pos, 1.2);
       for (let i = 0; i < 4; i++) {
         const ang = (i / 4) * Math.PI * 2 + rand(-0.4, 0.4);
         game.projectiles.launch({ food: 'melonchunk', owner: p.owner, local: true, pos: p.pos.clone().setY(p.pos.y + 0.3), vel: new THREE.Vector3(Math.cos(ang) * 9, 8, Math.sin(ang) * 9), gravity: 1, radius: 0.35, life: 3, spin: 9, bounces: 1 });

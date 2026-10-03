@@ -5,10 +5,11 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G, COUNTER, FLOOR_Y, addBox, addCyl, clearColliders, groundHeight, rand, clamp } from './core.js';
 import { Stains } from './stains.js';
+import { buildBackyard, BACKYARD_REGIONS } from './map-backyard.js';
 
 // ---------------------------------------------------------------------------
 // Procedural textures (no image files).
-function canvasTex(w, h, draw, { repeat = null, srgb = true } = {}) {
+export function canvasTex(w, h, draw, { repeat = null, srgb = true } = {}) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   draw(c.getContext('2d'), w, h);
@@ -144,7 +145,7 @@ export const SOFT_SPOT = () => canvasTex(64, 64, softSpot, { srgb: false });
 // Bake a colour (or a colour picked per vertex position) into a geometry for the vertex-coloured
 // giant-food materials, so every giant food merges into a couple of draw calls.
 const _col = new THREE.Color(), _col2 = new THREE.Color(), _gv = new THREE.Vector3();
-function paint(geo, color) {
+export function paint(geo, color) {
   const pos = geo.attributes.position, n = pos.count, arr = new Float32Array(n * 3);
   const fn = typeof color === 'function' ? color : null;
   if (!fn) _col.set(color);
@@ -155,10 +156,10 @@ function paint(geo, color) {
   geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
   return geo;
 }
-const mixHex = (a, b, t, out) => out.set(a).lerp(_col2.set(b), clamp(t, 0, 1));
+export const mixHex = (a, b, t, out) => out.set(a).lerp(_col2.set(b), clamp(t, 0, 1));
 // Deterministic bumpiness from a position (same point, same bump), for lumpy fruit and florets.
 const bump = (x, y, z) => Math.sin(x * 3.1 + y * 1.7) * Math.sin(y * 2.3 - z * 2.9) * Math.sin(z * 1.9 + x * 2.2);
-function lumpy(geo, amount) {
+export function lumpy(geo, amount) {
   const p = geo.attributes.position;
   for (let i = 0; i < p.count; i++) {
     _gv.fromBufferAttribute(p, i);
@@ -192,7 +193,7 @@ function bananaGeo(points, radius) {
 // ---------------------------------------------------------------------------
 // The playable Grand Kitchen, all at 1:40 scale (GDD 2.2, 9.1). Walkable levels:
 //   floor (y -36), island counter and back counter (y 0), dining table (y -6).
-const F = FLOOR_Y;
+export const F = FLOOR_Y;
 export const REGIONS = {
   island: { minX: -58, maxX: 58, minZ: -30, maxZ: 30, top: 0, weight: 0.34 },
   floor: { minX: -225, maxX: 225, minZ: -125, maxZ: 155, top: F, weight: 0.36 },
@@ -200,30 +201,48 @@ export const REGIONS = {
   table: { minX: -56, maxX: 56, minZ: 85, maxZ: 125, top: -6, weight: 0.12 },
 };
 
+// The maps you can pick. Both share the same frame (floor at FLOOR_Y, the same footprint), so the
+// physics, bots, Soap Tide and online clamps work the same on either.
+export const MAPS = {
+  kitchen: { name: 'The Grand Kitchen', blurb: 'Counters, a sink and stove, a dining table to hide under and a floor the size of a town.' },
+  backyard: { name: 'The Backyard BBQ', blurb: 'A picnic table on the lawn, a smoking grill, a cooler, a kiddie pool and a picnic spread under the open sky.' },
+};
+
 export class World {
-  constructor(scene, renderer, quality) {
-    this.scene = scene;
+  constructor(scene, renderer, quality, mapId = 'kitchen') {
+    // Everything the map builds goes into one group, so a map can be taken down and another built.
+    this.real = scene;
+    this.scene = new THREE.Group();
+    this.scene.name = 'world';
+    scene.add(this.scene);
+    this.mapId = MAPS[mapId] ? mapId : 'kitchen';
     this.renderer = renderer;
     this.quality = quality;
     clearColliders();
     this.mats = {};
     this.burners = []; this.waters = []; this.honeys = []; this.pads = [];
-    this.shadowDirty = true;
-    this._lights(renderer);
-    this._materials();
-    this._room();
-    this._island();
-    this._backCounter();
-    this._dining();
-    this._obstacles();
     this.slickSpots = []; // permanent slippery patches (the egg white), re-stamped by the game
-    this._giants();
-    this._floorClutter();
-    this._pads();
-    this._landmark();
-    this._tide();
-    this._atmosphere();
-    this._spawns();
+    this.shadowDirty = true;
+    if (this.mapId === 'backyard') {
+      this.regions = BACKYARD_REGIONS; this.playerRegion = 'table';
+      buildBackyard(this);
+    } else {
+      this.regions = REGIONS; this.playerRegion = 'island';
+      this._lights(renderer);
+      this._materials();
+      this._room();
+      this._island();
+      this._backCounter();
+      this._dining();
+      this._obstacles();
+      this._giants();
+      this._floorClutter();
+      this._pads();
+      this._landmark();
+      this._tide();
+      this._atmosphere();
+      this._spawns();
+    }
     this.drawCallsBefore = this._countMeshes();
     this._mergeStatic();
     // food stains on every surface (built after all colliders exist)
@@ -233,11 +252,13 @@ export class World {
   // ------------------------------------------------------------------ lighting and materials
   _lights(renderer) {
     const s = this.scene;
-    s.background = new THREE.Color('#e8d6bd');
-    s.fog = new THREE.Fog('#e8d6bd', 240, 720);
+    const R = this.real;
+    R.background = new THREE.Color('#e8d6bd');
+    R.fog = new THREE.Fog('#e8d6bd', 240, 720);
     const pmrem = new THREE.PMREMGenerator(renderer);
-    s.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    s.environmentIntensity = 0.55;
+    R.environment?.dispose();
+    R.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    R.environmentIntensity = 0.55;
     pmrem.dispose();
     s.add(new THREE.HemisphereLight('#fff3e0', '#6b4a2e', 0.9));
     const sun = new THREE.DirectionalLight('#ffe0b0', 2.6);
@@ -934,9 +955,9 @@ export class World {
     this.honeys.push({ x, y, z, r, cap: 150, max: 150, mesh });
   }
 
-  _pads() {
+  _pads(list = null) {
     // Spatula launch pads on the floor fling you up onto the counters and the table.
-    const pads = [
+    const pads = list || [
       [0, 46, 0, 0, 18], [0, -46, 0, 0, -16], [-76, 0, -48, 0, -4], [76, 0, 50, 0, 4], [-52, 44, -30, 0, 16], [52, -46, 18, 0, -22],
       [-150, -124, -140, 0, -158], [-40, -124, -40, 0, -158], [140, -124, 150, 0, -156],
       [0, 64, 0, -6, 98], [-92, 104, -40, -6, 104], [92, 104, 40, -6, 104],
@@ -964,8 +985,8 @@ export class World {
     return new THREE.Vector3((pad.target.x - from.x) / T, vy, (pad.target.z - from.z) / T);
   }
 
-  _landmark() {
-    const x = -18, z = 20, r = 6;
+  _landmark(x = -18, z = 20) { // the giant tomato, sitting on the main raised level (y 0)
+    const r = 6;
     const group = new THREE.Group();
     const body = new THREE.Mesh(new THREE.SphereGeometry(r, 48, 32), new THREE.MeshPhysicalMaterial({
       color: '#e0271c', roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.15, sheen: 0.5, sheenColor: new THREE.Color('#ff8a6a'),
@@ -1074,10 +1095,10 @@ export class World {
     let name = regionName;
     if (!name) {
       let r = Math.random();
-      for (const [k, v] of Object.entries(REGIONS)) { r -= v.weight; if (r <= 0) { name = k; break; } }
+      for (const [k, v] of Object.entries(this.regions)) { r -= v.weight; if (r <= 0) { name = k; break; } }
       name ||= 'floor';
     }
-    const R = REGIONS[name];
+    const R = this.regions[name] || this.regions.floor;
     for (let i = 0; i < 120; i++) {
       const x = rand(R.minX + margin, R.maxX - margin), z = rand(R.minZ + margin, R.maxZ - margin);
       const h = groundHeight(x, z, R.top + 0.5, 0.6, 1.2);
@@ -1087,6 +1108,22 @@ export class World {
       return new THREE.Vector3(x, h, z);
     }
     return new THREE.Vector3(0, 0, 0);
+  }
+
+  // Take the whole map down (before building another): meshes, materials, textures, lights.
+  dispose() {
+    this.real.remove(this.scene);
+    const seen = new Set();
+    this.scene.traverse((o) => {
+      if (o.geometry && !seen.has(o.geometry)) { seen.add(o.geometry); o.geometry.dispose(); }
+      for (const m of [].concat(o.material || [])) {
+        if (seen.has(m)) continue;
+        seen.add(m);
+        for (const k of ['map', 'emissiveMap', 'normalMap', 'roughnessMap']) if (m[k] && !seen.has(m[k])) { seen.add(m[k]); m[k].dispose(); }
+        m.dispose();
+      }
+    });
+    clearColliders();
   }
 
   // ------------------------------------------------------------------ food stains (see stains.js)

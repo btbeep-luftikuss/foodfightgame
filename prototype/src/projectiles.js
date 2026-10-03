@@ -65,7 +65,7 @@ export class Projectiles {
     if (p.u) U?.onLaunch(p);
     this.list.push(p);
     const net = this.game.net;
-    if (net && o.owner === this.game.player && !o.remote && !o.local) net.sendThrow(o);
+    if (net && !o.remote && !o.local && (o.owner === this.game.player || (o.owner?.isBot && !o.owner.isRemote && net.isHost))) net.sendThrow(o); // mine, or my bots' (host)
     return p;
   }
 

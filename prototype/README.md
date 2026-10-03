@@ -27,11 +27,11 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 **Version 0.6:**
 
-- **Online multiplayer ("Play online"):** pick a name and a room code; everyone on the published page who types the same code plays together in a free-for-all food fight with respawns, a scoreboard and a shared kill feed. It runs on the claude.ai artifact `room` capability (`src/net.js`):
+- **Online multiplayer ("Play online"):** pick a name and a room code; everyone on the published page who types the same code plays together (since 0.21 in Soap Tide rounds with bots, see above; this was first a free-for-all with respawns), with a scoreboard and a shared kill feed. It runs on the claude.ai artifact `room` capability (`src/net.js`):
   - Each player's game shares its Titan through room presence about 30 times a second, with throws, peel traps, trampolines and knockouts as a short rolling event log.
   - Every game simulates every projectile; a hit is decided by the game of the Titan that got hit, and the thrower is credited when that player announces the knockout.
   - Incoming data is untrusted: it's clamped, checked against the food table, shown as plain text and rate-limited.
-  - Pickups are per player online, and online matches have no Soap Tide (players join at different times).
+  - Pickups and delivery boxes are per player online. (Online matches had no Soap Tide until 0.21.)
   - Tested with two browser tabs through a stand-in room (`window.__useMockRoom`): joining, seeing each other, a thrown carrot knocking the other player out, kill credit, the kill feed, respawning and leaving.
 - **First person:** the camera is your Titan's eyes, with your arm and food as a viewmodel. **V** switches to third person.
 - **Blueberries (13th food):** rapid fire, about 12 berries a second at 5 damage each, with spray that grows while you hold the trigger. Pickups hold a handful (24–90 berries) and stack to 240.
@@ -62,6 +62,13 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 | Platforms | Desktop (mouse and keyboard, pointer lock) and phones (touch joystick, aim stick, buttons and plate dials for food and utensils); Low, Medium and High graphics with automatic resolution scaling |
 
 ## Run it
+
+**Version 0.21: a second map, online rounds with bots, slower cookies and a knife that dices** (`src/map-backyard.js`, `src/net.js`, `src/game.js`, `src/utensils.js`)
+
+- **New map: The Backyard BBQ.** A lawn under an open sky, fenced in, with a house and trees beyond the fence. In the middle stands a giant picnic table with a red gingham cloth (the main high ground, like the kitchen island) and two benches alongside it. There's a kettle grill whose coals heat up and burn like the stove burners (sausages and a burger on the grate, a bag of charcoal for cover), a cooler to climb with a puddle of melted ice, a kiddie pool that gets you Wet (with a rubber duck to hide behind), and a picnic blanket with a giant sandwich, burger, corn cob, ketchup and mustard bottles, a slice of watermelon, paper cups and a honey spill. Two trees, a hedge, a garden gnome and a watering can give cover, and 14 spatula pads fling you onto the table, the benches, the cooler and the grill. The giant tomato sits on the table. Pick the map on the menu (Play vs bots or Play online); it's remembered, and the bots behind the menu move there at once. Both maps share the same footprint and floor height, so physics, bots, the Soap Tide and online work the same on either; the world now builds into one group and can be taken down and rebuilt (`World.dispose`, `Game.setMap`).
+- **Online plays like Play vs bots.** Rooms now play rounds: everyone drops in on napkin gliders, the Soap Tide closes in phase by phase with grocery drops, the last Titan standing wins, and the next round starts 6 s later. Knocked-out players watch until the next round, and players who arrive mid-round join at the next drop. Rooms can have bots (None, Easy, Medium or Hard; they fill the room up to 10 Titans), Classic or Chef's Choice (your 3 foods from Play vs bots, or 3 random ones; heal crosses instead of food) and either map. The first player in a room hosts it: their game runs the round clock, the tide and the bots, and shares them in its presence (room settings, round state and every bot's state); bot throws, peel traps and trampolines go out as the host's events, and bot knockouts as a `bd` event. Everyone else follows, switching to the room's map and mode on arrival. Hits on a bot are decided by the host's game (everyone simulates every throw, so your food hurts the host's bots, and theirs hurt you). If the host leaves, whoever has been there longest (or has the lowest id) takes over and starts a fresh round with their own bots. Splats, kills and the scoreboard (bots included) carry on across rounds.
+- **Cookies are slower:** 11 m/s (was 18), so a sprint, a dash or a sharp turn can shake one off.
+- **The Knife no longer plays like the Blender.** It dices a cheese wheel or watermelon into a spread of 5 mini cheese balls or mini melons that roll out along the floor (each hits softer and smaller, and a mini melon just bursts instead of splitting into chunks), and slices other foods into a fan of 3 that sweeps side to side. The Blender still fires a straight jet that slicks the floor.
 
 **Version 0.20: bot difficulty** (`src/bots.js`)
 
@@ -198,7 +205,8 @@ npm run dev          # http://localhost:5173
 | `src/human.js` | The human model: lofted, skinned body and face, hair and beards, palette shader, skeleton posing, first-person arm |
 | `src/skins.js` | Skins: rarity, clothing palettes, costume pieces on the head, chest and hip bones |
 | `src/stains.js` | Food stains on every surface: decals cut from the scenery triangles, one atlas, one draw call |
-| `src/net.js`, `src/viewmodel.js` | Online rooms; first-person arm and held food |
+| `src/net.js`, `src/viewmodel.js` | Online rooms (hosting, shared rounds and bots); first-person arm and held food |
+| `src/map-backyard.js` | The Backyard BBQ map |
 | `src/projectiles.js` | Projectile flight, boomerang steering, rolling, hit detection (body capsule and head) |
 | `src/items.js` | Pickups and spawners, peel traps, stuck carrots |
 | `src/utensils.js`, `src/utensil-models.js`, `src/utensil-art.js` | The 20 support utensils: throw rewrites for every food, impact effects, zones, delivery boxes, loose utensils; their 3D models; the flat design-sheet art (generated by `docs/utensils/build.mjs`, used only if the 3D icons can't be rendered) |
@@ -253,7 +261,6 @@ What the checks caught along the way:
 
 ## Known limits
 
-- Bots only; there is no online multiplayer yet. That is the next prototype milestone (GDD §18.3, weeks 7–8).
+- Online rooms are peer-to-peer over presence: the host runs the round and the bots, and each player's game decides hits on themselves, so a player with a slow connection can see a hit land a little differently than the thrower did. Pickups and delivery boxes are per player.
 - Bots steer with simple wall-following and launch pads rather than real pathfinding.
 - The upper cabinets, window sill and ceiling pot rack are scenery; they aren't reachable yet.
-- Changing graphics quality reloads the page.
