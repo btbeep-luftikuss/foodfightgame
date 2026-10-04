@@ -14,6 +14,7 @@ import { Utensils, randomUtensilId } from './utensils.js';
 import { BotBrain, BOT_NAMES } from './bots.js';
 import { ViewModel } from './viewmodel.js';
 import { Spectator } from './spectator.js';
+import { PotWars } from './potwars.js';
 import { randomSkinId } from './skins.js';
 import { FOODS, FOOD_IDS, FEED_VERB, lobSpeed, lobDir, randomFoodId, rollAmmo, pickupAmmo } from './foods.js';
 import { UTENSIL_BY_ID } from './utensils.js';
@@ -69,6 +70,7 @@ export class Game {
     this.firstPerson = true; // V toggles
     this.viewModel = new ViewModel(camera);
     this.spectator = new Spectator(this); // what you watch while you're out (or only watching)
+    this.pots = new PotWars(this); // Cooking Pot Wars
     this.endAt = 0;
 
     // aim-preview dots for lobbed foods (GDD 5.1: arc shows the first part of the path only)
@@ -104,6 +106,7 @@ export class Game {
   // and drop in with them (or only watch); knocked-out players watch until the next round.
   startOnline(net) {
     this.net = net; this.online = true;
+    this.pots.clear(); // (Cooking Pot Wars is Play vs bots only)
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
     this.world.resetRound(); this.hud.clearFeed(); this.brains.clear(); this.utensils.reset(); this.slickAt = 0;
     for (const a of this.botActors.slice(1)) { a.alive = false; a.hide(); }
@@ -317,10 +320,12 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ targeting helpers
+  // Cooking Pot Wars: same team (nobody is a teammate in the other modes)
+  teammates(a, b) { return this.mode === 'pots' && !!a && !!b && a !== b && a.team != null && a.team === b.team; }
   nearestEnemy(a, range, from = a.pos) {
     let best = null, bd = range;
     for (const o of this.actors) {
-      if (o === a || !o.alive) continue;
+      if (o === a || !o.alive || this.teammates(a, o)) continue;
       const d = o.pos.distanceTo(from);
       if (d < bd && hasLineOfSight(_o.copy(from).setY(from.y + 1), o.center(_c))) { bd = d; best = o; }
     }
@@ -332,7 +337,7 @@ export class Game {
     let best = null, bestAng = 0.26;
     const eye = a.headPos(_o);
     for (const o of this.actors) {
-      if (o === a || !o.alive) continue;
+      if (o === a || !o.alive || this.teammates(a, o)) continue;
       _d.subVectors(o.center(_c), eye);
       const dist = _d.length();
       if (dist > 45) continue;
@@ -400,7 +405,7 @@ export class Game {
 
   // opts.mode 'chef' = Chef's Choice: every Titan brings 3 foods with endless ammo and no food spawns.
   newMatch(withPlayer, opts = {}) {
-    this.mode = opts.mode === 'chef' ? 'chef' : 'classic';
+    this.mode = opts.mode === 'chef' || opts.mode === 'pots' ? opts.mode : 'classic';
     const chef = this.mode === 'chef';
     this.actors = this.botActors;
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
@@ -445,13 +450,16 @@ export class Game {
     this.state = 'drop'; this.stateT = 0;
     this.endAt = 0; this.winner = null;
     this.spectator.reset();
+    for (const a of this.actors) { a.team = null; a.maxHp = 200; }
+    if (this.mode === 'pots') this.pots.start(); else this.pots.clear();
     this.onMatchEvent?.('start');
-    if (withPlayer) this.hud.banner(chef ? "Chef's Choice" : 'Drop in!', chef ? 'Your 3 foods never run out. Food doesn\'t heal: grab the green crosses' : 'Steer your napkin glider onto the counter');
+    if (withPlayer && this.mode !== 'pots') this.hud.banner(chef ? "Chef's Choice" : 'Drop in!', chef ? 'Your 3 foods never run out. Food doesn\'t heal: grab the green crosses' : 'Steer your napkin glider onto the counter');
   }
 
   // ------------------------------------------------------------------ combat API used by foods
   damage(target, amount, attacker, foodId, opts = {}) {
     if (!target.alive || amount <= 0 || this.state === 'over') return 0;
+    if (this.mode === 'pots' && (this.pots.setup || this.teammates(target, attacker))) return 0; // no hurting before the pots are down, or your own team
     amount *= this.dmgScale;
     this._action(target, attacker);
     if (target.isRemote) { // online: that player's own game decides; we only show our hit
@@ -600,6 +608,18 @@ export class Game {
     const food = foodId === 'burning' ? 'burner' : foodId;
     this._feed(victim, killer, food);
 
+    if (this.mode === 'pots' && this.pots.active) { // back at your pot while it stands; out when it's gone
+      const back = this.pots.onDeath(victim);
+      if (killer === this.player) this.hud.banner('Splat!', `${esc(victim.name)} ${back ? 'is back at their pot soon' : 'is out'}`, 1.6);
+      if (victim === this.player) {
+        this.spectator.focusNext = killer && killer.alive ? killer : null;
+        if (back) this.hud.banner('Splatted!', 'Back at your pot in 5 s', 2.4);
+        else this.onMatchEvent?.('playerDown', { killer, placement: victim.placement, food, note: 'Your pot is gone, so no more respawns.' });
+      }
+      this.pots._checkWin();
+      return;
+    }
+
     if (this.online) { // online: tell the room; out until the next round
       if (victim === this.player) {
         this.net.event('d', killer ? this.net._peerOf(killer) : '', food || '');
@@ -676,7 +696,7 @@ export class Game {
       const intent = this.input.enabled ? this.input.intent() : null;
       for (let s = 0; s < steps; s++) {
         // edge-triggered presses only count once per frame
-        if (s === 1 && intent) Object.assign(intent, { jump: false, dodge: false, alt: false, sniff: false, view: false, slot: -1, cycle: 0, uslot: -1, ucycle: 0 });
+        if (s === 1 && intent) Object.assign(intent, { jump: false, dodge: false, alt: false, sniff: false, view: false, ladle: false, slot: -1, cycle: 0, uslot: -1, ucycle: 0 });
         this._step(dt, intent);
       }
     }
@@ -692,6 +712,7 @@ export class Game {
     const held = this.player?.alive ? this.player.selected()?.id : null;
     this.lockCandidate = held === 'chili' ? this.lockTarget(this.player) : null;
     this.hud.update(this, realDt);
+    this.pots.updateVisual(realDt, this.camera, this.hud);
     if (this.spectator.active) this.spectator.updateUI(realDt);
   }
 
@@ -719,6 +740,7 @@ export class Game {
     }
     this.projectiles.update(dt);
     this.items.update(dt);
+    this.pots.update(dt);
     this.utensils.update(dt);
     if (this.time >= (this.slickAt || 0)) { // permanent slippery patches (the cracked egg)
       this.slickAt = this.time + 4;
@@ -728,7 +750,7 @@ export class Game {
     this._spikeStep(dt);
     this.world.update(dt, this.time, this.fx, this.sfx);
     this.fx.update(dt);
-    if (this.state === 'play' && Math.random() < dt * 30) this._tideBubbles();
+    if (this.state === 'play' && !this.pots.active && Math.random() < dt * 30) this._tideBubbles();
   }
 
   _tideUpdate(dt) {

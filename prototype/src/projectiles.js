@@ -61,6 +61,16 @@ export class Projectiles {
       mesh: this.getMesh(o.food),
       u: o.u || '', x: o.x || {},
     };
+    // Cooking Pot Wars: thrown from your team's pot, the turret fires it, harder and faster
+    const tur = !o.remote && this.game.pots?.turretFor(o.owner);
+    if (tur) {
+      p.turret = tur.mult;
+      p.pos.copy(tur.muzzle);
+      if (food.profile === 'lob' || food.profile === 'roll') p.vel.multiplyScalar(tur.speed);
+      else p.vel.subVectors(o.owner.aimPoint, tur.muzzle).normalize().multiplyScalar(p.speed * tur.speed);
+      p.speed = p.vel.length();
+      this.game.fx.burst('dust', tur.muzzle, 0.4);
+    }
     p.mesh.position.copy(p.pos);
     if (p.u) U?.onLaunch(p);
     this.list.push(p);
@@ -226,17 +236,18 @@ export class Projectiles {
 
   // Run fn with the projectile's utensil damage multiplier applied (fuses, rolls that stop).
   _scaled(p, fn) {
-    if (!p.u) return fn();
-    this.game.dmgScale = p.x.m ?? 1;
+    if (!p.u && !p.turret) return fn();
+    this.game.dmgScale = (p.u ? p.x.m ?? 1 : 1) * (p.turret || 1);
     try { fn(); } finally { this.game.dmgScale = 1; }
   }
 
   // A food's impact, with the thrower's utensil before and after it. Damage dealt inside is
   // scaled by the projectile's utensil multiplier (and crits / peel layers).
   _impact(p, food, hit) {
-    if (!p.u) return food.impact(p, hit, this.game);
+    if (!p.u && !p.turret) return food.impact(p, hit, this.game);
     const game = this.game, U = game.utensils;
-    game.dmgScale = p.x.m ?? 1;
+    if (!p.u) { game.dmgScale = p.turret; try { return food.impact(p, hit, game); } finally { game.dmgScale = 1; } }
+    game.dmgScale = (p.x.m ?? 1) * (p.turret || 1);
     let done;
     try {
       if (U.pre(p, hit)) done = false;

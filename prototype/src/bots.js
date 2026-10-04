@@ -48,7 +48,7 @@ export class BotBrain {
     let best = null, bestD = this.lv.sight;
     const eye = a.headPos(_v);
     for (const o of g.actors) {
-      if (o === a || !o.alive) continue;
+      if (o === a || !o.alive || g.teammates(a, o)) continue;
       const d = o.pos.distanceTo(a.pos);
       const bias = o === a.lastHitBy && now - a.lastHitAt < 4 ? 15 : 0;
       if (d - bias < bestD && hasLineOfSight(eye, o.headPos(_w))) { best = o; bestD = d - bias; }
@@ -60,7 +60,9 @@ export class BotBrain {
     this.goal = null; this.goalKind = null;
     const tide = g.tide;
     const onFloor = a.pos.y < FLOOR_Y + 5;
-    if (tide && Math.hypot(a.pos.x - tide.x, a.pos.z - tide.z) > tide.r - 4) {
+    const pg = g.pots.active ? g.pots.botGoal(a, this.target, bestD) : null; // Cooking Pot Wars: raid, guard, carry home
+    if (pg) { this.goal = pg.pos.clone(); this.goalKind = pg.kind; }
+    else if (tide && Math.hypot(a.pos.x - tide.x, a.pos.z - tide.z) > tide.r - 4) {
       // The safe zone may be up on a counter: then take the spatula pad that lands closest to it.
       const zoneY = groundHeight(tide.x, tide.z, 50);
       let allHigh = zoneY > a.pos.y + 3;
@@ -72,7 +74,7 @@ export class BotBrain {
       if (it) { this.goal = it.pos; this.goalKind = 'item'; }
       else if (allHigh) this._goPad(new THREE.Vector3(tide.x, zoneY, tide.z));
       else { this.goal = new THREE.Vector3(tide.x, a.pos.y, tide.z); this.goalKind = 'tide'; } // may mean jumping off a counter
-    } else if (g.mode === 'chef' && a.hp < MAX_HP * 0.6 && (!this.target || bestD > 14) && this._nearestItem(90)) {
+    } else if (g.mode === 'chef' && a.hp < a.maxHp * 0.6 && (!this.target || bestD > 14) && this._nearestItem(90)) {
       this.goal = this._nearestItem(90).pos; this.goalKind = 'item'; // hurt: go get a heal cross
     } else if (!a.inv.some(Boolean) || (!this.target && a.inv.filter(Boolean).length < 3)) {
       const it = this._nearestItem(this.target ? 25 : 80);
@@ -87,7 +89,7 @@ export class BotBrain {
     if (!this.goal && !this.target && a.inv.some(Boolean)) {
       let prey = null, pd = Infinity;
       for (const o of g.actors) {
-        if (o === a || !o.alive || now - o.noiseAt > 6) continue; // only hunt Titans making noise
+        if (o === a || !o.alive || now - o.noiseAt > 6 || g.teammates(a, o)) continue; // only hunt Titans making noise
         const d = o.pos.distanceTo(a.pos);
         if (d < pd) { pd = d; prey = o; }
       }
@@ -103,7 +105,7 @@ export class BotBrain {
 
     // heal with a banana when hurt and not under pressure
     const bananaSlot = a.inv.findIndex((s) => s && (s.id === 'banana' || s.id === 'grapes'));
-    if (a.hp < MAX_HP * 0.6 && bananaSlot >= 0 && (!this.target || bestD > 14) && !a.eat && g.mode !== 'chef') {
+    if (a.hp < a.maxHp * 0.6 && bananaSlot >= 0 && (!this.target || bestD > 14) && !a.eat && g.mode !== 'chef') {
       a.select(bananaSlot);
       this.pendingAlt = true;
       this.foodLockUntil = now + 1.4;
@@ -153,7 +155,7 @@ export class BotBrain {
       if (Math.abs(it.pos.y - a.pos.y) > 3) continue;
       if (insideTide && Math.hypot(it.pos.x - insideTide.x, it.pos.z - insideTide.z) > insideTide.r) continue;
       const d = it.pos.distanceTo(a.pos);
-      const wants = it.id === 'heal' ? a.hp < MAX_HP : a.inv.some((s) => !s || (s.id === it.id && s.count < FOODS[it.id].maxStack));
+      const wants = it.id === 'heal' ? a.hp < a.maxHp : a.inv.some((s) => !s || (s.id === it.id && s.count < FOODS[it.id].maxStack));
       if (d < bd && wants) { bd = d; best = it; }
     }
     return best;
@@ -181,7 +183,7 @@ export class BotBrain {
     const a = this.a, g = this.game, now = g.time;
     this.thinkT -= dt;
     if (this.thinkT <= 0) { this.think(); this.thinkT = this.lv.think; }
-    const it = { moveX: 0, moveZ: 0, sprint: false, jump: false, dodge: false, primary: false, alt: false, slot: -1, cycle: 0 };
+    const it = { moveX: 0, moveZ: 0, sprint: false, jump: false, dodge: false, primary: false, alt: false, ladle: false, slot: -1, cycle: 0 };
     const t = this.target && this.target.alive ? this.target : null;
     const slot = a.selected();
     const food = slot ? FOODS[slot.id] : null;
@@ -208,6 +210,10 @@ export class BotBrain {
       mv.set((tide ? tide.x : 0) - a.pos.x + Math.sin(now * 0.3 + a.id) * 20, 0, (tide ? tide.z : 0) - a.pos.z + Math.cos(now * 0.23 + a.id) * 12);
     }
     if (now < this.unstickUntil) mv.copy(this.unstickDir);
+    if (this.goalKind === 'pot' && g.pots.inReach(a, this.goal)) { // at an enemy pot: stand and swing the ladle
+      mv.set(0, 0, 0);
+      it.ladle = true;
+    } else if (this.goalKind === 'guard' && Math.hypot(this.goal.x - a.pos.x, this.goal.z - a.pos.z) < 3.5) mv.set(0, 0, 0);
 
     // Walls in the way (the island, the fridge, chairs): follow the wall until the way is clear.
     if (this.goal && mv.lengthSq() > 1e-4) {
@@ -294,6 +300,7 @@ export class BotBrain {
       if (mv.lengthSq() > 0.01) a.yaw = yawOf(mv.x, mv.z);
       if (a.charging) it.primary = false;
     }
+    if (it.ladle) a.yaw = yawOf(this.goal.x - a.pos.x, this.goal.z - a.pos.z); // face the pot
 
     if (this.pendingDodge) {
       it.dodge = true;

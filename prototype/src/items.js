@@ -139,7 +139,7 @@ export class Items {
         const dx = a.pos.x - it.pos.x, dz = a.pos.z - it.pos.z, dy = a.pos.y - it.pos.y;
         if (dx * dx + dz * dz > 2.3 * 2.3 || Math.abs(dy) > 2.2) continue;
         if (it.id === 'heal') {
-          if (a.hp >= MAX_HP) continue;
+          if (a.hp >= (a.maxHp || MAX_HP)) continue;
           a.heal(HEAL_HP);
           game.sfx.play('eat', it.pos, a === game.player ? 1 : 0.4);
           game.fx.burst('bubbles', it.pos);

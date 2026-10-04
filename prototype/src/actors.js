@@ -56,7 +56,8 @@ export class Actor {
   }
 
   reset() {
-    this.alive = true; this.hp = MAX_HP; this.glaze = 0; this.kills = 0;
+    this.alive = true; this.maxHp = MAX_HP; this.hp = MAX_HP; this.glaze = 0; this.kills = 0;
+    this.carry = null; this.respawnAt = 0; this.ladleT = 0;
     this.airJumps = 0; this.airDashes = 0; this.dashT = 0; this.noiseAt = -99; this.fpCam = null;
     this.stamina = STAMINA_MAX; this.staminaUsedAt = -99; this.staminaFlash = 0;
     this.vel.set(0, 0, 0); this.yaw = 0; this.onGround = false; this.gliding = false;
@@ -244,7 +245,7 @@ export class Actor {
     if (this.eat) this.eat.dmg += amount;
     return amount;
   }
-  heal(n) { this.hp = Math.min(MAX_HP, this.hp + n); }
+  heal(n) { this.hp = Math.min(this.maxHp, this.hp + n); }
   addSticky(amt, dur) {
     if (this.isRemote) return false; // remote Titans are moved by their own player's game
     if (this.isWet()) return;
@@ -491,6 +492,7 @@ export class Actor {
 
   _items(dt, it) {
     const g = this.game, now = g.time;
+    if (it.ladle && g.pots.active) g.pots.ladle(this); // Cooking Pot Wars: set the pot down, or swing the ladle
     if (it.slot >= 0) this.select(it.slot);
     if (it.uslot >= 0) g.utensils.select(this, it.uslot);
     if (it.ucycle) g.utensils.cycle(this, it.ucycle);

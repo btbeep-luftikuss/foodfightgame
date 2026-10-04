@@ -174,7 +174,7 @@ export class Spectator {
   _heat(a, now) {
     let h = 3 * Math.exp(-(now - (a.actionAt ?? -99)) / 2.5) + Math.exp(-(now - a.noiseAt) / 1.5);
     if (a.charging) h += 0.4;
-    h += (1 - clamp(a.hp / MAX_HP, 0, 1)) * 0.4;
+    h += (1 - clamp(a.hp / (a.maxHp || MAX_HP), 0, 1)) * 0.4;
     return h + this._human(a) * 0.5; // players are who people come to watch
   }
 
@@ -201,7 +201,7 @@ export class Spectator {
     }
     let pick = pair && pairS > 2.6 ? { kind: 'duel', a: pair[0], b: pair[1] } : hot && hotH > 1.3 ? { kind: 'chase', a: hot } : { kind: 'wide' };
     // an overall view every half minute, unless someone on screen is about to go down
-    const cur = this.shot, finish = cur && cur.kind !== 'wide' && [cur.a, cur.b].some((x) => this._in(x) && x.hp < MAX_HP * 0.3);
+    const cur = this.shot, finish = cur && cur.kind !== 'wide' && [cur.a, cur.b].some((x) => this._in(x) && x.hp < (x.maxHp || MAX_HP) * 0.3);
     if (pick.kind !== 'wide' && now - this.lastWideAt > WIDE_EVERY && !finish) pick = { kind: 'wide' };
     // the same fight seen from either side is the same fight
     const s = this.shot;
@@ -414,7 +414,7 @@ export class Spectator {
       const it = this._items(a), icons = g.hud.icons;
       const foods = it.foods.map((s, i) => (s ? `<span class="sc-it${i === it.sel ? ' sel' : ''}" title="${esc(FOODS[s.id]?.name || s.id)}"><img src="${icons[s.id] || ''}" alt="${esc(FOODS[s.id]?.name || s.id)}"><em>${s.inf ? '∞' : s.count}</em></span>` : '')).join('');
       const kit = it.kit.map((id, i) => (id && UTENSIL_BY_ID[id] ? `<span class="sc-it ut${i === it.uSel ? ' sel' : ''}" title="${esc(UTENSIL_BY_ID[id].name)}" style="--uc:${UTENSIL_BY_ID[id].color}"><img src="${utensilIcon(id)}" alt="${esc(UTENSIL_BY_ID[id].name)}"></span>` : '')).join('');
-      const hp = clamp(a.hp / MAX_HP, 0, 1);
+      const hp = clamp(a.hp / (a.maxHp || MAX_HP), 0, 1);
       html = `<div class="sc-top"><i class="sc-dot" style="background:${a.color}"></i><b class="sc-name">${esc(a.name)}</b>${g.online && !this._human(a) ? '<small class="sc-tag">bot</small>' : ''}<span class="sc-hp" title="Health ${Math.ceil(a.hp)}"><i style="width:${(hp * 100).toFixed(0)}%"></i></span></div>`
         + `<div class="sc-stats"><span><i class="ico splat"></i><b>${a.kills}</b> ${a.kills === 1 ? 'splat' : 'splats'}</span><span><i class="ico titan"></i><b>${left}</b> ${left === 1 ? 'Titan' : 'Titans'} left</span></div>`
         + `<div class="sc-items">${foods || '<span class="sc-none">No food</span>'}<span class="sc-sep"></span>${kit || '<span class="sc-none">No utensil</span>'}</div>`;

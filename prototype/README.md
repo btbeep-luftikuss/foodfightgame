@@ -63,6 +63,19 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.25: Cooking Pot Wars** (`src/potwars.js`; Play vs bots)
+
+- A team mode like Bed Wars, with cooking pots: 4 teams of 3 (you and 2 bots on Team Tomato, against Blueberry, Lime and Butter), each starting in a corner of the floor. No Soap Tide.
+- **Setup, 30 s.** Each team picks where its pot goes: press **G** where you stand (phones: the Ladle button). Bot teams set theirs where their leader stands. Nobody can be hurt meanwhile, and a team that didn't choose gets its pot at its leader's feet.
+- **Pots** have 300 health and spit out a random food every 10 s. You respawn beside your pot 5 s after a splat, for as long as it stands.
+- **Ladle (G):** every Titan's melee swing. It only hurts pots (15 a hit, 20 hits for a fresh pot), and it's the only thing that does.
+- **Smash a pot** and it goes on your back. Carry it to your own pot without being splatted (a splat loses it): your pot gets +150 health, spits food faster, and its turret goes up a level.
+- **Turret:** stand at your own pot and your throws come out of its turret, 1.6× damage (+0.4× per pot carried home) and faster. Only your team can use it, and a smashed pot takes its turret with it.
+- Every Titan has 75 health. 12 utensils lie around the map at the start, and delivery boxes still come in. No hurting your own team.
+- **Bots:** they ignore teammates; one per team raids from the start (all of them after 70 s, or once their pot is gone), the rest guard their pot and use its turret. They carry smashed pots home.
+- **Winning:** a team is out when its pot is gone and nobody on it is left standing. The last team standing wins.
+- A team bar under the top pill shows each pot's health, its turret level and how many Titans each team has up.
+
 **Version 0.24: pick your loadout online, and a spectator mode** (`src/spectator.js`, `src/game.js`, `src/net.js`, `src/main.js`)
 
 - **Loadout card.** After joining an online room, you pick 3 foods and a utensil, then press Ready (or Drop in while a round is young), or Spectate to only watch.
@@ -241,6 +254,7 @@ npm run dev          # http://localhost:5173
 | `src/surface.js` | Surface State Grid and zone visuals |
 | `src/bots.js` | Bot AI |
 | `src/game.js` | Match flow, online rounds and loadouts, damage and kills, Soap Tide, camera, aim preview |
+| `src/potwars.js` | Cooking Pot Wars: teams, pots, ladles, turrets, carrying pots home, respawns |
 | `src/spectator.js` | Spectator mode: the cinematic director, overview and follow cameras, minimap, Titan bar and player card |
 | `src/hud.js`, `src/dials.js`, `src/input.js`, `src/fx.js` | HUD, the phone plate dials, controls, particles, sound |
 

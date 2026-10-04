@@ -178,6 +178,7 @@ function boot() {
     menu.hidden = true; end.hidden = true; pause.hidden = true;
     hud.show(true);
     touch.hidden = !input.isTouch;
+    $('tLadle').hidden = game.mode !== 'pots';
     if (lock && !input.isTouch) input.requestLock(true);
   }
   let matchOpts = {}; // what "Play again" repeats
@@ -254,6 +255,7 @@ function boot() {
     reveal($('modes'));
   });
   $('mode-classic').addEventListener('click', () => start({}));
+  $('mode-pots').addEventListener('click', () => start({ mode: 'pots' }));
   $('mode-chef').addEventListener('click', () => {
     const open = $('chef').hidden;
     $('chef').hidden = !open; $('mode-chef').setAttribute('aria-expanded', String(open));
@@ -517,16 +519,17 @@ function boot() {
     if (type === 'playerDown') {
       const k = data.killer ? `${data.killer.name} got you` : 'The kitchen got you';
       $('end-title').textContent = 'Splatted!';
-      $('end-sub').textContent = `${k}. You placed #${data.placement} of ${TITANS}.`;
+      $('end-sub').textContent = data.note ? `${k}. ${data.note}` : `${k}. You placed #${data.placement} of ${TITANS}.`;
       $('end-kills').textContent = game.player.kills;
       $('end-place').textContent = `#${data.placement}`;
       $('spectate').hidden = false;
       setTimeout(() => { end.hidden = false; touch.hidden = true; input.exitLock(); }, 1400);
     }
     if (type === 'over') {
-      const won = data.winner && data.winner === game.player;
+      const won = data.won ?? (data.winner && data.winner === game.player);
       $('end-title').textContent = won ? "Chef's Kiss!" : 'Match over';
-      $('end-sub').textContent = won ? 'Last Bite Standing. The whole kitchen is yours.' : `${data.winner ? data.winner.name : 'Nobody'} took the Last Bite.`;
+      $('end-sub').textContent = data.team ? (won ? `${data.team} wins Cooking Pot Wars!` : `${data.team} wins Cooking Pot Wars.`)
+        : won ? 'Last Bite Standing. The whole kitchen is yours.' : `${data.winner ? data.winner.name : 'Nobody'} took the Last Bite.`;
       $('end-kills').textContent = game.player.kills;
       $('end-place').textContent = `#${game.player.placement || 1}`;
       $('spectate').hidden = true;
@@ -583,6 +586,7 @@ function boot() {
   hold('tDash', () => { input.pressed.dodge = true; });
   hold('tAlt', () => { input.pressed.alt = true; });
   hold('tSniff', () => { input.pressed.sniff = true; });
+  hold('tLadle', () => { input.pressed.ladle = true; });
   const stick = $('stick');
   input.onStick = (phase, x, y) => {
     if (phase === 'start') { stick.style.left = `${x}px`; stick.style.top = `${y}px`; stick.classList.add('on'); stick.firstElementChild.style.transform = ''; }

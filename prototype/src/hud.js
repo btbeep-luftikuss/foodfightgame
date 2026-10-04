@@ -115,6 +115,7 @@ export class HUD {
     if (game.online && game.net) this._scoreboard(game);
     if (game.online && game.net && !game.net.connected) { ico = 'online'; tt = 'Reconnecting'; urgent = true; tip = `Room ${game.net.roomName}`; }
     else if (game.state === 'lobby') { ico = 'online'; tt = 'Joining'; tip = `Room ${game.net?.roomName || ''}`; }
+    else if (game.mode === 'pots' && game.pots.active && game.state !== 'over') { tt = game.pots.pill(); ico = 'titan'; tip = 'Cooking Pot Wars'; }
     else if (game.state === 'over') { tt = 'Next round'; tip = 'The next round starts in a few seconds'; }
     else if (game.state === 'drop') tt = 'Drop in';
     else if (T.phase >= T.phases.length) { tt = 'Final'; urgent = true; tip = 'Final circle'; }
@@ -136,7 +137,7 @@ export class HUD {
       const kills = String(a.kills);
       if ($('kills').textContent !== kills) $('kills').textContent = kills;
       const hp = Math.max(0, a.hp), gl = Math.max(0, a.glaze);
-      $('hpFill').style.transform = `scaleX(${hp / MAX_HP})`;
+      $('hpFill').style.transform = `scaleX(${hp / (a.maxHp || MAX_HP)})`;
       $('glazeFill').style.transform = `scaleX(${gl / 100})`;
       $('glaze').classList.toggle('none', gl <= 0.5);
       const hpt = String(Math.ceil(hp));
@@ -202,7 +203,7 @@ export class HUD {
       o.classList.toggle('burning', a.isBurning());
       o.classList.toggle('juiced', game.time < a.juicedUntil);
       o.classList.toggle('wet', a.isWet());
-      o.classList.toggle('lowhp', a.alive && a.hp < MAX_HP * 0.3);
+      o.classList.toggle('lowhp', a.alive && a.hp < (a.maxHp || MAX_HP) * 0.3);
     }
 
     this.hitT -= dt; if (this.hitT <= 0) $('hitmarker').className = 'hitmarker';
@@ -300,7 +301,7 @@ export class HUD {
       el.style.display = '';
       el.style.transform = `translate(${pos.x}px, ${pos.y}px) translate(-50%, -100%)`;
       el.querySelector('.name').textContent = a.name;
-      el.querySelector('.h').style.width = `${Math.max(0, a.hp) / MAX_HP * 100}%`;
+      el.querySelector('.h').style.width = `${Math.max(0, a.hp) / (a.maxHp || MAX_HP) * 100}%`;
       el.querySelector('.g').style.width = `${Math.max(0, a.glaze)}%`;
       el.style.setProperty('--c', a.color);
       el.classList.toggle('locked', a === game.lockCandidate);

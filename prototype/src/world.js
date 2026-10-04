@@ -1096,12 +1096,15 @@ export class World {
   // Random standing spot on a walkable level, clear of tall props and hazards.
   randomOpenSpot(regionName = null, margin = 5) {
     let name = regionName;
+    if (name && typeof name === 'object') { const R = name; name = null; return this._openSpotIn(R, margin); }
     if (!name) {
       let r = Math.random();
       for (const [k, v] of Object.entries(this.regions)) { r -= v.weight; if (r <= 0) { name = k; break; } }
       name ||= 'floor';
     }
-    const R = this.regions[name] || this.regions.floor;
+    return this._openSpotIn(this.regions[name] || this.regions.floor, margin);
+  }
+  _openSpotIn(R, margin) {
     for (let i = 0; i < 120; i++) {
       const x = rand(R.minX + margin, R.maxX - margin), z = rand(R.minZ + margin, R.maxZ - margin);
       const h = groundHeight(x, z, R.top + 0.5, 0.6, 1.2);

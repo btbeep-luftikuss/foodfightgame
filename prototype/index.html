@@ -286,6 +286,23 @@ button { font: inherit; color: inherit; }
   .card.loadout h3 { display: none; }
   .card.loadout .lo-room { font-size: 13px; }
 }
+/* Cooking Pot Wars: the four teams under the top pill, and the labels over the pots */
+.pots { position: absolute; left: 50%; top: calc(88px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: grid; justify-items: center; gap: 4px; pointer-events: none; }
+.pots p { margin: 0; font-size: 13px; font-weight: 800; color: var(--butter); background: var(--ink-glass); padding: 3px 12px; border-radius: 999px; }
+.pots ul { margin: 0; padding: 4px 6px; list-style: none; display: flex; gap: 10px; background: var(--ink-glass); border-radius: 12px; }
+.pots li { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+.pots li > i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1.5px var(--ink); }
+.pots li b { color: var(--c); }
+.pots li.me b { text-decoration: underline; }
+.pots li.out { opacity: 0.4; } .pots li.out b { text-decoration: line-through; }
+.pots em { font-style: normal; color: var(--paper-dim); }
+.pots small { color: var(--paper-dim); font-weight: 700; }
+.php { width: 46px; height: 6px; border-radius: 3px; background: rgba(34,20,42,0.9); overflow: hidden; }
+.php i { display: block; height: 100%; background: var(--c); }
+.plate.potplate .name { color: var(--c); font-size: 13px; }
+.plate.potplate .mini { width: 70px; height: 7px; }
+.tbtn.ladle { width: 54px; height: 54px; right: calc(170px + var(--sr)); bottom: calc(196px + var(--sb)); background: #f3c89a; font-size: 10px; }
+@media (pointer: coarse) and (max-width: 560px) { .tbtn.ladle { width: 48px; height: 48px; right: calc(160px + var(--sr)); bottom: calc(262px + var(--sb)); } .pots ul { gap: 6px; } .pots li { font-size: 11px; } .php { width: 30px; } }
 /* the loadout card: what you bring into an online round */
 .card.loadout { width: min(880px, 100%); gap: 10px; padding: 20px 22px 0; }
 .card.loadout h3 { font-size: 34px; }
@@ -496,6 +513,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       </div>
     </div>
   </div>
+  <div id="potsPanel" class="pots" hidden></div>
   <div id="toast" class="toast"></div>
   <div id="banner" class="banner"></div>
   <div id="fps" class="fps"></div>
@@ -512,13 +530,14 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
   <button data-touch-btn id="tDash" class="tbtn roll" type="button">Dash</button>
   <button data-touch-btn id="tAlt" class="tbtn alt" type="button">Alt</button>
   <button data-touch-btn id="tSniff" class="tbtn sniffb" type="button">Sniff</button>
+  <button data-touch-btn id="tLadle" class="tbtn ladle" type="button" hidden>Ladle</button>
 </div>
 
 <section id="menu" class="menu" aria-label="Main menu">
   <div class="menu-panel">
-    <p class="eyebrow">Prototype 0.24 · Loadouts & spectator mode</p>
+    <p class="eyebrow">Prototype 0.25 · Cooking Pot Wars</p>
     <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
-    <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Play in first person against 11 bots until the Soap Tide closes in, or online against your friends (with bots too). Two maps: the kitchen and the Backyard BBQ. Blueberries fire like a machine gun.</p>
+    <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Play in first person against 11 bots until the Soap Tide closes in, in teams in Cooking Pot Wars, or online against your friends (with bots too). Two maps: the kitchen and the Backyard BBQ. Blueberries fire like a machine gun.</p>
     <div class="row">
       <button id="play" class="btn" type="button">Play vs bots</button>
       <button id="online-open" class="btn ghost" type="button">Play online</button>
@@ -561,6 +580,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <p><b>Choose a mode</b></p>
       <div class="modes">
         <button id="mode-classic" class="mode" type="button"><b>Classic</b><span>Grab food as you go. Food floats all over the kitchen and bananas and grapes heal.</span></button>
+        <button id="mode-pots" class="mode" type="button"><b>Cooking Pot Wars</b><span>4 teams of 3, like Bed Wars. Hide your team's pot, smash theirs with your ladle (G) and carry them home. You respawn at your pot while it stands; its turret fires your food harder.</span></button>
         <button id="mode-chef" class="mode" type="button" aria-expanded="false"><b>Chef's Choice</b><span>Pick 3 foods that never run out. No food spawns and food doesn't heal: grab green heal crosses instead.</span></button>
       </div>
       <div id="chef" class="chef" hidden>
@@ -589,6 +609,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <dt><kbd>6</kbd>–<kbd>8</kbd> <kbd>R</kbd></dt><dd>Pick utensil (you carry up to 3)</dd>
       <dt><kbd>B</kbd></dt><dd>Sniff: point at Titans making noise (10 s cooldown)</dd>
       <dt><kbd>V</kbd></dt><dd>Switch first / third person</dd>
+      <dt><kbd>G</kbd></dt><dd>Cooking Pot Wars: set your team's pot down (first 30 s), then swing your ladle at enemy pots</dd>
       <dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd>Pause</dd>
     </dl>
     <dl class="keys touch-only">
