@@ -151,6 +151,8 @@ export function buildBackyard(W) {
       addBox(sx * 56 - 2, sx * 56 + 2, sz * 22 - 7, sz * 22 + 7, F, -3, { surface: 'wood' });
     }
     W._box(sx * 56 - 2, sx * 56 + 2, -62, 62, -22, -19, m.wood); // the beam that carries the benches
+    addBox(sx * 56 - 2, sx * 56 + 2, -62, 62, -22, -19, { surface: 'wood' });
+    for (const sz of [-1, 1]) addBox(sx * 56 - 2, sx * 56 + 2, sz * 62 - (sz > 0 ? 4 : 0), sz * 62 + (sz > 0 ? 0 : 4), F, -19, { surface: 'wood' }); // (the posts under the ends of the beam)
   }
   for (const sz of [-1, 1]) {
     const z0 = sz > 0 ? 46 : -58, z1 = sz > 0 ? 58 : -46;
@@ -165,6 +167,7 @@ export function buildBackyard(W) {
       const a = (i / 3) * Math.PI * 2 + 0.4;
       const leg = W._mesh(new THREE.CylinderGeometry(1.1, 1.1, 30, 8), m.dark, gx + Math.cos(a) * 12, F + 13, gz + Math.sin(a) * 12);
       leg.rotation.set(Math.sin(a) * 0.25, 0, -Math.cos(a) * 0.25); leg.updateMatrix();
+      addCyl(gx + Math.cos(a) * 12, gz + Math.sin(a) * 12, 1.6, F, F + 12, { surface: 'steel' });
     }
     W._mesh(new THREE.SphereGeometry(22, 40, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), m.grill, gx, top, gz);
     W._mesh(new THREE.TorusGeometry(22, 0.7, 8, 48).rotateX(Math.PI / 2), m.steel, gx, top, gz, { cast: false });
@@ -185,19 +188,22 @@ export function buildBackyard(W) {
   W._box(-168, -132, -112, -88, F, -12, m.cooler);
   W._box(-169, -131, -113, -87, -12, -10, m.white);
   addBox(-169, -131, -113, -87, F, -10, { surface: 'plastic' });
+  addBox(-156, -144, -88, -86, -18, -14, { surface: 'plastic' }); // its handle
   W._box(-156, -144, -88, -86, -18, -14, m.white, { cast: false }); // handle
   W._water(-128, F, -80, 14, 9);
   for (const [x, z] of [[-122, -70], [-135, -76]]) {
+    addBox(x - 2.3, x + 2.3, z - 2.3, z + 2.3, F, F + 5, { surface: 'ice' });
     W._mesh(new THREE.BoxGeometry(5, 5, 5).rotateY(rand(0, 1)), new THREE.MeshPhysicalMaterial({ color: '#e3f6ff', roughness: 0.05, transparent: true, opacity: 0.8, clearcoat: 1 }), x, F + 2.5, z);
   }
 
   // ---------------------------------------------------------------- kiddie pool: get Wet
   {
     const px = -140, pz = 95, r = 30;
-    W._mesh(new THREE.TorusGeometry(r, 3, 12, 56).rotateX(Math.PI / 2), m.pool, px, F + 3, pz);
+    // (0.28) an inflatable rim you climb over (a ring of solid sections) and water you wade in
+    W._mesh(new THREE.TorusGeometry(r, 2.4, 12, 56).rotateX(Math.PI / 2), m.pool, px, F + 2.4, pz);
     W._mesh(new THREE.CircleGeometry(r, 48).rotateX(-Math.PI / 2), m.pool, px, F + 0.1, pz, { cast: false });
-    addCyl(px, pz, r + 3, F, F + 3.5, { surface: 'plastic' });
-    W._water(px, F + 3.5, pz, r - 1, r - 1);
+    for (let i = 0; i < 44; i++) { const a = (i / 44) * Math.PI * 2; addCyl(px + Math.cos(a) * r, pz + Math.sin(a) * r, 2.5, F, F + 4.8, { surface: 'plastic' }); }
+    W._water(px, F + 1, pz, r - 2.4, r - 2.4);
     // a rubber duck to hide behind
     food(lumpy(new THREE.SphereGeometry(5, 20, 14), 0.02).scale(1.3, 0.9, 1), '#ffd23f', px + 8, F + 7.5, pz - 6);
     food(new THREE.SphereGeometry(3.4, 18, 12), '#ffd23f', px + 12, F + 12, pz - 6);
@@ -262,6 +268,7 @@ export function buildBackyard(W) {
   addCyl(120, 60, 4, F, F + 21, { surface: 'plastic' });
   W._mesh(new THREE.CylinderGeometry(7, 7, 12, 24), m.steel, -60, F + 6, -130);
   W._mesh(new THREE.CylinderGeometry(1, 1.4, 16, 10).rotateZ(-0.9), m.steel, -50, F + 10, -130);
+  addBox(-53, -45, -131.4, -128.6, F + 6, F + 15, { surface: 'steel' }); // the spout
   addCyl(-60, -130, 7, F, F + 12, { surface: 'steel' });
 
   // ---------------------------------------------------------------- pads, the giant tomato, the tide, spawns

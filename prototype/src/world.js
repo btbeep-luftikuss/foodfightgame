@@ -387,6 +387,7 @@ export class World {
     this._mesh(new THREE.CylinderGeometry(4.2, 3.9, 9, 40), m.mug, 14, 4.5, -16, shadowy);
     this._mesh(new THREE.TorusGeometry(2.4, 0.6, 12, 24).rotateY(Math.PI / 2), m.mug, 18.5, 4.8, -16, shadowy);
     addCyl(14, -16, 4.2, 0, 9, { surface: 'ceramic' });
+    addBox(17.6, 19.6, -16.6, -15.4, 2.2, 7.4, { surface: 'ceramic' }); // the mug's handle
     const boardMat = new THREE.MeshStandardMaterial({ color: '#c98f55', roughness: 0.55 });
     this._mesh(new THREE.BoxGeometry(24, 1, 14), boardMat, 0, 0.5, -1, shadowy);
     this._mesh(new THREE.CylinderGeometry(1.2, 1.2, 1.1, 20), m.dark, 10, 0.55, -1, { cast: false });
@@ -397,6 +398,7 @@ export class World {
     this._mesh(new THREE.BoxGeometry(8, 0.3, 1.2), m.dark, 32, 9.05, -27.6, { cast: false });
     this._mesh(new THREE.BoxGeometry(8, 0.3, 1.2), m.dark, 32, 9.05, -24.4, { cast: false });
     this._mesh(new THREE.BoxGeometry(1, 2.4, 1.4), m.dark, 38.4, 6, -26, { cast: false });
+    addBox(37.9, 38.9, -26.7, -25.3, 4.8, 7.2, { surface: 'steel' }); // the toaster's lever
     addBox(26, 38, -30, -22, 0, 9, { surface: 'steel' });
     const salt = new THREE.MeshPhysicalMaterial({ color: '#fbfbfb', roughness: 0.2, clearcoat: 1 });
     const pepper = new THREE.MeshPhysicalMaterial({ color: '#3a3533', roughness: 0.25, clearcoat: 1 });
@@ -439,6 +441,7 @@ export class World {
     this._mesh(new THREE.CylinderGeometry(1.6, 2, 16, 16), m.chrome, -100, 8, -174);
     this._mesh(new THREE.TorusGeometry(5, 1.1, 10, 20, Math.PI).rotateY(Math.PI / 2), m.chrome, -100, 16, -169);
     addCyl(-100, -174, 2, 0, 18, { surface: 'steel' });
+    addBox(-101.2, -98.8, -175, -163.5, 14.5, 18.2, { surface: 'steel' }); // the faucet's arch
     // stove: two burners that cycle, a big stock pot and a range hood
     this._box(58, 132, -176, -148, 0, 0.6, m.dark, { cast: false });
     this._burner(78, 0.6, -162, 7, false);

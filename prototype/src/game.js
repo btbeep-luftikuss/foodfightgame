@@ -66,6 +66,7 @@ export class Game {
     this.mode = 'classic'; // 'classic' | 'chef' (Chef's Choice: 3 bottomless foods, nothing spawns) | 'pots' (Cooking Pot Wars)
     this.teamSize = 1; // 1 Solo, 2 Duos, 3 Trios, 4 Squads (teams.js)
     this.teamBar = { html: '' };
+    this.potMenu = ['tomato', 'carrot', 'blueberry', 'banana', 'ice']; // my pick for my team's pot (Cooking Pot Wars)
     this.player = null;
     this.tide = { x: 0, z: 0, r: 330, dps: 2, phase: 0, mode: 'wait', t: 99, phases: TIDE_PHASES };
     this.hitStopUntil = 0;
@@ -478,6 +479,7 @@ export class Game {
   newMatch(withPlayer, opts = {}) {
     this.mode = opts.mode === 'chef' || opts.mode === 'pots' ? opts.mode : 'classic';
     this.teamSize = withPlayer ? cleanSize(opts.team, this.mode) : 1;
+    if (opts.potMenu?.length) this.potMenu = opts.potMenu;
     const nT = teamCount(this.teamSize);
     const chef = this.mode === 'chef';
     this.actors = this.botActors;

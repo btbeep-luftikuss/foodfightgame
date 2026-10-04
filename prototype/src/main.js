@@ -217,6 +217,7 @@ function boot() {
     $('map-note').textContent = MAPS[mapId].blurb;
     renderTeamPick();
     $('chef').hidden = selMode !== 'chef';
+    $('potmenu-row').hidden = selMode !== 'pots';
     renderStart();
   };
   // Your team (Play vs bots): a team, or "Any" (the emptiest one, with bots for teammates).
@@ -301,12 +302,14 @@ function boot() {
   function renderStart() {
     const btn = $('play-start'), left = 3 - chefPick.length;
     const name = { classic: 'Classic', chef: "Chef's Choice", pots: 'Cooking Pot Wars' }[selMode];
-    btn.disabled = selMode === 'chef' && left > 0;
-    btn.textContent = btn.disabled ? `Pick ${left} more food${left > 1 ? 's' : ''}` : `Start ${name}${teamSize > 1 ? ` · ${TEAM_LABEL[teamSize]}` : ''}`;
+    const potLeft = selMode === 'pots' ? 5 - potPick.length : 0;
+    btn.disabled = (selMode === 'chef' && left > 0) || potLeft > 0;
+    btn.textContent = potLeft > 0 ? `Pick ${potLeft} more food${potLeft > 1 ? 's' : ''} for your pot` : btn.disabled ? `Pick ${left} more food${left > 1 ? 's' : ''}` : `Start ${name}${teamSize > 1 ? ` · ${TEAM_LABEL[teamSize]}` : ''}`;
   }
   $('play-start').addEventListener('click', () => {
     if (selMode === 'chef' && chefPick.length !== 3) return;
-    start({ mode: selMode, team: teamSize, myTeam: myTeamPick, ...(selMode === 'chef' ? { loadout: [...chefPick], utensil: chefUtensil || null } : {}) });
+    if (selMode === 'pots' && potPick.length !== 5) return;
+    start({ mode: selMode, team: teamSize, myTeam: myTeamPick, potMenu: [...potPick], ...(selMode === 'chef' ? { loadout: [...chefPick], utensil: chefUtensil || null } : {}) });
   });
   $('again').addEventListener('click', () => start());
 
@@ -406,6 +409,35 @@ function boot() {
   const foodGrids = [$('chef-grid'), $('lo-foods')];
   const foodHtml = FOOD_IDS.map((id) => `<button type="button" data-id="${id}" aria-pressed="false"><img src="${icons[id] || ''}" alt=""><span>${FOODS[id].name}</span><small>${FOODS[id].role.replace(/ · (heal|snack)$/, '')}</small></button>`).join('');
   for (const el of foodGrids) el.innerHTML = foodHtml;
+  // Cooking Pot Wars: the 5 foods you want your team's pot to spit out (remembered; your team votes)
+  let potPick = ['tomato', 'carrot', 'blueberry', 'banana', 'ice'];
+  try { const v = JSON.parse(localStorage.getItem('tt-potmenu') || 'null'); if (Array.isArray(v)) { const ok = v.filter((id) => FOOD_IDS.includes(id)).slice(0, 5); if (ok.length) potPick = ok; } } catch { /* storage blocked */ }
+  const potGrids = [$('potmenu'), $('lo-potmenu')];
+  for (const el of potGrids) el.innerHTML = foodHtml;
+  function renderPotMenu() {
+    for (const grid of potGrids) {
+      for (const b of grid.children) {
+        const i = potPick.indexOf(b.dataset.id);
+        b.setAttribute('aria-pressed', i >= 0 ? 'true' : 'false');
+        b.dataset.n = i >= 0 ? i + 1 : '';
+        b.disabled = i < 0 && potPick.length >= 5;
+      }
+    }
+    const left = 5 - potPick.length, txt = left > 0 ? `${left} more to pick` : 'all set';
+    $('potmenu-count').textContent = txt; $('lo-potmenu-count').textContent = txt;
+    if (potPick.length === 5) game.potMenu = [...potPick];
+  }
+  for (const grid of potGrids) {
+    grid.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const id = b.dataset.id, i = potPick.indexOf(id);
+      if (i >= 0) potPick.splice(i, 1); else if (potPick.length < 5) potPick.push(id);
+      try { localStorage.setItem('tt-potmenu', JSON.stringify(potPick)); } catch { /* storage blocked */ }
+      renderPotMenu(); renderStart(); renderLoadout();
+    });
+  }
+  renderPotMenu();
   // online: picks made while ready count from your next drop
   const pushLoadout = () => { if (game.net?.ready && chefPick.length === 3) { game.net.loadout = [...chefPick]; game.net.utensil = chefUtensil || null; } };
   function renderChef() {
@@ -466,6 +498,7 @@ function boot() {
     const room = `Room <b>${esc(net.roomName)}</b> · ${MAPS[rs.map]?.name || 'The Grand Kitchen'} · ${TEAM_LABEL[size]} · ${bots}. ${mode}.`;
     if ($('lo-room').innerHTML !== room) $('lo-room').innerHTML = room;
     renderLoTeams(size);
+    $('lo-potmenu-row').hidden = rs.mode !== 'pots';
     let note;
     if (!R || R.id < 0) note = 'Finding the room…';
     else if (game.player?.alive) note = 'You are in this round: a new pick counts from your next drop.';

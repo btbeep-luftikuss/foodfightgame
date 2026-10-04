@@ -63,6 +63,18 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.28: pot menus, steady turrets, bigger stacks, more solid scenery**
+
+- **Turret gunners sit still.** Anyone in a turret ignores moving, jumping and dashing. Bots kept hopping on the lid because their usual random jumps and "I'm stuck" hops kept running.
+- **Bigger stacks:** a stack holds up to 99 of a food (blueberries 600), up from 30 (240).
+- **Pot menus (Cooking Pot Wars).** Each team picks the 5 foods its pot spits out.
+  - Pick yours on the Play screen (Play vs bots; Start waits for 5) or in the loadout card online.
+  - The team's players vote (first picks count a little more), and the host keeps counting through the 30 s setup. Bot teams get 5 at random.
+  - Online every Titan shares its pick (pm) and the host shares each pot's menu. When the pots go down the feed says what yours cooks.
+- **More solid things.**
+  - Backyard: the kiddie pool's rim is now a ring you climb or jump over (you wade inside and get Wet), instead of a solid lid over the water. The beams and posts under the benches, the grill's legs, the ice cubes by the cooler, the cooler's handle and the watering can's spout are solid too.
+  - Kitchen: the mug's handle, the faucet's arch and the toaster's lever are solid.
+
 **Version 0.27: Cooking Pot Wars, carriers and manned turrets** (`src/potwars.js`)
 
 - **A carried pot goes home if its carrier falls.** A smashed pot rides on its smasher's back; if they're splatted (or leave), it's back at its spot with half its health and its team respawns again.

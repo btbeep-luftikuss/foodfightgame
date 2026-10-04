@@ -347,6 +347,10 @@ button { font: inherit; color: inherit; }
 .teampick button:disabled { opacity: 0.4; cursor: default; }
 h3.sub { margin: 4px 0 0; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--paper-dim); font-weight: 700; }
 .card .teampick-row { margin-bottom: 2px; }
+.potgrid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)) !important; }
+.potgrid button { padding: 5px 3px; font-size: 11.5px; }
+.potgrid button img { width: 30px; height: 30px; }
+.potgrid button small { display: none; }
 
 /* ------------------------------------------------------------------ touch */
 .touch { position: fixed; inset: 0; pointer-events: none; --sb: env(safe-area-inset-bottom, 0px); --sr: env(safe-area-inset-right, 0px); }
@@ -568,7 +572,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.27 · Pot Wars: carriers and turrets</p>
+      <p class="eyebrow">Prototype 0.28 · Pot menus, bigger stacks</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in, or smash the other teams' pots in Cooking Pot Wars.</p>
       <nav class="homenav" aria-label="Main menu">
@@ -631,6 +635,10 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
         <div id="teampick-row" class="teampick-row">
           <p class="step-sub"><b>Your team</b> <span>bots fill every other place</span></p>
           <div id="teampick" class="teampick" role="group" aria-label="Your team"></div>
+        </div>
+        <div id="potmenu-row" class="teampick-row" hidden>
+          <p class="step-sub"><b>Your pot's menu</b> <span>the 5 foods your pot spits out · <span id="potmenu-count"></span></span></p>
+          <div id="potmenu" class="chef-grid potgrid" role="group" aria-label="Pick 5 foods for your pot"></div>
         </div>
         <div id="chef" class="chef" hidden>
           <p class="step">3 · Your foods</p>
@@ -719,6 +727,10 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     <div id="lo-teams-row" class="teampick-row" hidden>
       <p class="lo-h"><b>Your team</b><span>bots fill the empty places</span></p>
       <div id="lo-teams" class="teampick" role="group" aria-label="Your team"></div>
+    </div>
+    <div id="lo-potmenu-row" class="teampick-row" hidden>
+      <p class="lo-h"><b>Your pot's menu</b><span>pick 5 foods for it to spit out; your team votes · <span id="lo-potmenu-count"></span></span></p>
+      <div id="lo-potmenu" class="chef-grid lo-grid potgrid" role="group" aria-label="Pick 5 foods for your pot"></div>
     </div>
     <div class="lo-cols">
       <div>

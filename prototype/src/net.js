@@ -218,6 +218,7 @@ export class Net {
     const t = this.game.time;
     this.log = this.log.filter((e) => t - e[e.length - 1] < (POT_EVENTS.has(e[1]) ? 3 : LOG_KEEP)).slice(-LOG_MAX); // (pot moves stay longer: they must not be missed)
     const msg = { n: this.name, c: this.color, k: this.game.playerSkin, w: this.ready ? 1 : 0, s: this._stateOf(p, this.game.input.pitch), e: this.log.map((e) => e.slice(0, -1)) };
+    if (g.mode === 'pots') msg.pm = (g.potMenu || []).map((id) => FOOD_IDS.indexOf(id).toString(36)).join(''); // my pick for my pot's menu
     if (this.isHost && g.pots.active) msg.pw = [Math.max(0, g.round.id), ...g.pots.state()]; // Cooking Pot Wars: the pots
     if (this.isHost) {
       const R = g.round, T = g.tide, to = T.to || { x: T.x, z: T.z, r: T.r };
@@ -384,6 +385,7 @@ export class Net {
     pr.ready = pres.w !== 0; // wants to play (older games always did)
     pr.actor.name = cleanName(pres.n);
     if (/^#[0-9a-f]{6}$/i.test(pres.c)) pr.actor.ownColor = pres.c;
+    pr.potMenu = typeof pres.pm === 'string' && pres.pm.length <= 5 ? [...pres.pm].map((c) => FOOD_IDS[parseInt(c, 36)]).filter(Boolean) : null;
     this._applyState(pr, pres.s);
 
     // events we haven't seen yet

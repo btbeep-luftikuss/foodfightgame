@@ -864,7 +864,7 @@ export const FOODS = {
 };
 
 // Every food pickup holds a random 4-15 of that food; a slot stacks up to 30.
-export const AMMO_MIN = 4, AMMO_MAX = 15, STACK_MAX = 30;
+export const AMMO_MIN = 4, AMMO_MAX = 15, STACK_MAX = 99; // (0.28: stacks up to 99, blueberries 600)
 export const pickupAmmo = (id) => (FOODS[id].ammo ? FOODS[id].ammo() : rollAmmo());
 export const rollAmmo = () => AMMO_MIN + Math.floor(Math.random() * (AMMO_MAX - AMMO_MIN + 1));
 export const FOOD_IDS = ['tomato', 'banana', 'carrot', 'ice', 'soda', 'cheese', 'grapes', 'chili', 'cookie', 'watermelon', 'pineapple', 'jelly', 'blueberry'];
@@ -905,7 +905,7 @@ export function makeFoodMesh(id) {
   return grp;
 }
 
-for (const id of FOOD_IDS) FOODS[id].maxStack = id === 'blueberry' ? 240 : STACK_MAX;
+for (const id of FOOD_IDS) FOODS[id].maxStack = id === 'blueberry' ? 600 : STACK_MAX;
 
 export function randomFoodId() {
   let total = 0;

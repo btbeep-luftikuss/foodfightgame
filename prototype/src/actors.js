@@ -354,6 +354,7 @@ export class Actor {
   // ------------------------------------------------------------------ simulation
   update(dt, it) {
     if (!this.alive) return;
+    if (this.inTurret && it) it = { ...it, moveX: 0, moveZ: 0, jump: false, dodge: false, sprint: false }; // sitting in a turret
     const g = this.game, now = g.time, W = g.world;
     this.sticky = this.sticky.filter((e) => e.until > now);
 

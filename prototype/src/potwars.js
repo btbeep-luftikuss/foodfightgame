@@ -8,6 +8,7 @@
 //  - (0.27) A carried pot goes back to its spot if its carrier goes down; while it's carried, its
 //    team's knocked-out Titans watch the carrier and come back only if the carrier falls.
 //  - (0.27) Turrets fire only when someone climbs in (T at your pot) and aims them.
+//  - (0.28) Each team picks the 5 foods its pot spits out (its players vote; bot teams get 5 at random).
 //  - Smash a pot and it goes on your back. Carry it home without getting splatted: your pot gets
 //    more health, spits food faster, and its turret gets stronger.
 //  - The turret on top of your pot fires your own food when you stand at the pot (only your team
@@ -18,7 +19,7 @@
 // Each player respawns their own Titan; the host respawns its bots.
 import * as THREE from 'three';
 import { clamp, rand, groundHeight, addCyl, FLOOR_Y } from './core.js';
-import { FOODS, pickupAmmo, randomFoodId } from './foods.js';
+import { FOODS, FOOD_IDS, pickupAmmo } from './foods.js';
 import { randomUtensilId } from './utensils.js';
 import { TEAMS, teamCount, teamHome } from './teams.js';
 
@@ -104,7 +105,9 @@ export class PotWars {
     this.active = true; this.over = false;
     this.setupUntil = g.time + SETUP; this.setup = true;
     this.raidAllAt = g.time + SETUP + 70; // after a while every bot goes raiding
-    this.pots = TEAMS.slice(0, n).map((t, i) => ({ team: i, ...t, placed: false, alive: true, carried: false, carrier: null, gunner: null, hp: POT_LIFE, maxHp: POT_LIFE, captures: 0, pos: new THREE.Vector3(), mesh: null, collider: null, spitAt: 0, flash: 0, firedAt: -9, label: null, out: false }));
+    this.pots = TEAMS.slice(0, n).map((t, i) => ({ team: i, ...t, placed: false, alive: true, menu: [], carried: false, carrier: null, gunner: null, hp: POT_LIFE, maxHp: POT_LIFE, captures: 0, pos: new THREE.Vector3(), mesh: null, collider: null, spitAt: 0, flash: 0, firedAt: -9, label: null, out: false }));
+    this.menuAt = 0;
+    if (this.auth) for (const p of this.pots) p.menu = this._menuFor(p.team);
     const seen = new Array(n).fill(0);
     for (const a of g.actors) {
       if (a.team == null) continue;
@@ -119,6 +122,20 @@ export class PotWars {
     }
   }
   _setHp(a) { a.maxHp = POT_HP; a.hp = POT_HP; }
+
+  // The 5 foods a team's pot spits out: its players' picks, by vote (first picks count a little
+  // more); a team of bots (or too few picks) gets the rest at random.
+  _menuFor(team) {
+    const g = this.game, picks = [];
+    if (g.player?.team === team && (!g.online || g.net?.ready)) picks.push(g.potMenu);
+    if (g.online) for (const pr of g.net.proxies.values()) if (pr.ready && pr.actor.team === team) picks.push(pr.potMenu);
+    const votes = new Map();
+    for (const list of picks) (list || []).forEach((id, i) => { if (FOOD_IDS.includes(id)) votes.set(id, (votes.get(id) || 0) + 10 - i * 0.1); });
+    const menu = [...votes.entries()].sort((x, y) => y[1] - x[1]).map((e) => e[0]).slice(0, 5);
+    const rest = FOOD_IDS.filter((id) => !menu.includes(id)).sort(() => Math.random() - 0.5);
+    while (menu.length < 5) menu.push(rest.pop());
+    return menu;
+  }
   home(t) { return teamHome(this.game.world, this.pots.length, t); }
 
   // ---------------------------------------------------------------- pots
@@ -375,7 +392,7 @@ export class PotWars {
   // ---------------------------------------------------------------- online: the host shares the pots
   // [seconds of setup left, then per pot: placed, alive (1; 2: carried off; 0: gone), hp, max hp, pots carried home, x, y, z]
   state() {
-    return [Math.max(0, Math.round(this.setupLeft() * 10) / 10), ...this.pots.map((p) => [p.placed ? 1 : 0, p.alive ? 1 : p.carried ? 2 : 0, Math.round(p.hp), Math.round(p.maxHp), p.captures, r1(p.pos.x), r1(p.pos.y), r1(p.pos.z), p.gunner?.alive ? 1 : 0])];
+    return [Math.max(0, Math.round(this.setupLeft() * 10) / 10), ...this.pots.map((p) => [p.placed ? 1 : 0, p.alive ? 1 : p.carried ? 2 : 0, Math.round(p.hp), Math.round(p.maxHp), p.captures, r1(p.pos.x), r1(p.pos.y), r1(p.pos.z), p.gunner?.alive ? 1 : 0, p.menu.map((id) => FOOD_IDS.indexOf(id).toString(36)).join('')])];
   }
   applyState(st, num) {
     if (!this.active || !Array.isArray(st)) return;
@@ -386,6 +403,7 @@ export class PotWars {
       const e = st[i + 1];
       if (!Array.isArray(e)) return;
       if (e[0] === 1 && !p.placed) this._place(i, new THREE.Vector3(num(e[5], -300, 300), num(e[6], -40, 120), num(e[7], -300, 300)));
+      if (typeof e[9] === 'string' && e[9].length <= 5) { const m = [...e[9]].map((c) => FOOD_IDS[parseInt(c, 36)]).filter(Boolean); if (m.length) p.menu = m; }
       p.hp = num(e[2], 0, 5000); p.maxHp = num(e[3], 1, 5000, POT_LIFE); p.captures = num(e[4], 0, 20) | 0;
       if (e[1] !== 1 && p.alive && p.placed) this._smash(p, null);
       p.carried = e[1] === 2;
@@ -432,6 +450,7 @@ export class PotWars {
   update(dt) {
     if (!this.active) return;
     const g = this.game, now = g.time;
+    if (this.auth && this.setup && now >= this.menuAt) { this.menuAt = now + 0.5; for (const p of this.pots) p.menu = this._menuFor(p.team); } // the team can still change its mind
     if (this.auth && this.setup && now >= this.setupUntil) {
       this.setup = false;
       for (const p of this.pots) {
@@ -445,6 +464,8 @@ export class PotWars {
     }
     if (this.setup !== this.wasSetup && !this.setup && this.wasSetup !== undefined) {
       g.hud.banner('Pots are down!', 'Smash their pots with your ladle (G) · press T at yours to get in its turret', 3.2);
+      const mine = this.pots[g.player?.team];
+      if (mine) g.hud.feed(`Your pot cooks: ${mine.menu.map((id) => FOODS[id]?.name).join(', ')}`, true);
       g.sfx.play('tide', null, 0.6);
     }
     this.wasSetup = this.setup;
@@ -453,7 +474,7 @@ export class PotWars {
       // the pot spits out food, faster with every pot carried home
       if (now >= p.spitAt) {
         p.spitAt = now + SPIT_EVERY / (1 + 0.6 * p.captures);
-        const id = randomFoodId(), a = rand(0, Math.PI * 2);
+        const id = p.menu[(Math.random() * p.menu.length) | 0] || 'tomato', a = rand(0, Math.PI * 2); // from the team's menu
         g.items.drop(id, pickupAmmo(id), _v.set(p.pos.x, p.pos.y + POT_H + 0.5, p.pos.z), _p.set(Math.cos(a) * 5, 9, Math.sin(a) * 5));
         g.fx.burst('steam', _v.set(p.pos.x, p.pos.y + POT_H, p.pos.z), 0.6);
       }
