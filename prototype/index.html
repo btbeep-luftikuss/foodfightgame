@@ -318,6 +318,34 @@ button { font: inherit; color: inherit; }
 .card p.lo-note { font-size: 13px; color: var(--glaze); font-weight: 700; }
 .lo-room b { color: var(--butter); }
 
+/* ------------------------------------------------------------------ menu screens (0.26) */
+.screen { display: grid; align-content: start; gap: 16px; }
+.scr-head { display: flex; align-items: center; gap: 12px; position: sticky; top: calc(-28px - env(safe-area-inset-top, 0px)); z-index: 2; margin: -8px -28px 0; padding: 8px 28px; background: var(--ink-glass); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.scr-head h2 { font-family: var(--display); font-weight: 400; font-size: 30px; letter-spacing: 0; text-transform: none; color: var(--butter); text-shadow: 2px 3px 0 var(--tomato); }
+.back { border: 0; border-radius: 999px; padding: 8px 14px; font-weight: 800; font-size: 14px; cursor: pointer; background: transparent; color: var(--paper); box-shadow: inset 0 0 0 2px var(--paper-dim); }
+.homenav { display: grid; gap: 10px; }
+.navbtn { display: grid; gap: 2px; text-align: left; padding: 14px 18px; border: 0; border-radius: 16px; cursor: pointer; background: var(--ink-2); color: var(--paper); box-shadow: inset 0 0 0 2px rgba(255,244,226,0.14); transition: transform 0.1s, box-shadow 0.1s; }
+.navbtn b { font-size: 19px; }
+.navbtn span { font-size: 13px; color: var(--paper-dim); }
+.navbtn:hover { transform: translateX(3px); box-shadow: inset 0 0 0 2px var(--butter); }
+.navbtn.main { background: var(--butter); color: var(--ink); box-shadow: 0 4px 0 #b8901a; }
+.navbtn.main span { color: #5a4630; }
+.step { margin: 6px 0 0; font-size: 12px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--glaze); }
+.step-sub { margin: 0; font-size: 14px; } .step-sub span { color: var(--paper-dim); font-size: 13px; }
+.modes { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) !important; }
+.mode[aria-pressed="true"] { border-color: var(--butter); box-shadow: 0 0 0 2px var(--butter); background: #3a3020; }
+.startbar { position: sticky; bottom: calc(-24px - env(safe-area-inset-bottom, 0px)); margin: 0 -28px; padding: 12px 28px calc(14px + env(safe-area-inset-bottom, 0px)); background: var(--ink-glass); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.startbar .btn { width: 100%; }
+.teampick-row { display: grid; gap: 8px; }
+.teampick { display: flex; flex-wrap: wrap; gap: 6px; }
+.teampick button { display: grid; gap: 1px; justify-items: start; min-width: 96px; padding: 7px 12px 8px; border-radius: 12px; border: 2px solid color-mix(in srgb, var(--c, #cdb9c9) 60%, transparent); background: var(--ink); color: var(--paper); font: inherit; font-weight: 800; font-size: 14px; cursor: pointer; text-align: left; }
+.teampick button b { color: var(--c, var(--paper)); }
+.teampick button small { font-weight: 500; font-size: 11.5px; color: var(--paper-dim); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.teampick button[aria-pressed="true"] { border-color: var(--c, var(--butter)); box-shadow: 0 0 0 2px var(--c, var(--butter)); background: color-mix(in srgb, var(--c, #ffd447) 18%, #22142a); }
+.teampick button:disabled { opacity: 0.4; cursor: default; }
+h3.sub { margin: 4px 0 0; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--paper-dim); font-weight: 700; }
+.card .teampick-row { margin-bottom: 2px; }
+
 /* ------------------------------------------------------------------ touch */
 .touch { position: fixed; inset: 0; pointer-events: none; --sb: env(safe-area-inset-bottom, 0px); --sr: env(safe-area-inset-right, 0px); }
 .stick { position: fixed; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 3px solid rgba(255,244,226,0.4); background: rgba(34,20,42,0.3); opacity: 0; transition: opacity 0.15s; }
@@ -513,7 +541,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       </div>
     </div>
   </div>
-  <div id="potsPanel" class="pots" hidden></div>
+  <div id="teamBar" class="pots" hidden></div>
   <div id="toast" class="toast"></div>
   <div id="banner" class="banner"></div>
   <div id="fps" class="fps"></div>
@@ -535,98 +563,147 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 
 <section id="menu" class="menu" aria-label="Main menu">
   <div class="menu-panel">
-    <p class="eyebrow">Prototype 0.25 · Cooking Pot Wars</p>
-    <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
-    <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Play in first person against 11 bots until the Soap Tide closes in, in teams in Cooking Pot Wars, or online against your friends (with bots too). Two maps: the kitchen and the Backyard BBQ. Blueberries fire like a machine gun.</p>
-    <div class="row">
-      <button id="play" class="btn" type="button">Play vs bots</button>
-      <button id="online-open" class="btn ghost" type="button">Play online</button>
-      <button id="locker-open" class="btn ghost" type="button">Locker</button>
-      <button id="gfx-open" class="btn ghost" type="button">Graphics</button>
+    <!-- home -->
+    <div class="screen" data-screen="home">
+      <p class="eyebrow">Prototype 0.26 · Teams, online Pot Wars</p>
+      <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
+      <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in, or smash the other teams' pots in Cooking Pot Wars.</p>
+      <nav class="homenav" aria-label="Main menu">
+        <button id="play" class="navbtn main" type="button" data-go="play"><b>Play vs bots</b><span>Classic, Chef's Choice or Cooking Pot Wars · Solo, Duos, Trios or Squads</span></button>
+        <button id="online-open" class="navbtn" type="button" data-go="online"><b>Play online</b><span>Your friends, a room code, every mode and team size</span></button>
+        <button id="locker-open" class="navbtn" type="button" data-go="locker"><b>Locker</b><span>Pick your skin</span></button>
+        <button id="gfx-open" class="navbtn" type="button" data-go="settings"><b>Settings</b><span>Graphics, ray tracing, resolution</span></button>
+        <button id="help-open" class="navbtn" type="button" data-go="help"><b>How to play</b><span>Controls, foods, utensils, the kitchen</span></button>
+      </nav>
+      <p id="menu-error" hidden></p>
+      <p class="foot">Prototype of the Tiny Titans design document: 13 foods, 20 utensils, two maps, 12 Titans.</p>
     </div>
-    <div id="gfx-menu" class="online gfx" hidden></div>
-    <p id="menu-error" hidden></p>
-    <div id="locker" class="online" hidden>
-      <p id="locker-now"></p>
-      <div id="locker-stage" class="locker-stage" aria-label="Your Titan in the selected skin; drag to spin"></div>
-      <div id="locker-grid" class="locker-grid" role="group" aria-label="Skins"></div>
-    </div>
-    <div id="modes" class="online" hidden>
-      <div id="match-settings" class="match-settings">
-        <div class="botlevel-row"><b>Map</b>
-          <div id="mappick" class="botlevel" role="group" aria-label="Map">
-            <button type="button" data-map="kitchen" aria-pressed="true">Grand Kitchen</button>
-            <button type="button" data-map="backyard" aria-pressed="false">Backyard BBQ</button>
+
+    <!-- play vs bots -->
+    <div class="screen" data-screen="play" hidden>
+      <header class="scr-head"><button class="back" type="button" data-go="home" aria-label="Back to the main menu">‹ Back</button><h2>Play vs bots</h2></header>
+      <div id="modes">
+        <p class="step">1 · Mode</p>
+        <div class="modes" role="group" aria-label="Mode">
+          <button id="mode-classic" class="mode" type="button" data-mode="classic" aria-pressed="true"><b>Classic</b><span>Grab food as you go. Food floats all over the kitchen and bananas and grapes heal. The Soap Tide closes in.</span></button>
+          <button id="mode-chef" class="mode" type="button" data-mode="chef" aria-pressed="false"><b>Chef's Choice</b><span>Pick 3 foods that never run out. No food spawns and food doesn't heal: grab green heal crosses instead.</span></button>
+          <button id="mode-pots" class="mode" type="button" data-mode="pots" aria-pressed="false"><b>Cooking Pot Wars</b><span>Like Bed Wars: hide your team's pot, smash theirs with your ladle (G), carry them home. You respawn at your pot while it stands.</span></button>
+        </div>
+        <p class="step">2 · Teams and arena</p>
+        <div id="play-settings"><div id="match-settings" class="match-settings">
+            <div class="botlevel-row online-only"><b>Mode</b>
+              <div id="onlinemode" class="botlevel" role="group" aria-label="Mode">
+                <button type="button" data-mode="classic" aria-pressed="true">Classic</button>
+                <button type="button" data-mode="chef" aria-pressed="false">Chef's Choice</button>
+                <button type="button" data-mode="pots" aria-pressed="false">Pot Wars</button>
+              </div>
+            </div>
+            <div class="botlevel-row"><b>Teams</b>
+              <div id="teamsize" class="botlevel" role="group" aria-label="Team size">
+                <button type="button" data-team="1" aria-pressed="true">Solo</button>
+                <button type="button" data-team="2" aria-pressed="false">Duos</button>
+                <button type="button" data-team="3" aria-pressed="false">Trios</button>
+                <button type="button" data-team="4" aria-pressed="false">Squads</button>
+              </div>
+            </div>
+            <p id="team-note" class="botlevel-note"></p>
+            <div class="botlevel-row"><b>Map</b>
+              <div id="mappick" class="botlevel" role="group" aria-label="Map">
+                <button type="button" data-map="kitchen" aria-pressed="true">Grand Kitchen</button>
+                <button type="button" data-map="backyard" aria-pressed="false">Backyard BBQ</button>
+              </div>
+            </div>
+            <p id="map-note" class="botlevel-note"></p>
+            <div class="botlevel-row"><b>Bots</b>
+              <div id="botlevel" class="botlevel" role="group" aria-label="Bot difficulty">
+                <button type="button" data-level="off" aria-pressed="false" class="online-only">None</button>
+                <button type="button" data-level="easy" aria-pressed="false">Easy</button>
+                <button type="button" data-level="medium" aria-pressed="true">Medium</button>
+                <button type="button" data-level="hard" aria-pressed="false">Hard</button>
+              </div>
+            </div>
+            <p id="botlevel-note" class="botlevel-note">Easy bots aim loosely, react slowly and rarely dodge. Hard bots lead their shots, throw faster and dodge often.</p>
           </div>
         </div>
-        <p id="map-note" class="botlevel-note"></p>
-        <div class="botlevel-row"><b>Bots</b>
-          <div id="botlevel" class="botlevel" role="group" aria-label="Bot difficulty">
-            <button type="button" data-level="off" aria-pressed="false" class="online-only">None</button>
-            <button type="button" data-level="easy" aria-pressed="false">Easy</button>
-            <button type="button" data-level="medium" aria-pressed="true">Medium</button>
-            <button type="button" data-level="hard" aria-pressed="false">Hard</button>
-          </div>
+        <div id="teampick-row" class="teampick-row">
+          <p class="step-sub"><b>Your team</b> <span>bots fill every other place</span></p>
+          <div id="teampick" class="teampick" role="group" aria-label="Your team"></div>
         </div>
-        <p id="botlevel-note" class="botlevel-note">Easy bots aim loosely, react slowly and rarely dodge. Hard bots lead their shots, throw faster and dodge often.</p>
-        <div class="botlevel-row online-only"><b>Mode</b>
-          <div id="onlinemode" class="botlevel" role="group" aria-label="Online mode">
-            <button type="button" data-mode="classic" aria-pressed="true">Classic</button>
-            <button type="button" data-mode="chef" aria-pressed="false">Chef's Choice</button>
-          </div>
+        <div id="chef" class="chef" hidden>
+          <p class="step">3 · Your foods</p>
+          <p>Pick 3 foods. Bots bring 3 random foods each.</p>
+          <div id="chef-grid" class="chef-grid" role="group" aria-label="Pick 3 foods"></div>
+          <p>Start with a utensil (optional). Bots may bring one too.</p>
+          <div id="chef-utensils" class="chef-grid uchoice" role="group" aria-label="Pick a starting utensil"></div>
         </div>
-        <p class="botlevel-note online-only">The first player in a room sets its map, mode and bots; everyone who joins plays by the room's settings. After joining you pick 3 foods and a utensil, or just watch.</p>
-      </div>
-      <p><b>Choose a mode</b></p>
-      <div class="modes">
-        <button id="mode-classic" class="mode" type="button"><b>Classic</b><span>Grab food as you go. Food floats all over the kitchen and bananas and grapes heal.</span></button>
-        <button id="mode-pots" class="mode" type="button"><b>Cooking Pot Wars</b><span>4 teams of 3, like Bed Wars. Hide your team's pot, smash theirs with your ladle (G) and carry them home. You respawn at your pot while it stands; its turret fires your food harder.</span></button>
-        <button id="mode-chef" class="mode" type="button" aria-expanded="false"><b>Chef's Choice</b><span>Pick 3 foods that never run out. No food spawns and food doesn't heal: grab green heal crosses instead.</span></button>
-      </div>
-      <div id="chef" class="chef" hidden>
-        <p>Pick 3 foods. Bots bring 3 random foods each.</p>
-        <div id="chef-grid" class="chef-grid" role="group" aria-label="Pick 3 foods"></div>
-        <p>Start with a utensil (optional). Bots may bring one too.</p>
-        <div id="chef-utensils" class="chef-grid uchoice" role="group" aria-label="Pick a starting utensil"></div>
-        <div class="row"><button id="chef-play" class="btn" type="button" disabled>Pick 3 foods</button></div>
+        <div class="startbar"><button id="play-start" class="btn" type="button">Start</button></div>
       </div>
     </div>
-    <form id="online" class="online" hidden>
-      <label for="nick">Your name<input id="nick" maxlength="16" autocomplete="nickname" value=""></label>
-      <label for="roomcode">Room code (friends type the same one)<input id="roomcode" maxlength="40" value="kitchen" autocapitalize="off" spellcheck="false"></label>
-      <div id="online-settings"></div>
-      <div class="row"><button id="online-join" class="btn" type="submit">Join room</button></div>
-      <p id="online-status">Everyone who opens this game and types the same room code plays together, in Soap Tide rounds like Play vs bots. You pick 3 foods and a utensil to drop in with, or spectate: a cinematic camera follows the fights, with a map and every Titan's splats and items. To invite friends, share this page with them from the Share menu; they need to be signed in to Claude.</p>
-    </form>
-    <h2>Controls</h2>
-    <dl class="keys desk-only">
-      <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move · <kbd>Shift</kbd> sprint</dd>
-      <dt><kbd>Mouse</kbd></dt><dd>Aim · click the game to lock the mouse · hold left button to charge, release to throw</dd>
-      <dt><kbd>Right-click</kbd> <kbd>Q</kbd></dt><dd>Food's alt action (eat, shield, fizz jump)</dd>
-      <dt><kbd>Space</kbd></dt><dd>Jump · press again in the air to double jump</dd>
-      <dt><kbd>C</kbd></dt><dd>Dash (short cooldown, once in the air)</dd>
-      <dt><kbd>1</kbd>–<kbd>5</kbd> <kbd>Wheel</kbd></dt><dd>Pick food</dd>
-      <dt><kbd>6</kbd>–<kbd>8</kbd> <kbd>R</kbd></dt><dd>Pick utensil (you carry up to 3)</dd>
-      <dt><kbd>B</kbd></dt><dd>Sniff: point at Titans making noise (10 s cooldown)</dd>
-      <dt><kbd>V</kbd></dt><dd>Switch first / third person</dd>
-      <dt><kbd>G</kbd></dt><dd>Cooking Pot Wars: set your team's pot down (first 30 s), then swing your ladle at enemy pots</dd>
-      <dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd>Pause</dd>
-    </dl>
-    <dl class="keys touch-only">
-      <dt>Left thumb</dt><dd>Drag anywhere on the left to move (push far to sprint)</dd>
-      <dt>Right thumb</dt><dd>Drag on the right to aim</dd>
-      <dt>Aim stick</dt><dd>Hold it to charge (or to fire blueberries non-stop) and drag to aim; let go to throw</dd>
-      <dt>Jump · Dash</dt><dd>Tap Jump again in the air to double jump; Dash for a quick burst</dd>
-      <dt>Plates</dt><dd>Turn the food plate (bottom left) or the utensil plate (bottom right) either way like a dial, or tap it to step to the next one; a plate has one place for each thing you carry</dd>
-      <dt>Sniff</dt><dd>Points at Titans making noise; quiet ones stay hidden</dd>
-    </dl>
-    <h2>On the menu today</h2>
-    <ul id="legend" class="legend"></ul>
-    <h2>Support utensils</h2>
-    <p class="foot">Utensils arrive in delivery boxes that parachute into the kitchen (follow the coloured light beams). Walk into a box to open it and carry the utensil, or splat it open with food from range. You carry up to three and switch between them like food; with all three full, a new one swaps out the one in your hand, and knocked-out Titans drop all of theirs. A utensil boosts every food you throw, even the banana peel trap for some, but the food is still the shot, and every boost has a cost.</p>
-    <ul id="ulegend" class="legend ulegend"></ul>
-    <p class="foot">Hazards: the three burners cycle on (don't stand on them), the sink and spilled water make you Wet (cleanses sticky and fire, but freezes last longer), honey pools refill your Glaze shield, and the red spatula pads on the floor fling you up onto the counters and the table. Smash the giant tomato for extra ammo. The floor is scattered with giant fallen food and knocked-over chairs to hide behind and climb, a pickle jar you can walk into, and a cracked egg whose white is slippery.</p>
-    <p class="foot">Prototype of the Tiny Titans design document: 12 of 30 foods, the whole kitchen, 12 Titans, bots only.</p>
+
+    <!-- online -->
+    <div class="screen" data-screen="online" hidden>
+      <header class="scr-head"><button class="back" type="button" data-go="home" aria-label="Back to the main menu">‹ Back</button><h2>Play online</h2></header>
+      <form id="online" class="online">
+        <label for="nick">Your name<input id="nick" maxlength="16" autocomplete="nickname" value=""></label>
+        <label for="roomcode">Room code (friends type the same one)<input id="roomcode" maxlength="40" value="kitchen" autocapitalize="off" spellcheck="false"></label>
+        <p class="step-sub"><b>If you start the room</b> <span>(joiners play by the room's settings)</span></p>
+        <div id="online-settings"></div>
+        <div class="row"><button id="online-join" class="btn" type="submit">Join room</button></div>
+        <p id="online-status">Everyone who types the same room code plays together, in rounds. After joining you pick your team, 3 foods and a utensil, or spectate. To invite friends, share this page with them from the Share menu; they need to be signed in to Claude.</p>
+      </form>
+    </div>
+
+    <!-- locker -->
+    <div class="screen" data-screen="locker" hidden>
+      <header class="scr-head"><button class="back" type="button" data-go="home" aria-label="Back to the main menu">‹ Back</button><h2>Locker</h2></header>
+      <div id="locker" class="online">
+        <p id="locker-now"></p>
+        <div id="locker-stage" class="locker-stage" aria-label="Your Titan in the selected skin; drag to spin"></div>
+        <div id="locker-grid" class="locker-grid" role="group" aria-label="Skins"></div>
+      </div>
+    </div>
+
+    <!-- settings -->
+    <div class="screen" data-screen="settings" hidden>
+      <header class="scr-head"><button class="back" type="button" data-go="home" aria-label="Back to the main menu">‹ Back</button><h2>Settings</h2></header>
+      <div id="gfx-menu" class="online gfx"></div>
+    </div>
+
+    <!-- how to play -->
+    <div class="screen" data-screen="help" hidden>
+      <header class="scr-head"><button class="back" type="button" data-go="home" aria-label="Back to the main menu">‹ Back</button><h2>How to play</h2></header>
+      <h3 class="sub">Controls</h3>
+      <dl class="keys desk-only">
+        <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move · <kbd>Shift</kbd> sprint</dd>
+        <dt><kbd>Mouse</kbd></dt><dd>Aim · click the game to lock the mouse · hold left button to charge, release to throw</dd>
+        <dt><kbd>Right-click</kbd> <kbd>Q</kbd></dt><dd>Food's alt action (eat, shield, fizz jump)</dd>
+        <dt><kbd>Space</kbd></dt><dd>Jump · press again in the air to double jump</dd>
+        <dt><kbd>C</kbd></dt><dd>Dash (short cooldown, once in the air)</dd>
+        <dt><kbd>1</kbd>–<kbd>5</kbd> <kbd>Wheel</kbd></dt><dd>Pick food</dd>
+        <dt><kbd>6</kbd>–<kbd>8</kbd> <kbd>R</kbd></dt><dd>Pick utensil (you carry up to 3)</dd>
+        <dt><kbd>B</kbd></dt><dd>Sniff: point at Titans making noise (10 s cooldown)</dd>
+        <dt><kbd>V</kbd></dt><dd>Switch first / third person</dd>
+        <dt><kbd>G</kbd></dt><dd>Cooking Pot Wars: set your team's pot down (first 30 s), then swing your ladle at enemy pots</dd>
+        <dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd>Pause</dd>
+      </dl>
+      <dl class="keys touch-only">
+        <dt>Left thumb</dt><dd>Drag anywhere on the left to move (push far to sprint)</dd>
+        <dt>Right thumb</dt><dd>Drag on the right to aim</dd>
+        <dt>Aim stick</dt><dd>Hold it to charge (or to fire blueberries non-stop) and drag to aim; let go to throw</dd>
+        <dt>Jump · Dash</dt><dd>Tap Jump again in the air to double jump; Dash for a quick burst</dd>
+        <dt>Plates</dt><dd>Turn the food plate (bottom left) or the utensil plate (bottom right) either way like a dial, or tap it to step to the next one; a plate has one place for each thing you carry</dd>
+        <dt>Sniff</dt><dd>Points at Titans making noise; quiet ones stay hidden</dd>
+      </dl>
+      <h3 class="sub">On the menu today</h3>
+      <ul id="legend" class="legend"></ul>
+      <h3 class="sub">Support utensils</h3>
+      <p class="foot">Utensils arrive in delivery boxes that parachute into the kitchen (follow the coloured light beams). Walk into a box to open it and carry the utensil, or splat it open with food from range. You carry up to three and switch between them like food; with all three full, a new one swaps out the one in your hand, and knocked-out Titans drop all of theirs. A utensil boosts every food you throw, even the banana peel trap for some, but the food is still the shot, and every boost has a cost.</p>
+      <ul id="ulegend" class="legend ulegend"></ul>
+      <p class="foot">Hazards: the three burners cycle on (don't stand on them), the sink and spilled water make you Wet (cleanses sticky and fire, but freezes last longer), honey pools refill your Glaze shield, and the red spatula pads on the floor fling you up onto the counters and the table. Smash the giant tomato for extra ammo. The floor is scattered with giant fallen food and knocked-over chairs to hide behind and climb, a pickle jar you can walk into, and a cracked egg whose white is slippery.</p>
+      
+      <h3 class="sub">Teams and modes</h3>
+      <p class="foot">Every mode plays Solo (every Titan for themselves) or in Duos, Trios or Squads: 6 teams of 2, 4 of 3 or 3 of 4, 12 Titans in all. Teammates can't hurt each other and start together; the last team with anyone standing wins. In Cooking Pot Wars each team sets its pot down in the first 30 s (press G), respawns beside it while it stands, smashes the others' pots with the ladle (G) and carries them home for a stronger pot and turret.</p>
+    </div>
   </div>
   <p class="live">Bots are fighting live behind this menu</p>
 </section>
@@ -635,6 +712,10 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
   <div class="card loadout">
     <h3>Your loadout</h3>
     <p id="lo-room" class="lo-room"></p>
+    <div id="lo-teams-row" class="teampick-row" hidden>
+      <p class="lo-h"><b>Your team</b><span>bots fill the empty places</span></p>
+      <div id="lo-teams" class="teampick" role="group" aria-label="Your team"></div>
+    </div>
     <div class="lo-cols">
       <div>
         <p class="lo-h"><b>Pick 3 foods</b><span id="lo-count"></span></p>

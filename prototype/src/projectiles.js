@@ -51,6 +51,16 @@ export class Projectiles {
       }
     }
     const food = FOODS[o.food];
+    // Cooking Pot Wars: thrown from your team's pot, its turret fires it, harder and faster (online,
+    // the shot goes out as fired, with its power)
+    const tur = !o.remote && this.game.pots?.turretFor(o.owner);
+    if (tur) {
+      const speed = o.vel.length() * tur.speed;
+      const vel = food.profile === 'lob' || food.profile === 'roll' ? o.vel.clone().multiplyScalar(tur.speed)
+        : o.owner.aimPoint.clone().sub(tur.muzzle).normalize().multiplyScalar(speed);
+      o = { ...o, pos: tur.muzzle, vel, turret: tur.mult };
+      this.game.fx.burst('dust', tur.muzzle, 0.4);
+    }
     const p = {
       food: o.food, owner: o.owner, pos: o.pos.clone(), vel: o.vel.clone(),
       gravity: o.gravity ?? 1, radius: o.radius ?? food.radius ?? 0.35, life: 0, maxLife: o.life ?? 6,
@@ -59,18 +69,8 @@ export class Projectiles {
       bounces: o.bounces ?? 0, seek: o.seek ?? null, turn: o.turn ?? 0, retarget: o.retarget ?? 0, shootable: !!o.shootable,
       fuse: o.fuse ?? 0, attached: null, stuck: false, stuckAt: 0, speed: o.vel.length(),
       mesh: this.getMesh(o.food),
-      u: o.u || '', x: o.x || {},
+      u: o.u || '', x: o.x || {}, turret: o.turret || 0,
     };
-    // Cooking Pot Wars: thrown from your team's pot, the turret fires it, harder and faster
-    const tur = !o.remote && this.game.pots?.turretFor(o.owner);
-    if (tur) {
-      p.turret = tur.mult;
-      p.pos.copy(tur.muzzle);
-      if (food.profile === 'lob' || food.profile === 'roll') p.vel.multiplyScalar(tur.speed);
-      else p.vel.subVectors(o.owner.aimPoint, tur.muzzle).normalize().multiplyScalar(p.speed * tur.speed);
-      p.speed = p.vel.length();
-      this.game.fx.burst('dust', tur.muzzle, 0.4);
-    }
     p.mesh.position.copy(p.pos);
     if (p.u) U?.onLaunch(p);
     this.list.push(p);

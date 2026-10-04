@@ -11,6 +11,7 @@ import { titanPreview } from './actors.js';
 import { TITANS } from './game.js';
 import { BOT_LEVELS } from './bots.js';
 import { MAPS } from './world.js';
+import { TEAMS, TEAM_LABEL, teamCount, cleanSize } from './teams.js';
 import { Net, roomAvailable, cleanRoom } from './net.js';
 import { UTENSILS, UTENSIL_BY_ID, UTENSIL_IDS, utensilIcon, setUtensilIcons } from './utensils.js';
 import { makeUtensilMesh } from './utensil-models.js';
@@ -182,35 +183,72 @@ function boot() {
     if (lock && !input.isTouch) input.requestLock(true);
   }
   let matchOpts = {}; // what "Play again" repeats
-  // Bot difficulty: remembered between visits, applied to the next match
-  // (online rooms can also have no bots: onlineBots 'off')
-  let botLevel = 'medium', onlineBots = 'medium', onlineMode = 'classic';
+  // Match settings, remembered between visits and shared by Play vs bots and Play online: mode, team
+  // size, map, bot difficulty (online rooms can also have no bots: onlineBots 'off'), your team.
+  let botLevel = 'medium', onlineBots = 'medium', selMode = 'classic', teamSize = 1, myTeamPick = -1;
   try {
     const v = localStorage.getItem('tt-bots'); if (BOT_LEVELS[v]) botLevel = v;
     const o = localStorage.getItem('tt-online-bots'); if (BOT_LEVELS[o] || o === 'off') onlineBots = o;
-    if (localStorage.getItem('tt-online-mode') === 'chef') onlineMode = 'chef';
+    const m = localStorage.getItem('tt-mode') || localStorage.getItem('tt-online-mode'); if (['classic', 'chef', 'pots'].includes(m)) selMode = m;
+    teamSize = cleanSize(localStorage.getItem('tt-team'), selMode);
+    myTeamPick = Number(localStorage.getItem('tt-myteam') ?? -1);
+    if (!Number.isInteger(myTeamPick)) myTeamPick = -1;
   } catch { /* storage blocked */ }
+  const save = (k, v) => { try { localStorage.setItem(k, String(v)); } catch { /* storage blocked */ } };
   const settings = $('match-settings');
   const forOnline = () => settings.classList.contains('online');
+  const TEAM_NOTE = {
+    1: 'Every Titan for themselves.',
+    2: '6 teams of 2. Teammates can\'t hurt each other; the last team standing wins.',
+    3: '4 teams of 3. Teammates can\'t hurt each other; the last team standing wins.',
+    4: '3 teams of 4. Teammates can\'t hurt each other; the last team standing wins.',
+  };
   const syncLevel = () => {
     const lv = forOnline() ? onlineBots : botLevel;
+    teamSize = cleanSize(teamSize, selMode);
     document.querySelectorAll('#botlevel button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.level === lv)));
     document.querySelectorAll('#mappick button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.map === mapId)));
-    document.querySelectorAll('#onlinemode button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === onlineMode)));
+    document.querySelectorAll('#onlinemode button, .modes .mode').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === selMode)));
+    document.querySelectorAll('#teamsize button').forEach((b) => {
+      b.setAttribute('aria-pressed', String(+b.dataset.team === teamSize));
+      b.disabled = selMode === 'pots' && b.dataset.team === '1'; // Cooking Pot Wars is a team game
+    });
+    $('team-note').textContent = TEAM_NOTE[teamSize] + (selMode === 'pots' ? ' Cooking Pot Wars needs teams.' : '');
     $('map-note').textContent = MAPS[mapId].blurb;
+    renderTeamPick();
+    $('chef').hidden = selMode !== 'chef';
+    renderStart();
   };
+  // Your team (Play vs bots): a team, or "Any" (the emptiest one, with bots for teammates).
+  function renderTeamPick() {
+    const n = teamCount(teamSize);
+    $('teampick-row').hidden = !n;
+    if (!n) return;
+    if (myTeamPick >= n) myTeamPick = -1;
+    const html = `<button type="button" data-t="-1" aria-pressed="${myTeamPick < 0}"><b>Any team</b><small>The game picks</small></button>`
+      + TEAMS.slice(0, n).map((T, t) => `<button type="button" data-t="${t}" aria-pressed="${myTeamPick === t}" style="--c:${T.color}"><b>${T.short}</b><small>You + ${teamSize - 1} bot${teamSize > 2 ? 's' : ''}</small></button>`).join('');
+    if ($('teampick').innerHTML !== html) $('teampick').innerHTML = html;
+  }
+  $('teampick').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-t]');
+    if (!b) return;
+    myTeamPick = +b.dataset.t; save('tt-myteam', myTeamPick);
+    renderTeamPick();
+  });
   $('botlevel').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-level]');
     if (!b) return;
-    if (forOnline()) { onlineBots = b.dataset.level; try { localStorage.setItem('tt-online-bots', onlineBots); } catch { /* storage blocked */ } }
-    else { botLevel = b.dataset.level; try { localStorage.setItem('tt-bots', botLevel); } catch { /* storage blocked */ } }
+    if (forOnline()) { onlineBots = b.dataset.level; save('tt-online-bots', onlineBots); }
+    else { botLevel = b.dataset.level; save('tt-bots', botLevel); }
     syncLevel();
   });
-  $('onlinemode').addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-mode]');
-    if (!b) return;
-    onlineMode = b.dataset.mode;
-    try { localStorage.setItem('tt-online-mode', onlineMode); } catch { /* storage blocked */ }
+  const pickMode = (m) => { selMode = m; save('tt-mode', selMode); if (m === 'pots' && teamSize < 2) { teamSize = 3; save('tt-team', 3); } syncLevel(); };
+  $('onlinemode').addEventListener('click', (e) => { const b = e.target.closest('button[data-mode]'); if (b) pickMode(b.dataset.mode); });
+  for (const b of document.querySelectorAll('.modes .mode')) b.addEventListener('click', () => pickMode(b.dataset.mode));
+  $('teamsize').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-team]');
+    if (!b || b.disabled) return;
+    teamSize = +b.dataset.team; save('tt-team', teamSize);
     syncLevel();
   });
   // Picking a map rebuilds the kitchen (or the yard) right away: the bots behind the menu move there too.
@@ -218,14 +256,13 @@ function boot() {
     const b = e.target.closest('button[data-map]');
     if (!b || b.dataset.map === mapId) return;
     mapId = b.dataset.map;
-    try { localStorage.setItem('tt-map', mapId); } catch { /* storage blocked */ }
+    save('tt-map', mapId);
     syncLevel();
     if (!playing && game.setMap(mapId)) game.newMatch(false);
   });
-  syncLevel();
-  // The settings block lives in whichever panel is open: Play vs bots or Play online.
+  // The settings block lives in whichever screen is open: Play vs bots or Play online.
   const placeSettings = (online) => {
-    if (online) $('online-settings').appendChild(settings); else $('modes').insertBefore(settings, $('modes').firstChild);
+    if (online) $('online-settings').appendChild(settings); else $('play-settings').appendChild(settings);
     settings.classList.toggle('online', online);
     syncLevel();
   };
@@ -243,23 +280,33 @@ function boot() {
     if (game.online) await game.stopOnline();
     playing = false; input.enabled = false; end.hidden = true; pause.hidden = true; hud.show(false); touch.hidden = true;
     menu.hidden = false; input.exitLock();
-    $('modes').hidden = true; $('chef').hidden = true; $('mode-chef').setAttribute('aria-expanded', 'false');
+    showScreen('home');
     game.setMap(mapId); // an online room may have played the other map
     game.newMatch(false);
   }
-  // Play opens the mode chooser: Classic starts right away, Chef's Choice opens the food picker.
-  const reveal = (el) => requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
-  $('play').addEventListener('click', () => {
-    $('modes').hidden = false; $('online').hidden = true; $('locker').hidden = true; closeStage();
-    placeSettings(false);
-    reveal($('modes'));
-  });
-  $('mode-classic').addEventListener('click', () => start({}));
-  $('mode-pots').addEventListener('click', () => start({ mode: 'pots' }));
-  $('mode-chef').addEventListener('click', () => {
-    const open = $('chef').hidden;
-    $('chef').hidden = !open; $('mode-chef').setAttribute('aria-expanded', String(open));
-    if (open) reveal($('chef'));
+  // Menu screens: home, Play vs bots, Play online, Locker, Settings, How to play.
+  const panel = document.querySelector('.menu-panel');
+  function showScreen(name) {
+    for (const el of document.querySelectorAll('.screen')) el.hidden = el.dataset.screen !== name;
+    if (name === 'locker') openStage(); else closeStage();
+    if (name === 'play') placeSettings(false);
+    if (name === 'online') placeSettings(true);
+    panel.scrollTop = 0;
+    const focus = name === 'online' ? $('nick') : document.querySelector(`.screen[data-screen="${name}"] .back`) || $('play');
+    requestAnimationFrame(() => focus?.focus({ preventScroll: true }));
+  }
+  for (const b of document.querySelectorAll('[data-go]')) b.addEventListener('click', () => showScreen(b.dataset.go));
+  addEventListener('keydown', (e) => { if (e.code === 'Escape' && !menu.hidden && !playing) showScreen('home'); });
+  // The Start button says what it starts (Chef's Choice needs 3 foods first).
+  function renderStart() {
+    const btn = $('play-start'), left = 3 - chefPick.length;
+    const name = { classic: 'Classic', chef: "Chef's Choice", pots: 'Cooking Pot Wars' }[selMode];
+    btn.disabled = selMode === 'chef' && left > 0;
+    btn.textContent = btn.disabled ? `Pick ${left} more food${left > 1 ? 's' : ''}` : `Start ${name}${teamSize > 1 ? ` · ${TEAM_LABEL[teamSize]}` : ''}`;
+  }
+  $('play-start').addEventListener('click', () => {
+    if (selMode === 'chef' && chefPick.length !== 3) return;
+    start({ mode: selMode, team: teamSize, myTeam: myTeamPick, ...(selMode === 'chef' ? { loadout: [...chefPick], utensil: chefUtensil || null } : {}) });
   });
   $('again').addEventListener('click', () => start());
 
@@ -273,7 +320,7 @@ function boot() {
     for (const b of lockerGrid.children) b.setAttribute('aria-pressed', b.dataset.id === skinId ? 'true' : 'false');
     const s = SKIN_BY_ID[skinId];
     $('locker-now').innerHTML = `Wearing <b style="color:${RARITY[s.rarity].color}">${s.name}</b>: ${s.desc}`;
-    $('locker-open').textContent = `Locker · ${s.name}`;
+    $('locker-open').querySelector('span').textContent = `Wearing ${s.name} · pick your skin`;
   }
   lockerGrid.addEventListener('click', (e) => {
     const b = e.target.closest('button');
@@ -352,10 +399,6 @@ function boot() {
     stage.r.dispose(); stage.r.forceContextLoss?.();
     stage = null;
   }
-  $('locker-open').addEventListener('click', () => {
-    $('locker').hidden = !$('locker').hidden; $('modes').hidden = true; $('online').hidden = true;
-    if (!$('locker').hidden) { openStage(); reveal($('locker')); } else closeStage();
-  });
 
   // Chef's Choice and the online loadout card share one pick (3 foods and a utensil), remembered.
   let chefPick = [];
@@ -375,8 +418,7 @@ function boot() {
       }
     }
     const left = 3 - chefPick.length;
-    $('chef-play').disabled = left > 0;
-    $('chef-play').textContent = left > 0 ? `Pick ${left} more food${left > 1 ? 's' : ''}` : 'Start Chef\'s Choice';
+    renderStart();
     renderLoadout();
   }
   for (const grid of foodGrids) {
@@ -418,9 +460,12 @@ function boot() {
     const net = game.net, R = game.round, rs = net.roomSettings(), left = 3 - chefPick.length;
     $('lo-count').textContent = left > 0 ? `${left} more to pick` : 'all set';
     const bots = rs.bots === 'off' ? 'no bots' : `${rs.bots[0].toUpperCase()}${rs.bots.slice(1)} bots`;
-    const mode = rs.mode === 'chef' ? "Chef's Choice: your 3 foods never run out" : 'Classic: you start with a stack of each, and find more';
-    const room = `Room <b>${esc(net.roomName)}</b> · ${MAPS[rs.map]?.name || 'The Grand Kitchen'} · ${bots}. ${mode}.`;
+    const mode = rs.mode === 'chef' ? "Chef's Choice: your 3 foods never run out" : rs.mode === 'pots' ? 'Cooking Pot Wars: you start with a stack of each; guard your pot, smash theirs'
+      : 'Classic: you start with a stack of each, and find more';
+    const size = cleanSize(rs.team, rs.mode);
+    const room = `Room <b>${esc(net.roomName)}</b> · ${MAPS[rs.map]?.name || 'The Grand Kitchen'} · ${TEAM_LABEL[size]} · ${bots}. ${mode}.`;
     if ($('lo-room').innerHTML !== room) $('lo-room').innerHTML = room;
+    renderLoTeams(size);
     let note;
     if (!R || R.id < 0) note = 'Finding the room…';
     else if (game.player?.alive) note = 'You are in this round: a new pick counts from your next drop.';
@@ -433,6 +478,29 @@ function boot() {
     const label = left > 0 ? `Pick ${left} more food${left > 1 ? 's' : ''}` : game.joinableNow() ? 'Drop in' : 'Ready';
     if (btn.textContent !== label) btn.textContent = label;
   }
+  // Online: pick your team (players who picked are listed; bots fill the empty places).
+  function renderLoTeams(size) {
+    const net = game.net, n = teamCount(size);
+    $('lo-teams-row').hidden = !n;
+    if (!n) return;
+    const names = TEAMS.slice(0, n).map(() => []);
+    for (const pr of net.proxies.values()) if (pr.ready && pr.actor.team != null && pr.actor.team < n) names[pr.actor.team].push(pr.actor.name);
+    const mine = game.teamSize === size ? game.myTeam() : (net.teamPick >= 0 && net.teamPick < n ? net.teamPick : null);
+    const html = `<button type="button" data-t="-1" aria-pressed="${net.teamPick < 0}"><b>Any team</b><small>${mine != null && net.teamPick < 0 ? `Now: ${TEAMS[mine].short}` : 'The emptiest one'}</small></button>`
+      + TEAMS.slice(0, n).map((T, t) => {
+        const who = names[t], full = who.length >= size && net.teamPick !== t;
+        return `<button type="button" data-t="${t}" aria-pressed="${net.teamPick === t}" style="--c:${T.color}"${full ? ' disabled' : ''}><b>${T.short}</b><small>${who.length ? esc(who.join(', ')) : 'Bots for now'}${full ? ' · full' : ''}</small></button>`;
+      }).join('');
+    if ($('lo-teams').innerHTML !== html) $('lo-teams').innerHTML = html;
+  }
+  $('lo-teams').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-t]');
+    if (!b || b.disabled || !game.net) return;
+    game.net.teamPick = +b.dataset.t;
+    game.autoTeam = null;
+    if (!game.player.alive) game.player.team = game.myTeam(); // (a pick in the middle of a round counts from the next one)
+    renderLoadout();
+  });
   function openLoadout() {
     loadout.hidden = false;
     input.exitLock();
@@ -453,7 +521,7 @@ function boot() {
   game.spectator.onLeave = toMenu;
   renderChef();
   syncUtensils();
-  $('chef-play').addEventListener('click', () => { if (chefPick.length === 3) start({ mode: 'chef', loadout: [...chefPick], utensil: chefUtensil || null }); });
+  placeSettings(false); // (also the first syncLevel)
   $('end-menu').addEventListener('click', toMenu);
   $('leave').addEventListener('click', toMenu);
   $('hud-menu').addEventListener('click', () => { // the pause button on phones (online games keep running)
@@ -464,10 +532,6 @@ function boot() {
   // Online: join a room code; everyone with the same code plays together.
   const status = $('online-status');
   try { $('nick').value = localStorage.getItem('tt-nick') || ''; } catch { /* storage blocked */ }
-  $('online-open').addEventListener('click', () => {
-    $('online').hidden = !$('online').hidden; $('modes').hidden = true; $('locker').hidden = true; closeStage();
-    if (!$('online').hidden) { placeSettings(true); $('nick').focus(); }
-  });
   $('online').addEventListener('submit', async (e) => {
     e.preventDefault();
     sfx.unlock();
@@ -485,7 +549,7 @@ function boot() {
       const net = new Net(game);
       const nick = $('nick').value || 'Titan';
       // what I'd host with (if the room has no host yet); joiners take the room's settings
-      await net.connect(lobby, cleanRoom($('roomcode').value), nick, { map: mapId, mode: onlineMode, bots: onlineBots, loadout: chefPick.length === 3 ? [...chefPick] : null, utensil: chefUtensil || null });
+      await net.connect(lobby, cleanRoom($('roomcode').value), nick, { map: mapId, mode: selMode, team: teamSize, bots: onlineBots, loadout: chefPick.length === 3 ? [...chefPick] : null, utensil: chefUtensil || null });
       try { localStorage.setItem('tt-nick', nick); } catch { /* storage blocked */ }
       game.startOnline(net);
       status.textContent = '';
@@ -528,7 +592,7 @@ function boot() {
     if (type === 'over') {
       const won = data.won ?? (data.winner && data.winner === game.player);
       $('end-title').textContent = won ? "Chef's Kiss!" : 'Match over';
-      $('end-sub').textContent = data.team ? (won ? `${data.team} wins Cooking Pot Wars!` : `${data.team} wins Cooking Pot Wars.`)
+      $('end-sub').textContent = data.team ? `${data.team} wins${game.mode === 'pots' ? ' Cooking Pot Wars' : ''}${won ? '! Your team took it.' : '.'}`
         : won ? 'Last Bite Standing. The whole kitchen is yours.' : `${data.winner ? data.winner.name : 'Nobody'} took the Last Bite.`;
       $('end-kills').textContent = game.player.kills;
       $('end-place').textContent = `#${game.player.placement || 1}`;
@@ -703,10 +767,6 @@ function boot() {
       applyQuality(qKey); // rebuilds passes, resolution and particle density
     }
     syncGfx();
-  });
-  $('gfx-open').addEventListener('click', () => {
-    $('gfx-menu').hidden = !$('gfx-menu').hidden;
-    if (!$('gfx-menu').hidden) requestAnimationFrame(() => $('gfx-menu').scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
   });
   applyQuality(qKey);
   syncGfx();

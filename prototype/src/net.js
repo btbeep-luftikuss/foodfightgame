@@ -23,22 +23,32 @@
 // only players who want to play drop in, and the host fills the room with bots around them. Every
 // Titan's state also carries what it carries (foods and utensils, as short codes), so someone
 // spectating can see a player's items.
+//
+// Teams and Cooking Pot Wars (0.26): the room settings carry the mode and the team size; every
+// Titan's state carries its team and the pot on its back. Players pick their team (state), the host
+// fills the rest with bots. In Cooking Pot Wars the host owns the pots and shares them (pw); players
+// send their pot moves as events: set the pot down (pp), a ladle hit (lh), a pot carried home (pc);
+// the host announces who smashed a pot (ps). Turret shots carry their power (tm).
 import * as THREE from 'three';
 import { clamp, rand, FLOOR_BOUNDS } from './core.js';
 import { FOODS, FOOD_IDS } from './foods.js';
 import { Actor } from './actors.js';
 import { UTENSIL_BY_ID, UTENSIL_IDS } from './utensils.js';
+import { TEAMS, cleanSize } from './teams.js';
 
 const COLORS = ['#ff9a1f', '#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5', '#f2f2f2'];
-const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048 };
+const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048, ladle: 4096 };
 const SEND_EVERY = 1 / 30;
 const LOG_KEEP = 0.7;   // seconds an event stays in the rolling log
 const LOG_MAX = 90;
+const POT_EVENTS = new Set(['pp', 'lh', 'pc', 'ps']);
 const MAPS_OK = ['kitchen', 'backyard'], BOTS_OK = ['off', 'easy', 'medium', 'hard'];
-const cleanRS = (rs) => (rs && typeof rs === 'object' ? {
-  map: MAPS_OK.includes(rs.map) ? rs.map : 'kitchen', mode: rs.mode === 'chef' ? 'chef' : 'classic',
-  bots: BOTS_OK.includes(rs.bots) ? rs.bots : 'medium', since: num(rs.since, 0, 1e15),
-} : null);
+const MODES_OK = ['classic', 'chef', 'pots'];
+const cleanRS = (rs) => { // eslint-disable-line arrow-body-style
+  if (!rs || typeof rs !== 'object') return null;
+  const mode = MODES_OK.includes(rs.mode) ? rs.mode : 'classic';
+  return { map: MAPS_OK.includes(rs.map) ? rs.map : 'kitchen', mode, team: cleanSize(rs.team, mode), bots: BOTS_OK.includes(rs.bots) ? rs.bots : 'medium', since: num(rs.since, 0, 1e15) };
+};
 const STATES = ['drop', 'play', 'over'];
 const cleanRD = (rd) => (Array.isArray(rd) ? [num(rd[0], 0, 1e6) | 0, STATES.includes(rd[1]) ? rd[1] : 'play',
   num(rd[2], -300, 300), num(rd[3], -300, 300), num(rd[4], 0, 400, 330), num(rd[5], 0, 10) | 0, rd[6] === 'shrink' ? 'shrink' : 'wait',
@@ -132,7 +142,8 @@ export class Net {
     this.sendT = 0;
     this.name = 'Titan'; this.color = COLORS[0]; this.roomName = 'kitchen';
     this.lastSent = null;
-    this.settings = { map: 'kitchen', mode: 'classic', bots: 'medium' }; // what I'd host with
+    this.settings = { map: 'kitchen', mode: 'classic', team: 1, bots: 'medium' }; // what I'd host with
+    this.teamPick = -1;           // the team I picked (-1: let the game choose)
     this.loadout = null;          // my 3 foods (picked after joining)
     this.utensil = null;          // ... and my utensil
     this.ready = false;           // I want to play (false: only watching)
@@ -184,6 +195,7 @@ export class Net {
       c: o.charge, cv: o.curve, b: o.bounces, fu: o.fuse, sk: seekPeer, tu: o.turn, rt: o.retarget, sh: o.shootable ? 1 : 0, br: o.bruise, sp: o.spin,
       ...(o.u ? { u: o.u, x: o.x || {} } : {}), // utensil-boosted throw
       ...(o.owner && o.owner !== this.game.player ? { ow: o.owner.id } : {}), // one of my bots threw it
+      ...(o.turret ? { tm: r2(o.turret) } : {}), // fired from a pot's turret
     });
   }
 
@@ -204,8 +216,9 @@ export class Net {
   _sendState(now) {
     const p = this.game.player, g = this.game;
     const t = this.game.time;
-    this.log = this.log.filter((e) => t - e[e.length - 1] < LOG_KEEP).slice(-LOG_MAX);
+    this.log = this.log.filter((e) => t - e[e.length - 1] < (POT_EVENTS.has(e[1]) ? 3 : LOG_KEEP)).slice(-LOG_MAX); // (pot moves stay longer: they must not be missed)
     const msg = { n: this.name, c: this.color, k: this.game.playerSkin, w: this.ready ? 1 : 0, s: this._stateOf(p, this.game.input.pitch), e: this.log.map((e) => e.slice(0, -1)) };
+    if (this.isHost && g.pots.active) msg.pw = [Math.max(0, g.round.id), ...g.pots.state()]; // Cooking Pot Wars: the pots
     if (this.isHost) {
       const R = g.round, T = g.tide, to = T.to || { x: T.x, z: T.z, r: T.r };
       msg.rs = { ...this.roomSettings(), since: this.hostSince };
@@ -229,8 +242,9 @@ export class Net {
     if (p.dashT > 0) f |= FLAG.dashing;
     if (t < p.juicedUntil) f |= FLAG.juiced;
     if (p.onGround) f |= FLAG.ground;
+    if (p.ladleT > 0) f |= FLAG.ladle;
     return [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.vel.x), r2(p.vel.y), r2(p.vel.z), r2(p.yaw), r2(pitch),
-      Math.round(p.hp), Math.round(p.glaze), p.alive ? 1 : 0, p.selected()?.id || '', f, p.kills, r2(Math.min(99, t - p.noiseAt)), p.utensil || '', invCode(p), kitCode(p)];
+      Math.round(p.hp), Math.round(p.glaze), p.alive ? 1 : 0, p.selected()?.id || '', f, p.kills, r2(Math.min(99, t - p.noiseAt)), p.utensil || '', invCode(p), kitCode(p), p.team ?? -1, p.carry ?? -1];
   }
 
   // ---------------------------------------------------------------- incoming
@@ -285,6 +299,8 @@ export class Net {
       this.hostSettings = top[3];
       this.hostRound = cleanRD(top[2].rd);
       this._syncBots(top[0], top[2].b);
+      const pw = top[2].pw; // Cooking Pot Wars: the host's pots (for this round only)
+      if (Array.isArray(pw) && pw[0] === this.game.round.id) this.game.pots.applyState(pw.slice(1), num);
     } else if (!top && this.myPeer && performance.now() - this.joinedAt > 1500) {
       let lowest = this.myPeer;
       for (const peer of this.proxies.keys()) if (peer < lowest) lowest = peer;
@@ -319,6 +335,7 @@ export class Net {
           this.game.actors.push(actor);
         }
         pr.actor.name = cleanName(e[1]);
+        if (/^#[0-9a-f]{6}$/i.test(e[2])) pr.actor.ownColor = e[2];
         this._applyState(pr, e.slice(4));
       }
     }
@@ -365,6 +382,7 @@ export class Net {
     pr.presence = pres;
     pr.ready = pres.w !== 0; // wants to play (older games always did)
     pr.actor.name = cleanName(pres.n);
+    if (/^#[0-9a-f]{6}$/i.test(pres.c)) pr.actor.ownColor = pres.c;
     this._applyState(pr, pres.s);
 
     // events we haven't seen yet
@@ -422,6 +440,14 @@ export class Net {
     a.utensil = typeof s[15] === 'string' && UTENSIL_BY_ID[s[15]] ? s[15] : null; // drawn in their left hand
     a.netInv = readInv(s[16]); // what they carry (shown to spectators)
     a.netKit = readKit(s[17]);
+    // teams: their team (its colour on the HUD), and a smashed pot on their back (Cooking Pot Wars)
+    const tm = num(s[18], -1, TEAMS.length - 1, -1) | 0;
+    a.team = game.teamSize > 1 && tm >= 0 ? tm : null;
+    a.color = a.team != null ? TEAMS[a.team].color : a.ownColor || a.color;
+    a.maxHp = game.pots.active ? 75 : 200;
+    const carry = num(s[19], -1, TEAMS.length - 1, -1) | 0;
+    game.pots.setCarry(a, game.pots.active && a.alive && carry >= 0 ? carry : null);
+    if (f & FLAG.ladle && !(a.ladleT > 0)) a.ladleT = 0.3;
   }
 
   _event(pr, type, d, peer) {
@@ -453,12 +479,21 @@ export class Net {
         gravity: num(o.g, -1, 3, 1), radius: num(o.r, 0.05, 1.5, 0.35), life: num(o.l, 0.1, 12, 6),
         orient: !!o.o, roll: !!o.rl, charge: num(o.c, 0, 1, 1), curve: num(o.cv, -5, 5), bounces: num(o.b, 0, 6) | 0,
         fuse: num(o.fu, 0, 5), seek, turn: num(o.tu, 0, 6), retarget: num(o.rt, 0, 60), shootable: !!o.sh, bruise: num(o.br, 0, 3) | 0, spin: num(o.sp, 0, 30),
+        turret: o.tm ? num(o.tm, 1, 4, 1) : 0,
       });
       a.armT = 0.3;
     } else if (type === 'p' || type === 'r') {
       if (d[3] !== undefined) { a = botOf(d[3]); if (!a) return; }
       const at = new THREE.Vector3(num(d[0], -300, 300), num(d[1], -40, 120), num(d[2], -300, 300));
       if (type === 'p') game.items.addTrap(a, at); else game.items.addTrampoline(a, at);
+    } else if (type === 'pp' || type === 'lh' || type === 'pc') { // Cooking Pot Wars: the host handles pot moves
+      if (!this.isHost || !game.pots.active) return;
+      if (pr.target && !pr.actor.isBotProxy) a.pos.copy(pr.target); // where they are now (their Titan on my screen trails a little)
+      if (type === 'pp') game.pots.remotePlace(a, new THREE.Vector3(num(d[0], -300, 300), num(d[1], -40, 120), num(d[2], -300, 300)));
+      else if (type === 'lh') game.pots.remoteHit(a, num(d[0], 0, TEAMS.length - 1) | 0);
+      else game.pots.remoteCapture(a, num(d[0], 0, TEAMS.length - 1) | 0);
+    } else if (type === 'ps') { // the host: who smashed a pot
+      if (peer === this.hostPeer && game.pots.active) game.pots.remoteSmash(num(d[0], 0, TEAMS.length - 1) | 0, typeof d[1] === 'string' ? this._actorOf(d[1]) : null);
     } else if (type === 'd') { // this player was knocked out
       const killer = typeof d[0] === 'string' ? this._actorOf(d[0]) : null;
       const food = typeof d[1] === 'string' ? d[1] : '';

@@ -14,7 +14,8 @@ import { Utensils, randomUtensilId } from './utensils.js';
 import { BotBrain, BOT_NAMES } from './bots.js';
 import { ViewModel } from './viewmodel.js';
 import { Spectator } from './spectator.js';
-import { PotWars } from './potwars.js';
+import { PotWars, POT_SETUP } from './potwars.js';
+import { TEAMS, teamCount, teamHome, assignTeams, emptiest, cleanSize, sidesLeft, winningTeam, renderTeamBar } from './teams.js';
 import { randomSkinId } from './skins.js';
 import { FOODS, FOOD_IDS, FEED_VERB, lobSpeed, lobDir, randomFoodId, rollAmmo, pickupAmmo } from './foods.js';
 import { UTENSIL_BY_ID } from './utensils.js';
@@ -62,7 +63,9 @@ export class Game {
     this.botActors = this.actors;
     this.net = null; this.online = false; this.respawnAt = 0;
     this.playerSkin = 'chef'; // chosen in the Locker
-    this.mode = 'classic'; // 'classic' | 'chef' (Chef's Choice: 3 bottomless foods, nothing spawns)
+    this.mode = 'classic'; // 'classic' | 'chef' (Chef's Choice: 3 bottomless foods, nothing spawns) | 'pots' (Cooking Pot Wars)
+    this.teamSize = 1; // 1 Solo, 2 Duos, 3 Trios, 4 Squads (teams.js)
+    this.teamBar = { html: '' };
     this.player = null;
     this.tide = { x: 0, z: 0, r: 330, dps: 2, phase: 0, mode: 'wait', t: 99, phases: TIDE_PHASES };
     this.hitStopUntil = 0;
@@ -106,7 +109,7 @@ export class Game {
   // and drop in with them (or only watch); knocked-out players watch until the next round.
   startOnline(net) {
     this.net = net; this.online = true;
-    this.pots.clear(); // (Cooking Pot Wars is Play vs bots only)
+    this.pots.clear(); this.teamSize = 1; this.autoTeam = null;
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
     this.world.resetRound(); this.hud.clearFeed(); this.brains.clear(); this.utensils.reset(); this.slickAt = 0;
     for (const a of this.botActors.slice(1)) { a.alive = false; a.hide(); }
@@ -144,7 +147,9 @@ export class Game {
   // play drop in right away (see _lateJoin).
   beginRound(id, rs) {
     if (rs.map) this.setMap(rs.map);
-    this.mode = rs.mode === 'chef' ? 'chef' : 'classic';
+    this.mode = rs.mode === 'chef' || rs.mode === 'pots' ? rs.mode : 'classic';
+    this.teamSize = cleanSize(rs.team, this.mode);
+    const nT = teamCount(this.teamSize);
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
     this.world.resetRound(); this.utensils.reset(); this.slickAt = 0;
     for (const z of this.spikes) this.scene.remove(z.group);
@@ -159,12 +164,22 @@ export class Game {
       Object.assign(this.tide, { x: 0, z: 0, r: 330, dps: 2, phase: 0, mode: 'wait', t: TIDE_PHASES[0].wait });
       this.botLevel = BOT_LEVELS_ONLINE.includes(rs.bots) ? rs.bots : 'medium';
       const humans = Math.max(1, this._humans().ready);
-      const n = rs.bots === 'off' ? 0 : Math.max(0, Math.min(TITANS - 1, 10 - humans));
+      // teams: bots fill every place the players who play haven't taken
+      const botTeams = [];
+      if (nT) {
+        const counts = new Array(nT).fill(0);
+        if (this.net.ready) counts[this.myTeam()]++;
+        for (const pr of this.net.proxies.values()) if (pr.ready && pr.actor.team != null && pr.actor.team < nT) counts[pr.actor.team]++;
+        for (let t = 0; t < nT; t++) for (let k = counts[t]; k < this.teamSize; k++) botTeams.push(t);
+      }
+      const n = rs.bots === 'off' ? 0 : nT ? Math.min(TITANS - 1, botTeams.length) : Math.max(0, Math.min(TITANS - 1, 10 - humans));
       const names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
       for (let i = 1; i <= n; i++) {
         const a = this.botActors[i];
         a.reset(); a.isBot = true; a.applySkin(randomSkinId()); a.name = names[i];
-        this._dropIn(a, null);
+        a.team = nT ? botTeams[i - 1] : null;
+        if (a.team != null) a.color = TEAMS[a.team].color;
+        this._dropIn(a, a.team != null ? teamHome(this.world, nT, a.team) : null);
         this._kitOut(a, random3(), Math.random() < 0.6 ? randomUtensilId() : null); // bots bring a loadout too
         this.brains.set(a, new BotBrain(a, this));
         bots.push(a);
@@ -176,6 +191,8 @@ export class Game {
     this.items.fillSpawners(this.time);
     const p = this.player;
     if (p.alive) { p.alive = false; p.hide(); } // last round's winner: out until the drop
+    p.team = this.myTeam();
+    if (this.mode === 'pots') this.pots.start(); else this.pots.clear();
     this.spectator.newRound();
     this.onMatchEvent?.('start');
   }
@@ -190,7 +207,11 @@ export class Game {
   _joinRound() {
     const p = this.player, net = this.net, kills = p.kills, R = this.round;
     p.reset(); p.isBot = false; p.kills = kills; p.name = net.name;
-    this._dropIn(p, this.world.playerRegion);
+    p.applySkin(this.playerSkin);
+    p.team = this.myTeam();
+    if (p.team != null) p.color = TEAMS[p.team].color;
+    this._dropIn(p, p.team != null ? teamHome(this.world, teamCount(this.teamSize), p.team) : this.world.playerRegion);
+    if (this.pots.active) { this.pots._setHp(p); p.potRole = 'guard'; }
     this._kitOut(p, net.loadout?.length === 3 ? net.loadout : random3(), net.utensil);
     this.input.yaw = p.yaw; this.input.pitch = -0.25;
     this.camPivotY = p.pos.y;
@@ -200,16 +221,32 @@ export class Game {
     this.onMatchEvent?.('joined');
   }
   // Online: could I drop into the current round right now? (the loadout card's Ready button)
+  // Cooking Pot Wars: through the pot setup and a while after, while my team's pot stands.
   joinableNow() {
     const R = this.round;
-    return !!this.online && !!R && R.id >= 0 && R.state !== 'over' && !R.joined && R.t < LATE_JOIN && !this.player?.alive;
+    if (!this.online || !R || R.id < 0 || R.state === 'over' || R.joined || this.player?.alive) return false;
+    if (!this.pots.active) return R.t < LATE_JOIN;
+    const pot = this.pots.pots[this.myTeam()];
+    return R.t < POT_SETUP + LATE_JOIN && (!pot || pot.alive);
+  }
+  // My team online: the one I picked, or (letting the game choose) the emptiest one, kept while it has room.
+  myTeam() {
+    const n = teamCount(this.teamSize);
+    if (!n) return null;
+    const pick = this.net?.teamPick ?? -1;
+    if (pick >= 0 && pick < n) return pick;
+    const counts = new Array(n).fill(0);
+    for (const pr of this.net?.proxies.values() || []) if (pr.ready && pr.actor.team != null && pr.actor.team < n) counts[pr.actor.team]++;
+    if (this.autoTeam != null && this.autoTeam < n && counts[this.autoTeam] < this.teamSize) return this.autoTeam;
+    return (this.autoTeam = emptiest(counts, n));
   }
   joinNow() { if (this.online) this._lateJoin(); }
   // Every frame: if I want to play and the round is young enough, drop in.
   _lateJoin() {
     const R = this.round, p = this.player;
+    if (!p.alive && R.id >= 0) p.team = this.myTeam(); // (shared, so the host fills the teams around me)
     if (!this.net.ready || p.alive || R.joined || R.id < 0 || R.state === 'over') return;
-    if (R.t < LATE_JOIN) this._joinRound();
+    if (this.joinableNow()) this._joinRound();
     else if (!R.toldWait) { R.toldWait = true; this.hud.banner('Round in progress', 'You drop in at the next one. Watch for now.', 3); }
   }
   _dropIn(a, region) {
@@ -225,31 +262,63 @@ export class Game {
     if (R.id < 0) { this.beginRound(0, net.roomSettings()); return; }
     R.t += dt;
     const alive = this.actors.filter((a) => a.alive).length;
+    if (R.state !== 'over' && R.t < (this.pots.active ? POT_SETUP + LATE_JOIN : LATE_JOIN)) this._balanceTeams(); // players drop in early on
     if (R.state === 'drop') {
-      if (this.actors.every((a) => !a.alive || a.onGround) || R.t > 12) { R.state = 'play'; R.started = alive; this.state = 'play'; }
+      if (this.actors.every((a) => !a.alive || a.onGround) || R.t > 12) { R.state = 'play'; R.started = sidesLeft(this); this.state = 'play'; }
     } else if (R.state === 'play') {
       this._tideUpdate(dt);
-      R.started = Math.max(R.started, alive); // late joiners count too
+      const sides = sidesLeft(this);
+      R.started = Math.max(R.started, sides); // late joiners count too
       const h = this._humans();
       // Nobody who wants to play is in this round (they're all out, or just got ready), or a lone
       // Titan has the room to itself while someone waits: a fresh round soon.
       const restart = h.waiting > 0 && (h.inRound === 0 || R.started < 2);
       R.idle = restart ? (R.idle || 0) + dt : 0;
-      if (R.started >= 2 && alive <= 1) this._roundOver();
+      if (R.started >= 2 && sides <= 1 && !(this.pots.active && this.pots.setup)) this._roundOver();
       else if (R.idle > (h.inRound ? 3 : 5)) this._roundOver(true);
     } else if (R.state === 'over' && R.t > OVER_FOR) {
       this.beginRound(R.id + 1, net.roomSettings());
     }
   }
+  // Host, early in a round: a player joined a team the bots had already filled. One of that team's
+  // bots moves to a team with room (or leaves if every team is full).
+  _balanceTeams() {
+    const n = teamCount(this.teamSize);
+    if (!n) return;
+    const members = Array.from({ length: n }, () => []);
+    for (const a of this.actors) if (a.team != null && a.team < n && (a.alive || a.respawnAt)) members[a.team].push(a);
+    for (let t = 0; t < n; t++) {
+      if (members[t].length <= this.teamSize) continue;
+      const bot = members[t].find((a) => a.isBot && !a.isRemote);
+      if (!bot) continue;
+      members[t].splice(members[t].indexOf(bot), 1);
+      let to = -1;
+      for (let u = 0; u < n; u++) if (members[u].length < this.teamSize && (to < 0 || members[u].length < members[to].length)) to = u;
+      if (to < 0) { bot.alive = false; bot.respawnAt = 0; bot.hide(); this.brains.delete(bot); continue; } // no room anywhere
+      bot.team = to; bot.color = TEAMS[to].color;
+      members[to].push(bot);
+      if (this.pots.active) bot.potRole = 'guard';
+      const pot = this.pots.active ? this.pots.pots[to] : null;
+      const s = pot && pot.placed ? pot.pos.clone().add(new THREE.Vector3(3, 0, 0)) : this.world.randomOpenSpot(teamHome(this.world, n, to), 4);
+      bot.pos.set(s.x, s.y + (pot?.placed ? 0.2 : 20), s.z); bot.vel.set(0, 0, 0); bot.gliding = !pot?.placed;
+      this.brains.set(bot, new BotBrain(bot, this));
+    }
+  }
   _roundOver(fresh = false) {
     const R = this.round;
-    const w = fresh ? null : this.actors.find((a) => a.alive) || null;
-    R.state = 'over'; R.t = fresh ? OVER_FOR - 3 : 0; R.winner = w ? w.name : ''; R.fresh = fresh;
+    const team = !fresh && this.teamSize > 1 ? winningTeam(this) : null;
+    const w = fresh ? null : this.actors.find((a) => a.alive && (team == null || a.team === team)) || null;
+    const tName = team != null ? TEAMS[team].name : null;
+    R.state = 'over'; R.t = fresh ? OVER_FOR - 3 : 0; R.winner = tName || (w ? w.name : ''); R.fresh = fresh;
     this.state = 'over';
-    this._showRoundOver(w, fresh);
+    this._showRoundOver(w, fresh, tName);
   }
-  _showRoundOver(w, fresh) {
+  _showRoundOver(w, fresh, tName = null) {
     if (fresh) this.hud.banner('New round', 'Everyone who plays drops in · 3 s', 2.6);
+    else if (tName) {
+      if (this.player?.team != null && TEAMS[this.player.team]?.name === tName) { this.sfx.play('win'); this.hud.banner("Chef's Kiss!", `${tName} wins · next round in ${OVER_FOR} s`, 4); }
+      else this.hud.banner('Round over', `${tName} wins · next round in ${OVER_FOR} s`, 4);
+    }
     else if (w && w === this.player) { this.sfx.play('win'); this.hud.banner("Chef's Kiss!", `Last Bite Standing · next round in ${OVER_FOR} s`, 4); }
     else this.hud.banner('Round over', `${w ? esc(w.name) : 'Nobody'} took the Last Bite · next round in ${OVER_FOR} s`, 4);
   }
@@ -271,7 +340,8 @@ export class Game {
     R.t = rt;
     if (st !== R.state) {
       R.state = st; this.state = st;
-      if (st === 'over') this._showRoundOver(fresh ? null : this.actors.find((a) => a.name === winner && a.alive) || (winner === this.player.name && this.player.alive ? this.player : null), !!fresh);
+      const tName = this.teamSize > 1 && TEAMS.some((T) => T.name === winner) ? winner : null;
+      if (st === 'over') this._showRoundOver(fresh ? null : this.actors.find((a) => a.name === winner && a.alive) || (winner === this.player.name && this.player.alive ? this.player : null), !!fresh, fresh ? null : tName);
     }
   }
 
@@ -321,7 +391,7 @@ export class Game {
 
   // ------------------------------------------------------------------ targeting helpers
   // Cooking Pot Wars: same team (nobody is a teammate in the other modes)
-  teammates(a, b) { return this.mode === 'pots' && !!a && !!b && a !== b && a.team != null && a.team === b.team; }
+  teammates(a, b) { return this.teamSize > 1 && !!a && !!b && a !== b && a.team != null && a.team === b.team; }
   nearestEnemy(a, range, from = a.pos) {
     let best = null, bd = range;
     for (const o of this.actors) {
@@ -404,8 +474,11 @@ export class Game {
   aliveCount() { return this.actors.filter((a) => a.alive).length; }
 
   // opts.mode 'chef' = Chef's Choice: every Titan brings 3 foods with endless ammo and no food spawns.
+  // opts.team: team size (1 Solo, 2 Duos, 3 Trios, 4 Squads); opts.myTeam: the team you picked (-1: any).
   newMatch(withPlayer, opts = {}) {
     this.mode = opts.mode === 'chef' || opts.mode === 'pots' ? opts.mode : 'classic';
+    this.teamSize = withPlayer ? cleanSize(opts.team, this.mode) : 1;
+    const nT = teamCount(this.teamSize);
     const chef = this.mode === 'chef';
     this.actors = this.botActors;
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
@@ -421,10 +494,14 @@ export class Game {
       a.isBot = !(withPlayer && i === 0);
       a.applySkin(a.isBot ? randomSkinId() : this.playerSkin);
       a.name = withPlayer && i === 0 ? 'You' : names[i];
+    });
+    // teams first: each starts together in its own home patch
+    assignTeams(this.actors, this.teamSize, withPlayer && opts.myTeam >= 0 && opts.myTeam < nT ? new Map([[this.actors[0], opts.myTeam]]) : new Map());
+    this.actors.forEach((a, i) => {
       let p;
       for (let k = 0; k < 30; k++) {
-        p = this.world.randomOpenSpot(withPlayer && i === 0 ? this.world.playerRegion : null, 6);
-        if (spots.every((s) => s.distanceTo(p) > 22)) break;
+        p = this.world.randomOpenSpot(a.team != null ? teamHome(this.world, nT, a.team) : withPlayer && i === 0 ? this.world.playerRegion : null, a.team != null ? 4 : 6);
+        if (spots.every((s) => s.distanceTo(p) > (a.team != null ? 5 : 22))) break;
       }
       spots.push(p);
       a.pos.set(p.x, p.y + 30 + rand(0, 7), p.z);
@@ -450,16 +527,16 @@ export class Game {
     this.state = 'drop'; this.stateT = 0;
     this.endAt = 0; this.winner = null;
     this.spectator.reset();
-    for (const a of this.actors) { a.team = null; a.maxHp = 200; }
     if (this.mode === 'pots') this.pots.start(); else this.pots.clear();
     this.onMatchEvent?.('start');
-    if (withPlayer && this.mode !== 'pots') this.hud.banner(chef ? "Chef's Choice" : 'Drop in!', chef ? 'Your 3 foods never run out. Food doesn\'t heal: grab the green crosses' : 'Steer your napkin glider onto the counter');
+    if (withPlayer && nT && this.mode !== 'pots') this.hud.banner(`${TEAMS[this.player.team].name}`, `${{ 2: 'Duos', 3: 'Trios', 4: 'Squads' }[this.teamSize]}: stick with your team. Last team standing wins`, 3.4);
+    else if (withPlayer && this.mode !== 'pots') this.hud.banner(chef ? "Chef's Choice" : 'Drop in!', chef ? 'Your 3 foods never run out. Food doesn\'t heal: grab the green crosses' : 'Steer your napkin glider onto the counter');
   }
 
   // ------------------------------------------------------------------ combat API used by foods
   damage(target, amount, attacker, foodId, opts = {}) {
     if (!target.alive || amount <= 0 || this.state === 'over') return 0;
-    if (this.mode === 'pots' && (this.pots.setup || this.teammates(target, attacker))) return 0; // no hurting before the pots are down, or your own team
+    if (this.teammates(target, attacker) || (this.pots.active && this.pots.setup)) return 0; // never your own team; nobody before the pots are down
     amount *= this.dmgScale;
     this._action(target, attacker);
     if (target.isRemote) { // online: that player's own game decides; we only show our hit
@@ -608,8 +685,19 @@ export class Game {
     const food = foodId === 'burning' ? 'burner' : foodId;
     this._feed(victim, killer, food);
 
-    if (this.mode === 'pots' && this.pots.active) { // back at your pot while it stands; out when it's gone
-      const back = this.pots.onDeath(victim);
+    const back = this.pots.active ? this.pots.onDeath(victim) : false; // Cooking Pot Wars: back at your pot while it stands
+    if (this.online) { // online: tell the room; out until the next round (or back at the pot)
+      if (victim === this.player) {
+        this.net.event('d', killer ? this.net._peerOf(killer) : '', food || '');
+        this.spectator.focusNext = killer && killer.alive ? killer : null;
+        this.hud.banner('Splatted!', back ? 'Back at your pot in 5 s' : `${killer ? `by ${esc(killer.name)} · ` : ''}you're back next round`, 2.8);
+      } else if (victim.isBot && this.net.isHost) {
+        this.net.event('bd', victim.id, killer ? this.net._peerOf(killer) : '', food || '');
+      }
+      if (killer === this.player && victim !== this.player) this.hud.banner('Splat!', `${esc(victim.name)} ${back ? 'is back at their pot soon' : 'is out'}`, 1.6);
+      return;
+    }
+    if (this.pots.active) {
       if (killer === this.player) this.hud.banner('Splat!', `${esc(victim.name)} ${back ? 'is back at their pot soon' : 'is out'}`, 1.6);
       if (victim === this.player) {
         this.spectator.focusNext = killer && killer.alive ? killer : null;
@@ -619,24 +707,27 @@ export class Game {
       this.pots._checkWin();
       return;
     }
-
-    if (this.online) { // online: tell the room; out until the next round
-      if (victim === this.player) {
-        this.net.event('d', killer ? this.net._peerOf(killer) : '', food || '');
-        this.spectator.focusNext = killer && killer.alive ? killer : null;
-        this.hud.banner('Splatted!', `${killer ? `by ${esc(killer.name)} · ` : ''}you're back next round`, 2.8);
-      } else if (victim.isBot && this.net.isHost) {
-        this.net.event('bd', victim.id, killer ? this.net._peerOf(killer) : '', food || '');
-      }
-      if (killer === this.player && victim !== this.player) this.hud.banner('Splat!', `${esc(victim.name)} is out`, 1.6);
-      return;
-    }
     if (killer === this.player) this.hud.banner('Splat!', `${esc(victim.name)} is out · ${this.aliveCount()} left`, 1.6);
     if (victim === this.player) {
       this.spectator.focusNext = killer && killer.alive ? killer : null;
-      this.onMatchEvent?.('playerDown', { killer, placement: victim.placement, food });
+      const mates = this.teamSize > 1 && this.actors.some((a) => a.alive && a.team === victim.team);
+      this.onMatchEvent?.('playerDown', { killer, placement: victim.placement, food, note: mates ? 'Your team is still in: keep watching them.' : '' });
     }
-    if (this.aliveCount() <= 1) this._finish();
+    if (sidesLeft(this) <= 1) { if (this.teamSize > 1) this.teamWins(winningTeam(this)); else this._finish(); }
+  }
+
+  // Play vs bots in teams: the last team standing wins.
+  teamWins(team) {
+    if (this.state === 'over') return;
+    this.state = 'over'; this.endAt = this.time;
+    const T = team != null ? TEAMS[team] : null;
+    const w = this.actors.find((a) => a.team === team && a.alive) || this.actors.find((a) => a.team === team) || null;
+    this.winner = w;
+    if (w) w.placement = 1;
+    const won = team != null && team === this.player?.team;
+    if (won) { this.sfx.play('win'); this.hud.banner("Chef's Kiss!", `${T.name} wins`, 4); }
+    else if (this.player) this.hud.banner('Match over', `${T ? T.name : 'Nobody'} wins`, 4);
+    this.onMatchEvent?.('over', { winner: w, team: T?.name, won });
   }
 
   // Another player's game says they were knocked out (online).
@@ -713,6 +804,7 @@ export class Game {
     this.lockCandidate = held === 'chili' ? this.lockTarget(this.player) : null;
     this.hud.update(this, realDt);
     this.pots.updateVisual(realDt, this.camera, this.hud);
+    renderTeamBar(this, document.getElementById('teamBar'), this.teamBar);
     if (this.spectator.active) this.spectator.updateUI(realDt);
   }
 

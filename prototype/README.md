@@ -63,6 +63,28 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.26: teams in every mode, Cooking Pot Wars online, a menu in screens** (`src/teams.js`, `src/potwars.js`, `src/game.js`, `src/net.js`, `src/main.js`, `index.html`)
+
+- **Teams everywhere.** Classic, Chef's Choice and Cooking Pot Wars all play Solo (Pot Wars excepted), Duos (6 teams of 2), Trios (4 of 3) or Squads (3 of 4), with 12 Titans in all.
+  - Teams: Tomato, Blueberry, Lime, Butter, Grape and Mint. Each starts together in its own patch of floor.
+  - Teammates can't hurt each other, and bots never aim at their own team. The last team with anyone standing (or, in Pot Wars, a pot standing) wins.
+  - The team bar under the top pill shows every team, how many of its Titans are up and, in Pot Wars, its pot.
+- **Pick your team.** Play vs bots: "Your team" on the Play screen (or Any team), and bots fill every other place. Online: the loadout card lists every team with the players on it. Pick one (full teams are greyed out) or Any team (the emptiest).
+- **Online.** The room's settings carry the mode (Classic, Chef's Choice, Pot Wars) and team size. Every Titan's shared state carries its team and the pot on its back.
+  - The host fills each team with bots around the players. When someone joins a team bots already filled, one of its bots moves to a team with room (or leaves).
+  - Teammates online can't hurt each other either, and the round ends with "Team X wins".
+- **Cooking Pot Wars online.** The host owns the pots: it places them, takes ladle hits, decides who smashed a pot, counts pots carried home, and shares every pot's state with everyone (with the round number, so a new round never takes an old round's pots).
+  - Players send their pot moves as events: setting the pot down, a ladle hit (at most 4 every 2 s, checked against where they stand), a pot carried home. These events stay in the shared log for 3 s so none are missed.
+  - The host announces who smashed a pot, so it lands on the right back.
+  - Turret shots go out as fired, with their power, so every game applies the same damage.
+  - Each player respawns their own Titan while their pot stands; the host respawns its bots. You can drop in through the 30 s setup and 25 s after it, while your team's pot stands.
+- **Menu in screens.**
+  - Home: Play vs bots, Play online, Locker, Settings, How to play.
+  - Play vs bots: mode cards, team size, map, bots, your team, Chef's foods, and a Start button that says what it starts.
+  - Play online: name, room code and the room settings if you start it.
+  - Locker, Settings (graphics) and How to play (controls, foods, utensils, teams).
+  - Every screen has a Back button (Esc works too), and the mode, team size, map and team you pick are remembered.
+
 **Version 0.25: Cooking Pot Wars** (`src/potwars.js`; Play vs bots)
 
 - A team mode like Bed Wars, with cooking pots: 4 teams of 3 (you and 2 bots on Team Tomato, against Blueberry, Lime and Butter), each starting in a corner of the floor. No Soap Tide.
@@ -254,7 +276,8 @@ npm run dev          # http://localhost:5173
 | `src/surface.js` | Surface State Grid and zone visuals |
 | `src/bots.js` | Bot AI |
 | `src/game.js` | Match flow, online rounds and loadouts, damage and kills, Soap Tide, camera, aim preview |
-| `src/potwars.js` | Cooking Pot Wars: teams, pots, ladles, turrets, carrying pots home, respawns |
+| `src/potwars.js` | Cooking Pot Wars: pots, ladles, turrets, carrying pots home, respawns; online, the host's pots |
+| `src/teams.js` | Teams: sizes, colours, home patches, who goes where, the last team standing, the team bar |
 | `src/spectator.js` | Spectator mode: the cinematic director, overview and follow cameras, minimap, Titan bar and player card |
 | `src/hud.js`, `src/dials.js`, `src/input.js`, `src/fx.js` | HUD, the phone plate dials, controls, particles, sound |
 
