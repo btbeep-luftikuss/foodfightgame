@@ -395,6 +395,16 @@ function arm(B, side, hi, sStart = -1) {
     bottom: { p: f.S.clone().addScaledVector(f.d, 0.562), a: { b: [[fore, 1]], part: P.longCuff } },
   });
 }
+// Holding a utensil by its handle: how far the fingers curl, and where the hollow inside the fist is
+// (d down the hand from the wrist, m toward the palm side, f along the knuckles), with its radius:
+// a handle up to that thick runs through the fist without touching the fingers (found by fitting the
+// largest circle inside the loop of palm and curled middle finger; see the 0.23 notes).
+//   fp: your first-person fist, a tight grip on a thin handle; tp: every Titan's left hand.
+export const GRIP = {
+  fp: { curl: 1.2, thumb: 0.45, d: 0.0785, m: 0.030, f: 0.0015, r: 0.0112 },
+  tp: { curl: 0.9, thumb: 0.45, d: 0.088, m: 0.0345, f: 0.0015, r: 0.0177 },
+};
+
 // Hand hanging from the wrist, palm toward the body, thumb forward. curl bends each finger joint toward the palm.
 function hand(B, side, hi, curl = 0.32, thumbCurl = 0.25, bone = null) {
   const f = side > 0 ? AL : AR;
@@ -523,7 +533,8 @@ export function bodyGeometry(hi) {
   if (BODY_CACHE[key]) return BODY_CACHE[key];
   const B = new Builder();
   torso(B, hi); neck(B, hi); head(B, hi); face(B, hi);
-  for (const s of [1, -1]) { arm(B, s, hi); hand(B, s, hi); leg(B, s, hi); shoe(B, s, hi); }
+  // the left hand is a loose fist, ready to hold a utensil by its handle
+  for (const s of [1, -1]) { arm(B, s, hi); if (s > 0) hand(B, s, hi, GRIP.tp.curl, GRIP.tp.thumb); else hand(B, s, hi); leg(B, s, hi); shoe(B, s, hi); }
   const g = B.geometry();
   g.boundingSphere = new THREE.Sphere(V(0, 1, 0), 1.45);
   BODY_CACHE[key] = g;
@@ -863,10 +874,17 @@ export class HumanRig {
     this.handAnchorR.position.copy(AR.d).multiplyScalar(0.075).addScaledVector(AR.ex, -0.035);
     this.bones.handR.add(this.handAnchorR);
     // ... and the utensil in the left fist: the tool points forward out of the fist (up when the forearm is raised)
+    // the left fist (bone space of handL): a handle runs through the hollow along the knuckles (+z)
+    const G = GRIP.tp;
     this.handAnchorL = new THREE.Group();
-    this.handAnchorL.position.copy(AL.d).multiplyScalar(0.07).addScaledVector(AL.ex, -0.02).add(V(0, 0, 0.012));
-    this.handAnchorL.rotation.x = Math.PI / 2;
+    this.handAnchorL.position.copy(AL.d).multiplyScalar(G.d).addScaledVector(AL.ex, -G.m).add(V(0, 0, G.f));
+    this.handAnchorL.rotation.x = Math.PI / 2; // the utensil's +y (up its handle) along the knuckles
     this.bones.handL.add(this.handAnchorL);
+    // ... and the left palm, turned up (see the toolPalm pose), for gadgets without a handle
+    this.palmAnchorL = new THREE.Group();
+    this.palmAnchorL.position.copy(AL.d).multiplyScalar(0.06);
+    this.palmAnchorL.quaternion.setFromUnitVectors(V(0, 1, 0), AL.ex.clone().negate()); // +y out of the palm
+    this.bones.handL.add(this.palmAnchorL);
     this.outfit = [];
     this.blinkT = 1 + Math.random() * 3; this.blinkK = 0;
     this.near = true;
@@ -933,6 +951,9 @@ export class HumanRig {
     if (s.tool) {
       T.upperArmL[0] = sn * 0.2 * a - 0.32; T.upperArmL[2] = 0.18;
       T.foreArmL[0] = -1.15; T.foreArmL[1] = -0.25; T.handL[0] = -0.1; T.handL[2] = 0.15;
+    } else if (s.toolPalm) { // a gadget carried on the upturned palm, out in front
+      T.upperArmL[0] = sn * 0.15 * a - 0.45; T.upperArmL[2] = 0.22;
+      T.foreArmL[0] = -1.2; T.foreArmL[1] = Math.PI / 2; T.handL[0] = 0; T.handL[2] = 0;
     }
     // --- airborne
     if (!s.onGround && !s.gliding && !s.tripped) {

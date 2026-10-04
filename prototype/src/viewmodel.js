@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { clamp, damp } from './core.js';
 import { makeFoodMesh } from './foods.js';
-import { fpArmGeometry, FP_ARM_UP, FP_PALM_N } from './human.js';
-import { makeUtensilMesh } from './utensil-models.js';
+import { fpArmGeometry, FP_ARM_UP, FP_PALM_N, GRIP } from './human.js';
+import { makeUtensilMesh, utensilHold } from './utensil-models.js';
 
 const HELD_SCALE = { cheese: 0.55, watermelon: 0.5, carrot: 0.75, banana: 0.8, grapes: 0.7, blueberry: 0.8, pineapple: 0.7 };
 
@@ -36,15 +36,24 @@ export class ViewModel {
     camera.add(this.rootL);
     this.swayL = new THREE.Group();
     this.rootL.add(this.swayL);
-    this.armL = new THREE.Mesh(fpArmGeometry(1.25, 1.15), this.arm.material); // fingers wrapped around the handle
+    // two hands: a fist round a handle (its fingers curled to fit, see GRIP) and an open palm for gadgets
+    this.fistGeo = fpArmGeometry(GRIP.fp.curl, GRIP.fp.thumb);
+    this.palmGeo = fpArmGeometry(0.62, 0.35);
+    this.armL = new THREE.Mesh(this.fistGeo, this.arm.material);
     this.armL.frustumCulled = false;
     this.armL.scale.set(-1.3, 1.3, 1.3); // mirrored (three.js flips the face winding for a negative scale)
     this.swayL.add(this.armL);
     this.handL = new THREE.Group();
     this.swayL.add(this.handL);
     const m = (v) => v.clone().setX(-v.x);
-    // the fist closes around the handle: wrist just below and behind the grip
-    this.armL.position.copy(this.handL.position).addScaledVector(m(this.palmN), -(this.gripR = 0.045)).addScaledVector(m(this.armUp), 0.095);
+    this.palmNL = m(this.palmN); this.armUpL = m(this.armUp);
+    // the fist: wrist just below and behind the grip; where its hollow is and which way the knuckles run
+    this.fistPos = this.handL.position.clone().addScaledVector(this.palmNL, -0.045).addScaledVector(this.armUpL, 0.095);
+    const G = GRIP.fp, Zp = new THREE.Vector3().crossVectors(this.palmN, this.armUp);
+    const q = this.palmN.clone().multiplyScalar(G.m).addScaledVector(this.armUp, -G.d).addScaledVector(Zp, G.f);
+    this.fistHollow = this.fistPos.clone().add(q.multiply(new THREE.Vector3(-1.3, 1.3, 1.3)));
+    this.fistAxis = Zp.clone().setX(-Zp.x).normalize(); // along the knuckles, out past the thumb
+    this.armL.position.copy(this.fistPos);
     this.toolId = null; this.tool = null; this.kickL = 0; this.toolIn = 0;
     this.root.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
   }
@@ -100,20 +109,42 @@ export class ViewModel {
     if (this.held) this.held.rotation.y += dt * (id === 'blueberry' ? 0 : 0.3);
   }
 
+  // Put the utensil in the left hand: a handle through the hollow of the fist (along the knuckles,
+  // the business end out past the thumb, its face toward you), or a gadget resting on the open palm.
+  _holdTool(id) {
+    const t = this.tool;
+    t.scale.setScalar(0.5);
+    if (utensilHold(id) === 'grip') {
+      this.armL.geometry = this.fistGeo;
+      this.armL.position.copy(this.fistPos);
+      const y = this.fistAxis, z = new THREE.Vector3(0, 0, 1).addScaledVector(y, -y.z).normalize(), x = new THREE.Vector3().crossVectors(y, z);
+      t.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+      t.position.copy(this.fistHollow);
+      this.swayL.add(t);
+    } else {
+      this.armL.geometry = this.palmGeo;
+      // like food in the right hand: centred over the palm, the palm one bounding radius below it
+      const y = this.palmNL.clone().normalize(), z = new THREE.Vector3(0, 0, 1).addScaledVector(y, -y.z).normalize(), x = new THREE.Vector3().crossVectors(y, z);
+      t.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+      t.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(t), sph = box.getBoundingSphere(new THREE.Sphere());
+      const c = sph.center.clone().sub(t.getWorldPosition(new THREE.Vector3()));
+      t.position.copy(this.handL.position).sub(c);
+      this.swayL.add(t);
+      const r = sph.radius / Math.max(1e-3, t.parent.matrixWorld.getMaxScaleOnAxis());
+      this.armL.position.copy(this.handL.position).addScaledVector(this.palmNL, -(r + 0.012 * 1.3)).addScaledVector(this.armUpL, 0.07 * 1.3);
+    }
+  }
+
   // The left hand: swaps utensils by dipping out of view and back, kicks forward when the utensil fires.
   _left(dt, player) {
     const id = player.alive ? player.utensil : null;
     if (id !== this.toolId) {
       if (this.toolIn > 0.05 && this.tool) { this.toolIn = Math.max(0, this.toolIn - dt * 7); } // lower the old one first
       else {
-        if (this.tool) this.handL.remove(this.tool);
+        if (this.tool) this.tool.parent?.remove(this.tool);
         this.tool = id ? makeUtensilMesh(id) : null;
-        if (this.tool) {
-          this.tool.scale.setScalar(0.5);
-          this.tool.rotation.set(-0.35, 0.5, -0.32); // up, leaning in toward the middle of the view and away from you
-          this.tool.position.set(0.0, -0.02, 0.0);
-          this.handL.add(this.tool);
-        }
+        if (this.tool) this._holdTool(id);
         this.toolId = id;
       }
     } else this.toolIn = Math.min(1, this.toolIn + dt * (this.tool ? 5 : -7));

@@ -2,10 +2,13 @@
 // glossy plastic, polished steel and wood, no outlines. Every model is merged into one geometry
 // per material (vertex-coloured), so a utensil costs at most four draw calls wherever it appears.
 //
-// Model space: the grip is at the origin (where the hand closes), the business end points up (+y)
-// and the front faces +z. Models are about 0.7 tall. Every utensil has a handle there, and nothing
-// but the handle may come inside the fist (FIST: |y| < 0.14, within 0.1 of the y axis), so no
-// utensil clips through the hand that holds it (fistClearance checks this).
+// Two ways to hold one (HOLD):
+//  - 'grip' (knife, spoon, whisk...): the handle runs along +y through the origin, where the fist
+//    closes. Handles are thin (HANDLE_R) so they fit the hollow inside the fist (GRIP in human.js)
+//    and the fingers wrap round them instead of through them; the business end points up (+y).
+//  - 'palm' (the gadgets: microwave, toaster, blender...): no handle; the gadget rests on the open
+//    palm, its bottom on the hand, like food in the right hand.
+// The front faces +z. Models are about 0.7 tall.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -83,187 +86,173 @@ function slab(shape, depth, bevel = 0.006) { // a flat 2D outline with a little 
   g.translate(0, 0, -depth / 2);
   return g;
 }
-const grip = (k, color, len = 0.3, r = 0.048) => { // a chunky handle centred on the grip, with a collar at the top
+export const HANDLE_R = 0.021;
+const grip = (k, color, len = 0.3, r = HANDLE_R) => { // a slim handle centred on the grip, a collar above the fist
   k.add(caps(r, len - 2 * r), color, 'gloss', { grip: true });
-  k.add(cyl(r * 1.25, r * 1.25, 0.03), color, 'gloss', { p: [0, len / 2 + 0.005, 0], grip: true });
+  k.add(cyl(r * 1.5, r * 1.3, 0.03), color, 'gloss', { p: [0, len / 2 + 0.01, 0], grip: true });
 };
-const pistol = (k, color) => { // a gadget's handle: the body sits on top, clear of the fist
-  k.add(caps(0.05, 0.2), color, 'gloss', { grip: true });
-  k.add(cyl(0.065, 0.065, 0.03), color, 'gloss', { p: [0, 0.155, 0], grip: true });
-};
-const FIST = { y: 0.14, r: 0.1 };
+const FIST = { y: 0.12, r: 0.06 }; // where the fingers wrap a handle, in model units
 
 // ---------------------------------------------------------------- the utensils
 const G = { grip: true };
+// How each utensil is held (see the top of this file).
+export const HOLD = {
+  knife: 'grip', spoon: 'grip', 'blow-torch': 'grip', whisk: 'grip', 'rolling-pin': 'grip', spatula: 'grip',
+  'deep-fryer': 'grip', colander: 'grip', peeler: 'grip', pan: 'grip',
+  'ice-cream-machine': 'palm', blender: 'palm', microwave: 'palm', grater: 'palm', 'mortar-and-pestle': 'palm',
+  toaster: 'palm', 'cotton-candy-machine': 'palm', 'popcorn-popper': 'palm', mixer: 'palm', 'oven-mitt': 'palm',
+};
 const MAKERS = {
   knife(k) {
     grip(k, '#b8372b', 0.3);
-    for (const y of [-0.06, 0.05]) k.add(ball(0.014, 8, 6), STEEL, 'metal', { p: [0, y, 0.046], ...G });
-    k.add(rbox(0.13, 0.04, 0.05, 0.015), STEEL, 'metal', { p: [0, 0.185, 0] });
+    for (const y of [-0.06, 0.05]) k.add(ball(0.008, 8, 6), STEEL, 'metal', { p: [0, y, HANDLE_R * 0.9], ...G });
+    k.add(rbox(0.11, 0.035, 0.04, 0.012), STEEL, 'metal', { p: [0, 0.19, 0] });
     const s = new THREE.Shape();
     s.moveTo(-0.055, 0); s.lineTo(0.06, 0); s.quadraticCurveTo(0.075, 0.25, 0.0, 0.46); s.quadraticCurveTo(-0.03, 0.3, -0.055, 0.16); s.lineTo(-0.055, 0);
     k.add(slab(s, 0.012, 0.004), STEEL, 'metal', { p: [0, 0.205, 0] });
   },
-  'ice-cream-machine'(k) {
-    pistol(k, '#2f9f86');
-    const b = 0.3; // body centre, clear of the fist
-    k.add(rbox(0.3, 0.24, 0.26, 0.07), '#5fd6b8', 'gloss', { p: [0, b, 0] });
-    k.add(cyl(0.05, 0.04, 0.09, 8), STEEL, 'metal', { p: [0, b, 0.16], r: [Math.PI / 2, 0, 0] });
-    k.add(cyl(0.12, 0.09, 0.08), '#5fd6b8', 'gloss', { p: [0, b + 0.16, 0] });
-    for (let i = 0; i < 3; i++) k.add(tor(0.1 - i * 0.028, 0.035, Math.PI * 2, 18), CREAM, 'matte', { p: [0, b + 0.22 + i * 0.05, 0], r: [Math.PI / 2, 0, 0] });
-    k.add(ball(0.035), CREAM, 'matte', { p: [0, b + 0.37, 0] });
-    k.add(ball(0.025), '#ff6fa8', 'gloss', { p: [0, b + 0.4, 0] }); // a cherry
+  'ice-cream-machine'(k) { // a soft-serve gun: body, nozzle, a swirl and a cherry (rests on the palm)
+    k.add(rbox(0.3, 0.24, 0.26, 0.07), '#5fd6b8', 'gloss', { p: [0, 0.12, 0] });
+    k.add(cyl(0.05, 0.04, 0.09, 8), STEEL, 'metal', { p: [0, 0.12, 0.16], r: [Math.PI / 2, 0, 0] });
+    k.add(cyl(0.12, 0.09, 0.08), '#5fd6b8', 'gloss', { p: [0, 0.28, 0] });
+    for (let i = 0; i < 3; i++) k.add(tor(0.1 - i * 0.028, 0.035, Math.PI * 2, 18), CREAM, 'matte', { p: [0, 0.34 + i * 0.05, 0], r: [Math.PI / 2, 0, 0] });
+    k.add(ball(0.035), CREAM, 'matte', { p: [0, 0.49, 0] });
+    k.add(ball(0.025), '#ff6fa8', 'gloss', { p: [0, 0.52, 0] });
   },
   spoon(k) {
-    k.add(caps(0.04, 0.24), '#3f9be8', 'gloss', { s: [1, 1, 0.75], ...G });
-    k.add(cyl(0.05, 0.05, 0.03), '#3f9be8', 'gloss', { p: [0, 0.155, 0], s: [1, 1, 0.75], ...G });
-    k.add(cyl(0.018, 0.022, 0.16, 10), STEEL, 'metal', { p: [0, 0.25, 0], s: [1, 1, 0.5] });
-    k.add(ball(0.12, 20, 14), STEEL, 'metal', { p: [0, 0.43, 0.01], s: [0.85, 1.15, 0.35] });
+    grip(k, '#3f9be8', 0.3);
+    k.add(cyl(0.016, 0.02, 0.14, 10), STEEL, 'metal', { p: [0, 0.24, 0], s: [1, 1, 0.6] });
+    k.add(ball(0.12, 20, 14), STEEL, 'metal', { p: [0, 0.42, 0.01], s: [0.85, 1.15, 0.35] });
   },
-  'blow-torch'(k) {
-    k.add(cyl(0.06, 0.06, 0.3, 18), '#ff6a2a', 'gloss', G); // the gas canister is the handle
-    k.add(ball(0.06, 18, 10), '#ff6a2a', 'gloss', { p: [0, -0.15, 0], s: [1, 0.5, 1], ...G });
-    k.add(cyl(0.075, 0.075, 0.12, 18), '#fff4e6', 'gloss', { p: [0, 0.21, 0] });
-    k.add(cyl(0.05, 0.06, 0.07), '#d9a432', 'metal', { p: [0, 0.3, 0] });
-    k.add(rbox(0.05, 0.03, 0.08, 0.01), '#2b2836', 'gloss', { p: [0.06, 0.3, 0] });
-    k.add(cyl(0.022, 0.026, 0.22, 10), STEEL, 'metal', { p: [0, 0.38, 0.08], r: [0.9, 0, 0] });
-    k.add(new THREE.ConeGeometry(0.03, 0.12, 10), '#7fd4ff', 'glow', { p: [0, 0.47, 0.2], r: [0.9, 0, 0] });
-    k.add(new THREE.ConeGeometry(0.016, 0.07, 8), '#ffffff', 'glow', { p: [0, 0.455, 0.185], r: [0.9, 0, 0] });
+  'blow-torch'(k) { // a slim gas bottle in the fist, the torch head above
+    k.add(caps(HANDLE_R * 1.05, 0.24), '#ff6a2a', 'gloss', G);
+    k.add(cyl(0.05, 0.035, 0.1, 18), '#fff4e6', 'gloss', { p: [0, 0.22, 0] });
+    k.add(cyl(0.04, 0.05, 0.06), '#d9a432', 'metal', { p: [0, 0.3, 0] });
+    k.add(rbox(0.05, 0.03, 0.07, 0.01), '#2b2836', 'gloss', { p: [0.055, 0.3, 0] });
+    k.add(cyl(0.02, 0.024, 0.2, 10), STEEL, 'metal', { p: [0, 0.37, 0.07], r: [0.9, 0, 0] });
+    k.add(new THREE.ConeGeometry(0.03, 0.12, 10), '#7fd4ff', 'glow', { p: [0, 0.45, 0.18], r: [0.9, 0, 0] });
+    k.add(new THREE.ConeGeometry(0.016, 0.07, 8), '#ffffff', 'glow', { p: [0, 0.435, 0.165], r: [0.9, 0, 0] });
   },
   whisk(k) {
     grip(k, '#ff6fb3', 0.3);
-    k.add(cyl(0.03, 0.05, 0.06, 12), STEEL, 'metal', { p: [0, 0.18, 0] });
-    for (let i = 0; i < 4; i++) k.add(tor(0.1, 0.008, Math.PI * 2, 28), STEEL, 'metal', { p: [0, 0.42, 0], r: [0, (i / 4) * Math.PI, 0], s: [1, 2.1, 1] });
+    k.add(cyl(0.025, 0.04, 0.06, 12), STEEL, 'metal', { p: [0, 0.19, 0] });
+    for (let i = 0; i < 4; i++) k.add(tor(0.1, 0.008, Math.PI * 2, 28), STEEL, 'metal', { p: [0, 0.43, 0], r: [0, (i / 4) * Math.PI, 0], s: [1, 2.1, 1] });
   },
-  blender(k) { // a handheld blender: a grip under the motor base, the jug on top
-    pistol(k, '#c43a4a');
-    const b = 0.24;
-    k.add(rbox(0.22, 0.14, 0.22, 0.04), '#e8475a', 'gloss', { p: [0, b, 0] });
-    k.add(rbox(0.06, 0.04, 0.02, 0.008), '#fff4e6', 'gloss', { p: [0, b, 0.112] });
-    k.add(lathe([[0.0, 0], [0.085, 0], [0.11, 0.3], [0.0, 0.3]]), (x, y) => (y < 0.18 ? '#ff8fb0' : '#d8f1ff'), 'gloss', { p: [0, b + 0.07, 0] });
-    k.add(cyl(0.12, 0.12, 0.04), '#e8475a', 'gloss', { p: [0, b + 0.39, 0] });
-    k.add(cyl(0.03, 0.03, 0.04), '#e8475a', 'gloss', { p: [0, b + 0.43, 0] });
-    k.add(rbox(0.04, 0.2, 0.05, 0.02), '#e8475a', 'gloss', { p: [0.13, b + 0.23, 0] });
+  blender(k) { // a little blender: motor base and jug (rests on the palm)
+    k.add(rbox(0.22, 0.14, 0.22, 0.04), '#e8475a', 'gloss', { p: [0, 0.07, 0] });
+    k.add(rbox(0.06, 0.04, 0.02, 0.008), '#fff4e6', 'gloss', { p: [0, 0.07, 0.112] });
+    k.add(lathe([[0.0, 0], [0.085, 0], [0.11, 0.3], [0.0, 0.3]]), (x, y) => (y < 0.18 ? '#ff8fb0' : '#d8f1ff'), 'gloss', { p: [0, 0.14, 0] });
+    k.add(cyl(0.12, 0.12, 0.04), '#e8475a', 'gloss', { p: [0, 0.46, 0] });
+    k.add(cyl(0.03, 0.03, 0.04), '#e8475a', 'gloss', { p: [0, 0.5, 0] });
+    k.add(rbox(0.04, 0.2, 0.05, 0.02), '#e8475a', 'gloss', { p: [0.13, 0.3, 0] });
   },
   'rolling-pin'(k) {
-    k.add(caps(0.042, 0.2), WOOD_D, 'matte', G);
-    k.add(cyl(0.09, 0.09, 0.44, 20), (x, y) => (Math.abs(y) > 0.2 ? WOOD_D : WOOD), 'matte', { p: [0, 0.39, 0] });
-    k.add(caps(0.042, 0.12), WOOD_D, 'matte', { p: [0, 0.7, 0] });
+    k.add(caps(HANDLE_R, 0.2), WOOD_D, 'matte', G);
+    k.add(cyl(0.09, 0.09, 0.44, 20), (x, y) => (Math.abs(y) > 0.2 ? WOOD_D : WOOD), 'matte', { p: [0, 0.4, 0] });
+    k.add(caps(HANDLE_R, 0.12), WOOD_D, 'matte', { p: [0, 0.7, 0] });
   },
   microwave(k) {
-    pistol(k, '#c9861e');
-    const b = 0.3;
-    k.add(rbox(0.36, 0.25, 0.25, 0.05), '#ffc93f', 'gloss', { p: [0, b, 0] });
-    k.add(rbox(0.2, 0.15, 0.02, 0.02), '#ffe58a', 'glow', { p: [-0.05, b, 0.125] });
-    k.add(cyl(0.035, 0.035, 0.02, 12), '#ff9f1c', 'glow', { p: [-0.05, b, 0.135], r: [Math.PI / 2, 0, 0] });
-    for (let i = 0; i < 3; i++) k.add(cyl(0.012, 0.012, 0.02, 8), DARK, 'gloss', { p: [0.12, b + 0.05 - i * 0.045, 0.125], r: [Math.PI / 2, 0, 0] });
+    k.add(rbox(0.36, 0.25, 0.25, 0.05), '#ffc93f', 'gloss', { p: [0, 0.125, 0] });
+    k.add(rbox(0.2, 0.15, 0.02, 0.02), '#ffe58a', 'glow', { p: [-0.05, 0.125, 0.125] });
+    k.add(cyl(0.035, 0.035, 0.02, 12), '#ff9f1c', 'glow', { p: [-0.05, 0.125, 0.135], r: [Math.PI / 2, 0, 0] });
+    for (let i = 0; i < 3; i++) k.add(cyl(0.012, 0.012, 0.02, 8), DARK, 'gloss', { p: [0.12, 0.175 - i * 0.045, 0.125], r: [Math.PI / 2, 0, 0] });
   },
-  grater(k) { // held by a handle under it; rows of slots and a loop on top
-    grip(k, '#2bbfae', 0.3);
-    const b = 0.18;
-    k.add(new THREE.CylinderGeometry(0.085, 0.125, 0.4, 4, 32), (x, y) => (Math.abs(y) < 0.17 && ((y * 80) % 2 + 2) % 2 < 0.8 ? '#4e5868' : STEEL), 'metal', { p: [0, b + 0.2, 0], r: [0, Math.PI / 4, 0] });
-    k.add(new THREE.CylinderGeometry(0.13, 0.13, 0.03, 4), '#2bbfae', 'gloss', { p: [0, b + 0.005, 0], r: [0, Math.PI / 4, 0] });
-    k.add(new THREE.CylinderGeometry(0.09, 0.09, 0.025, 4), '#2bbfae', 'gloss', { p: [0, b + 0.41, 0], r: [0, Math.PI / 4, 0] });
-    k.add(tor(0.06, 0.02, Math.PI, 14), '#2bbfae', 'gloss', { p: [0, b + 0.42, 0] });
+  grater(k) { // a box grater with a loop on top (rests on the palm)
+    k.add(new THREE.CylinderGeometry(0.085, 0.125, 0.4, 4, 32), (x, y) => (Math.abs(y) < 0.17 && ((y * 80) % 2 + 2) % 2 < 0.8 ? '#4e5868' : STEEL), 'metal', { p: [0, 0.2, 0], r: [0, Math.PI / 4, 0] });
+    k.add(new THREE.CylinderGeometry(0.13, 0.13, 0.03, 4), '#2bbfae', 'gloss', { p: [0, 0.015, 0], r: [0, Math.PI / 4, 0] });
+    k.add(new THREE.CylinderGeometry(0.09, 0.09, 0.025, 4), '#2bbfae', 'gloss', { p: [0, 0.41, 0], r: [0, Math.PI / 4, 0] });
+    k.add(tor(0.06, 0.02, Math.PI, 14), '#2bbfae', 'gloss', { p: [0, 0.42, 0] });
   },
   spatula(k) {
     grip(k, '#21b3a3', 0.3);
-    k.add(rbox(0.035, 0.16, 0.018, 0.008), STEEL, 'metal', { p: [0, 0.24, 0] });
+    k.add(rbox(0.035, 0.16, 0.018, 0.008), STEEL, 'metal', { p: [0, 0.25, 0] });
     const s = new THREE.Shape();
     s.moveTo(-0.11, 0); s.lineTo(0.11, 0); s.lineTo(0.12, 0.24); s.quadraticCurveTo(0, 0.27, -0.12, 0.24); s.lineTo(-0.11, 0);
     for (const x of [-0.06, 0, 0.06]) { const h = new THREE.Path(); h.moveTo(x - 0.012, 0.05); h.lineTo(x + 0.012, 0.05); h.lineTo(x + 0.012, 0.2); h.lineTo(x - 0.012, 0.2); h.lineTo(x - 0.012, 0.05); s.holes.push(h); }
-    k.add(slab(s, 0.014, 0.005), '#3fd8c6', 'gloss', { p: [0, 0.31, 0], r: [-0.15, 0, 0] });
+    k.add(slab(s, 0.014, 0.005), '#3fd8c6', 'gloss', { p: [0, 0.32, 0], r: [-0.15, 0, 0] });
   },
   'deep-fryer'(k) {
     grip(k, '#2b2836', 0.3);
-    k.add(cyl(0.012, 0.012, 0.16, 8), STEEL, 'metal', { p: [0, 0.24, 0] });
+    k.add(cyl(0.012, 0.012, 0.16, 8), STEEL, 'metal', { p: [0, 0.25, 0] });
     const fb = bowlPts(0.11, 0.15, 0.2, 16);
-    for (const pts of [fb, inner(fb)]) k.add(lathe(pts, 40), (x, y, z) => ((Math.round(Math.atan2(z, x) * 6.4) + Math.round(y * 50)) % 2 ? '#7d8796' : STEEL), 'metal', { p: [0, 0.32, 0] });
-    k.add(tor(0.15, 0.012, Math.PI * 2, 32), STEEL, 'metal', { p: [0, 0.52, 0], r: [Math.PI / 2, 0, 0] });
+    for (const pts of [fb, inner(fb)]) k.add(lathe(pts, 40), (x, y, z) => ((Math.round(Math.atan2(z, x) * 6.4) + Math.round(y * 50)) % 2 ? '#7d8796' : STEEL), 'metal', { p: [0, 0.33, 0] });
+    k.add(tor(0.15, 0.012, Math.PI * 2, 32), STEEL, 'metal', { p: [0, 0.53, 0], r: [Math.PI / 2, 0, 0] });
     for (let i = 0; i < 7; i++) {
       const a = i * 2.4, r = 0.03 + (i % 3) * 0.03;
-      k.add(rbox(0.03, 0.18, 0.03, 0.01), '#f6c544', 'matte', { p: [Math.cos(a) * r, 0.44, Math.sin(a) * r], r: [Math.sin(a) * 0.3, 0, Math.cos(a) * 0.3] });
+      k.add(rbox(0.03, 0.18, 0.03, 0.01), '#f6c544', 'matte', { p: [Math.cos(a) * r, 0.45, Math.sin(a) * r], r: [Math.sin(a) * 0.3, 0, Math.cos(a) * 0.3] });
     }
   },
-  'mortar-and-pestle'(k) { // the stone bowl sits on a short wooden handle
-    k.add(caps(0.045, 0.2), WOOD_D, 'matte', G);
-    const b = 0.17;
-    k.add(cyl(0.09, 0.1, 0.06, 18), '#7f8ea8', 'matte', { p: [0, b + 0.03, 0] });
-    k.add(lathe([[0.0, 0.03], [0.1, 0.03], [0.17, 0.12], [0.18, 0.24], [0.15, 0.24], [0.13, 0.13], [0.0, 0.1]], 24), '#98a7c0', 'matte', { p: [0, b, 0] });
-    k.add(caps(0.035, 0.3), '#c9d3e2', 'matte', { p: [0.06, b + 0.3, 0.02], r: [0, 0, -0.45] });
-    k.add(ball(0.055), '#c9d3e2', 'matte', { p: [0.0, b + 0.16, 0.0] });
-    k.add(cyl(0.13, 0.13, 0.01, 18), '#f1e7d0', 'matte', { p: [0, b + 0.2, 0] }); // powder
+  'mortar-and-pestle'(k) { // the stone bowl rests on the palm
+    k.add(cyl(0.09, 0.1, 0.06, 18), '#7f8ea8', 'matte', { p: [0, 0.03, 0] });
+    k.add(lathe([[0.0, 0.03], [0.1, 0.03], [0.17, 0.12], [0.18, 0.24], [0.15, 0.24], [0.13, 0.13], [0.0, 0.1]], 24), '#98a7c0', 'matte');
+    k.add(caps(0.035, 0.3), '#c9d3e2', 'matte', { p: [0.06, 0.3, 0.02], r: [0, 0, -0.45] });
+    k.add(ball(0.055), '#c9d3e2', 'matte', { p: [0.0, 0.16, 0.0] });
+    k.add(cyl(0.13, 0.13, 0.01, 18), '#f1e7d0', 'matte', { p: [0, 0.2, 0] }); // powder
   },
   toaster(k) {
-    pistol(k, '#8f97a6');
-    const b = 0.3;
-    k.add(rbox(0.34, 0.24, 0.2, 0.07), STEEL, 'metal', { p: [0, b, 0] });
+    k.add(rbox(0.34, 0.24, 0.2, 0.07), STEEL, 'metal', { p: [0, 0.12, 0] });
     for (const x of [-0.07, 0.07]) {
-      k.add(rbox(0.11, 0.02, 0.13, 0.01), DARK, 'gloss', { p: [x, b + 0.12, 0] });
-      k.add(rbox(0.1, 0.13, 0.11, 0.025), (X, Y) => (Y > 0.05 ? '#9a5a26' : '#e3a85a'), 'matte', { p: [x, b + 0.16, 0] });
+      k.add(rbox(0.11, 0.02, 0.13, 0.01), DARK, 'gloss', { p: [x, 0.24, 0] });
+      k.add(rbox(0.1, 0.13, 0.11, 0.025), (X, Y) => (Y > 0.05 ? '#9a5a26' : '#e3a85a'), 'matte', { p: [x, 0.28, 0] });
     }
-    k.add(rbox(0.03, 0.05, 0.05, 0.01), '#ff8a2e', 'gloss', { p: [0.18, b + 0.04, 0] });
-    k.add(cyl(0.02, 0.02, 0.02, 10), '#ff8a2e', 'gloss', { p: [0.08, b - 0.06, 0.105], r: [Math.PI / 2, 0, 0] });
+    k.add(rbox(0.03, 0.05, 0.05, 0.01), '#ff8a2e', 'gloss', { p: [0.18, 0.16, 0] });
+    k.add(cyl(0.02, 0.02, 0.02, 10), '#ff8a2e', 'gloss', { p: [0.08, 0.06, 0.105], r: [Math.PI / 2, 0, 0] });
   },
   colander(k) {
-    grip(k, '#e8475a', 0.3, 0.042);
+    grip(k, '#e8475a', 0.3);
     const holes = (x, y, z) => { // rows of round holes
       const row = Math.round(y * 60), a = Math.atan2(z, x) * 7 + (row % 2) * 0.5;
       return y > 0.03 && y < 0.17 && row % 2 === 0 && Math.abs(a - Math.round(a)) < 0.26 ? '#7a1622' : '#e8475a';
     };
     const b = bowlPts(0.08, 0.21, 0.2, 24);
-    for (const pts of [b, inner(b)]) k.add(lathe(pts, 56), holes, 'gloss', { p: [0, 0.4, -0.06], r: [Math.PI / 2 - 0.5, 0, 0] });
-    k.add(tor(0.215, 0.014, Math.PI * 2, 40), '#e8475a', 'gloss', { p: [0, 0.4, -0.06], r: [-0.5, 0, 0] });
+    for (const pts of [b, inner(b)]) k.add(lathe(pts, 56), holes, 'gloss', { p: [0, 0.42, -0.06], r: [Math.PI / 2 - 0.5, 0, 0] });
+    k.add(tor(0.215, 0.014, Math.PI * 2, 40), '#e8475a', 'gloss', { p: [0, 0.42, -0.06], r: [-0.5, 0, 0] });
   },
   'cotton-candy-machine'(k) {
-    pistol(k, '#e8579a');
-    const b = 0.18;
-    k.add(lathe([[0.0, 0], [0.12, 0], [0.16, 0.12], [0.14, 0.12], [0.11, 0.02], [0.0, 0.02]], 24), (x, y, z) => (Math.round(Math.atan2(z, x) * 3) % 2 ? '#ffffff' : '#ff9cc8'), 'gloss', { p: [0, b, 0] });
+    k.add(lathe([[0.0, 0], [0.12, 0], [0.16, 0.12], [0.14, 0.12], [0.11, 0.02], [0.0, 0.02]], 24), (x, y, z) => (Math.round(Math.atan2(z, x) * 3) % 2 ? '#ffffff' : '#ff9cc8'), 'gloss');
     for (const [x, y, z, r] of [[0, 0.22, 0, 0.13], [0.09, 0.18, 0.03, 0.09], [-0.09, 0.19, -0.02, 0.1], [0.03, 0.32, 0.02, 0.09], [-0.04, 0.28, 0.07, 0.08]]) {
-      k.add(new THREE.IcosahedronGeometry(r, 2), '#ffb3d6', 'matte', { p: [x, b + y, z] });
+      k.add(new THREE.IcosahedronGeometry(r, 2), '#ffb3d6', 'matte', { p: [x, y, z] });
     }
   },
   'popcorn-popper'(k) {
-    pistol(k, '#c42a3a');
-    const b = 0.18;
-    k.add(lathe([[0.0, 0], [0.11, 0], [0.15, 0.28], [0.0, 0.28]], 24), (x, y, z) => (Math.round(Math.atan2(z, x) * 16 / Math.PI) % 2 ? '#ffffff' : '#e8475a'), 'gloss', { p: [0, b, 0] });
+    k.add(lathe([[0.0, 0], [0.11, 0], [0.15, 0.28], [0.0, 0.28]], 24), (x, y, z) => (Math.round(Math.atan2(z, x) * 16 / Math.PI) % 2 ? '#ffffff' : '#e8475a'), 'gloss');
     for (let i = 0; i < 11; i++) {
       const a = i * 2.39, r = 0.03 + (i % 4) * 0.03;
-      k.add(new THREE.IcosahedronGeometry(0.045, 1), i % 4 ? '#fff3c8' : '#ffd36b', 'matte', { p: [Math.cos(a) * r, b + 0.3 + (i % 3) * 0.035, Math.sin(a) * r] });
+      k.add(new THREE.IcosahedronGeometry(0.045, 1), i % 4 ? '#fff3c8' : '#ffd36b', 'matte', { p: [Math.cos(a) * r, 0.3 + (i % 3) * 0.035, Math.sin(a) * r] });
     }
   },
   peeler(k) {
     grip(k, '#8a5cf0', 0.3);
-    for (const x of [-0.07, 0.07]) k.add(cyl(0.014, 0.014, 0.2, 8), STEEL, 'metal', { p: [x * 0.6, 0.26, 0], r: [0, 0, -x * 3.5] });
-    k.add(rbox(0.2, 0.05, 0.02, 0.008), STEEL, 'metal', { p: [0, 0.37, 0] });
-    k.add(rbox(0.16, 0.01, 0.024, 0.004), '#c9d1dd', 'metal', { p: [0, 0.35, 0.004] });
+    for (const x of [-0.07, 0.07]) k.add(cyl(0.014, 0.014, 0.2, 8), STEEL, 'metal', { p: [x * 0.6, 0.27, 0], r: [0, 0, -x * 3.5] });
+    k.add(rbox(0.2, 0.05, 0.02, 0.008), STEEL, 'metal', { p: [0, 0.38, 0] });
+    k.add(rbox(0.16, 0.01, 0.024, 0.004), '#c9d1dd', 'metal', { p: [0, 0.36, 0.004] });
   },
-  mixer(k) { // a hand mixer held by its handle, the motor and beaters above
-    pistol(k, '#22a88a');
-    const b = 0.27;
-    k.add(rbox(0.28, 0.16, 0.2, 0.07), '#2fc9a8', 'gloss', { p: [0, b, 0] });
-    k.add(rbox(0.06, 0.03, 0.03, 0.01), CREAM, 'gloss', { p: [0, b + 0.09, 0.04] });
+  mixer(k) { // a hand mixer with a loop handle on top, beaters down the front (rests on the palm)
+    k.add(rbox(0.28, 0.16, 0.2, 0.07), '#2fc9a8', 'gloss', { p: [0, 0.08, 0] });
+    k.add(tor(0.08, 0.025, Math.PI, 16), '#2fc9a8', 'gloss', { p: [0, 0.16, 0] });
+    k.add(rbox(0.06, 0.03, 0.03, 0.01), CREAM, 'gloss', { p: [0.08, 0.17, 0.04] });
     for (const x of [-0.05, 0.05]) {
-      k.add(cyl(0.01, 0.01, 0.14, 6), STEEL, 'metal', { p: [x, b + 0.15, 0.02] });
-      for (let i = 0; i < 3; i++) k.add(tor(0.035, 0.006, Math.PI * 2, 14), STEEL, 'metal', { p: [x, b + 0.25, 0.02], r: [0, (i / 3) * Math.PI, 0], s: [1, 1.7, 1] });
+      k.add(cyl(0.01, 0.01, 0.12, 6), STEEL, 'metal', { p: [x, 0.08, 0.16], r: [Math.PI / 2, 0, 0] });
+      for (let i = 0; i < 3; i++) k.add(tor(0.035, 0.006, Math.PI * 2, 14), STEEL, 'metal', { p: [x, 0.08, 0.25], r: [Math.PI / 2, (i / 3) * Math.PI, 0], s: [1, 1.7, 1] });
     }
   },
-  'oven-mitt'(k) { // held by its hanging loop and cuff, the quilted mitt above the fist
-    k.add(caps(0.046, 0.2), (x, y) => (Math.round(y * 60) % 2 ? '#fff4e6' : '#f2e2cc'), 'matte', { s: [1, 1, 0.8], ...G });
-    k.add(cyl(0.1, 0.1, 0.08, 18), (x, y) => (Math.round(y * 60) % 2 ? '#fff4e6' : '#f2e2cc'), 'matte', { p: [0, 0.2, 0], s: [1, 1, 0.75] });
-    k.add(caps(0.11, 0.2, 16), (x, y, z) => ((Math.round(x * 25) + Math.round(y * 25)) % 2 ? '#e8414f' : '#d23240'), 'matte', { p: [0, 0.4, 0], s: [1, 1, 0.62] });
-    k.add(caps(0.05, 0.1, 10), '#d23240', 'matte', { p: [0.11, 0.32, 0.0], r: [0, 0, -0.6], s: [1, 1, 0.75] });
+  'oven-mitt'(k) { // the quilted mitt lying on the palm
+    k.add(cyl(0.1, 0.1, 0.08, 18), (x, y) => (Math.round(y * 60) % 2 ? '#fff4e6' : '#f2e2cc'), 'matte', { p: [0, 0.04, 0], s: [1, 1, 0.75] });
+    k.add(caps(0.11, 0.2, 16), (x, y, z) => ((Math.round(x * 25) + Math.round(y * 25)) % 2 ? '#e8414f' : '#d23240'), 'matte', { p: [0, 0.24, 0], s: [1, 1, 0.62] });
+    k.add(caps(0.05, 0.1, 10), '#d23240', 'matte', { p: [0.11, 0.16, 0.0], r: [0, 0, -0.6], s: [1, 1, 0.75] });
   },
   pan(k) {
-    k.add(caps(0.04, 0.26, 10), DARK, 'gloss', { s: [1, 1, 0.75], ...G });
-    k.add(rbox(0.05, 0.08, 0.03, 0.012), STEEL, 'metal', { p: [0, 0.2, 0] });
-    k.add(lathe([[0.0, 0], [0.19, 0], [0.22, 0.06], [0.205, 0.06], [0.18, 0.012], [0.0, 0.012]], 30), (x, y) => (y > 0.05 ? '#9aa3b2' : DARK), 'gloss', { p: [0, 0.45, -0.02], r: [Math.PI / 2, 0, 0] });
-    k.add(cyl(0.18, 0.18, 0.004, 30), '#3b3649', 'gloss', { p: [0, 0.45, -0.006], r: [Math.PI / 2, 0, 0] }); // non-stick
+    k.add(caps(HANDLE_R, 0.28, 10), DARK, 'gloss', G);
+    k.add(rbox(0.05, 0.08, 0.03, 0.012), STEEL, 'metal', { p: [0, 0.21, 0] });
+    k.add(lathe([[0.0, 0], [0.19, 0], [0.22, 0.06], [0.205, 0.06], [0.18, 0.012], [0.0, 0.012]], 30), (x, y) => (y > 0.05 ? '#9aa3b2' : DARK), 'gloss', { p: [0, 0.46, -0.02], r: [Math.PI / 2, 0, 0] });
+    k.add(cyl(0.18, 0.18, 0.004, 30), '#3b3649', 'gloss', { p: [0, 0.46, -0.006], r: [Math.PI / 2, 0, 0] }); // non-stick
   },
 };
+export const utensilHold = (id) => HOLD[id] || 'palm';
 
 // How many points of a utensil's non-handle parts are inside the fist (0 = nothing clips the hand).
 export function fistClearance(id) {
+  if (HOLD[id] !== 'grip') return { points: 0, depth: 0 }; // a gadget on the palm has no fist round it
   const k = new Kit();
   MAKERS[id](k);
   let n = 0, worst = 0;

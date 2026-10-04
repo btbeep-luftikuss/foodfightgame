@@ -8,7 +8,7 @@ import {
 import { FOODS, makeFoodMesh } from './foods.js';
 import { dress } from './skins.js';
 import { Utensils } from './utensils.js';
-import { makeUtensilMesh } from './utensil-models.js';
+import { makeUtensilMesh, utensilHold } from './utensil-models.js';
 import { HumanRig, SKIN_TONES, HAIR_COLORS, HAIR_STYLES, IRIS_COLORS, SHOE_COLORS, BEARDS, pick } from './human.js';
 
 const JUMP_V = Math.sqrt(2 * G * 5);   // 5 m jump: clears a sugar-cube step
@@ -182,7 +182,13 @@ export class Actor {
     if (!id) return;
     this.uMesh = makeUtensilMesh(id, !!this.game.quality.dynamicShadows);
     this.uMesh.scale.setScalar(0.75);
-    this.rig.handAnchorL.add(this.uMesh);
+    this.uHold = utensilHold(id);
+    if (this.uHold === 'grip') this.rig.handAnchorL.add(this.uMesh); // its handle through the fist
+    else { // a gadget sits on the upturned palm, its bottom clear of the curled fingertips
+      const box = new THREE.Box3().setFromObject(this.uMesh);
+      this.uMesh.position.set(-(box.min.x + box.max.x) / 2, 0.075 - box.min.y, -(box.min.z + box.max.z) / 2);
+      this.rig.palmAnchorL.add(this.uMesh);
+    }
   }
 
   // ------------------------------------------------------------------ queries
@@ -584,7 +590,7 @@ export class Actor {
         gliding: this.gliding, dashing: this.dashT > 0, tripped: this.isTripped(), frozen: this.isFrozen(),
         charging: this.charging, charge: this.charging && food ? clamp(this.chargeT / Math.max(0.2, food.charge || 1), 0, 1) : 0,
         throwK: this.armT / 0.3, auto: !!(food && food.auto && this.armT > 0), eating: !!this.eat, shield: this.shieldUp,
-        heavy: this.heavy() && !this.shieldUp, holding: !!this.heldMesh, tool: !!this.uMesh, pitch: clamp(pitch, -1, 1), hit: this.hitFlash,
+        heavy: this.heavy() && !this.shieldUp, holding: !!this.heldMesh, tool: !!this.uMesh && this.uHold === 'grip', toolPalm: !!this.uMesh && this.uHold !== 'grip', pitch: clamp(pitch, -1, 1), hit: this.hitFlash,
       }, dt);
     }
     this.napkin.visible = this.gliding;

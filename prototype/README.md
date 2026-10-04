@@ -63,6 +63,14 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.23: handles only where they belong, and fingers that wrap them** (`src/utensil-models.js`, `src/human.js`, `src/viewmodel.js`, `src/actors.js`)
+
+- The handles 0.22 added to the gadgets are gone. Each utensil now has one of two hold styles (`utensilHold(id)`):
+  - *grip* (knife, spoon, blow torch, whisk, rolling pin, spatula, deep fryer, colander, peeler, pan): a slim handle (`HANDLE_R` 0.021) that runs through the hollow of a closed fist.
+  - *palm* (ice cream machine, blender, microwave, grater, mortar and pestle, toaster, cotton candy machine, popcorn popper, mixer, oven mitt): rests on the open, palm-up hand.
+- Why the fingers clipped: the first-person fist was curled so tight that its hollow (0.010) was less than half the handle's width, and third-person hands were nearly flat. `GRIP` in `human.js` now sets a curl for each view so the hollow fits the handle (first person: curl 1.2, hollow 0.0112; third person: curl 0.9, hollow 0.0177). The handle sits exactly on the hollow's centre, along the knuckle line.
+- Third-person Titans curl their left fingers and turn the palm up for gadgets (`palmAnchorL`, `toolPalm` pose).
+
 **Version 0.22: no utensil clips through the hand** (`src/utensil-models.js`)
 
 - Every utensil now has a real handle where the fist closes, and the rest of it sits above the fist. Before, the bulky ones sank into the hand: the blender, grater and mortar bases swallowed it, the microwave, toaster, popcorn bucket and cotton candy tub sat on the fingers, the mixer's body and the oven mitt's cuff went through them. Gadgets (ice cream machine, blender, microwave, toaster, cotton candy machine, popcorn popper, mixer) now sit on a handle like a hand tool, the grater and mortar stand on one, the oven mitt is held by its cuff loop, and the rolling pin, spoon and pan have longer handles. This holds in first and third person and online.
