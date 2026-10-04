@@ -55,13 +55,28 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 | Fairness rules | Shared hard-CC diminishing returns (2nd = 50%, 3rd = immune, max 2.5 s per 6 s), eating interrupted by 25+ damage, banana bruising |
 | Systems | Surface State Grid (ice rinks, soda puddles, melt pools), splat canvas (stains painted onto the counter), Fire + Ice = steam |
 | Map | The whole kitchen at 1:40 scale (about 480 × 340 m). The island (cereal boxes, jam jar, mug, toaster, hot plate, water spill, honey, giant tomato). A 440 m back counter with sink, stove burners, stock pot, coffee maker and fridge. A dining table with chairs, plates, glasses, a pepper mill and a napkin holder that you can stand on or hide under. The floor, with crumbs, bean cans, sugar-cube steps, a colander dome, a rolling pin, a plate stack, a milk carton, lemons, a fallen cereal box and a wooden spoon. 12 spatula launch pads |
-| Match | 12 Titans, napkin-glider drop, Soap Tide closing in 6 phases, grocery drops inside each new safe zone, kill feed, spectating, win screen |
+| Match | 12 Titans, napkin-glider drop, Soap Tide closing in 6 phases, grocery drops inside each new safe zone, kill feed, win screen; spectator mode with a cinematic camera, overview, follow cam, minimap and player cards; online loadouts |
 | Movement | Walk, sprint, jump and double jump, dash (also once in the air), momentum skating on slick surfaces, jelly trampolines, no fall damage |
 | Bots | Pick targets, choose food by range, lead shots with the same ballistic math, dodge, strafe, loot, heal, hunt, walk around walls, use launch pads to reach the safe zone, avoid burners and ledges |
 | Presentation | Procedural textures, synthesized sound, pooled instanced particles, rim-lit characters, soft contact shadows, sunbeam and dust, bloom (High), hit markers, damage numbers, hit-stop, screen shake |
 | Platforms | Desktop (mouse and keyboard, pointer lock) and phones (touch joystick, aim stick, buttons and plate dials for food and utensils); Low, Medium and High graphics with automatic resolution scaling |
 
 ## Run it
+
+**Version 0.24: pick your loadout online, and a spectator mode** (`src/spectator.js`, `src/game.js`, `src/net.js`, `src/main.js`)
+
+- **Loadout card.** After joining an online room, you pick 3 foods and a utensil, then press Ready (or Drop in while a round is young), or Spectate to only watch.
+  - Picks are remembered and shared with Chef's Choice in Play vs bots.
+  - In Classic you start with a stack of each food (more lies around the map); in Chef's Choice they never run out.
+  - The card opens again from the spectator bar (Play / Change loadout) between rounds. A new pick counts from your next drop.
+  - Bots bring a loadout too: 3 random foods, and a utensil 6 times in 10.
+- **Spectator mode,** whenever you're out of the round: splatted, waiting for the next one, or only watching. It works offline too, after "Keep watching".
+  - *Cinematic:* a director that scores every Titan for action and frames the hottest fight. Action counts hits given and taken (every client sees every hit), throws, charging, low health, and players count extra. Two Titans trading shots are filmed side-on: framed for the screen's shape, never jumping the line between them, a slow dolly drift. When it's quiet, it rides behind or ahead of a Titan on the move. An overall view of the arena comes at least every 30 s. It cuts between shots (4–11 s each), holds on a splat for a moment, and finds a new angle when scenery hides the fight.
+  - *Overview:* the wide shot only, slowly circling the Soap Tide and leaning toward where the Titans are.
+  - *Follow:* pick a Titan in the bar at the bottom (or tap them on the map, or use the arrow keys) and the camera rides over their shoulder, looking where they look. When they're splatted, it moves on to whoever got them.
+  - *Minimap:* a top-down picture of the map, taken once per map from the game's own renderer. It shows everything below 21 m, with the floor as one flat colour; tall things it cuts through are drawn solid. On top: the Soap Tide (and where it's heading), every Titan still in (players bigger, the one you watch ringed) and the camera's view cone.
+  - *Bar and card:* every Titan still in, with their splats ("bot" marks the host's bots online). The card shows the Titan you follow: health, splats, how many Titans are left and everything they carry (foods with counts, utensils, what's in hand). Other players' kits now travel in their shared state as short codes, so a spectator sees them too.
+- **Online rounds.** Only players who want to play drop in, and the host fills the room with bots around them. You can drop into a round up to 25 s in. When no player is in the round and someone is waiting (or a lone Titan has the room to itself while someone waits), the host starts a fresh round within a few seconds instead of making everyone watch bots to the end.
 
 **Version 0.23: handles only where they belong, and fingers that wrap them** (`src/utensil-models.js`, `src/human.js`, `src/viewmodel.js`, `src/actors.js`)
 
@@ -225,7 +240,8 @@ npm run dev          # http://localhost:5173
 | `src/utensils.js`, `src/utensil-models.js`, `src/utensil-art.js` | The 20 support utensils: throw rewrites for every food, impact effects, zones, delivery boxes, loose utensils; their 3D models; the flat design-sheet art (generated by `docs/utensils/build.mjs`, used only if the 3D icons can't be rendered) |
 | `src/surface.js` | Surface State Grid and zone visuals |
 | `src/bots.js` | Bot AI |
-| `src/game.js` | Match flow, damage and kills, Soap Tide, camera, aim preview |
+| `src/game.js` | Match flow, online rounds and loadouts, damage and kills, Soap Tide, camera, aim preview |
+| `src/spectator.js` | Spectator mode: the cinematic director, overview and follow cameras, minimap, Titan bar and player card |
 | `src/hud.js`, `src/dials.js`, `src/input.js`, `src/fx.js` | HUD, the phone plate dials, controls, particles, sound |
 
 ## Performance

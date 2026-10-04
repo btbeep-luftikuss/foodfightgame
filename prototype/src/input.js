@@ -16,6 +16,7 @@ export class Input {
     this.locked = false;
     this.lockFails = 0; // failed lock attempts since the mouse was last locked
     this.wantLock = null; // set by main.js: is the game in a state where the mouse should be locked?
+    this.blockClicks = null; // set by main.js: clicks on the game do nothing (spectating)
     this.enabled = false;
     this.touch = { active: false, moveId: null, moveOrigin: null, move: { x: 0, y: 0 }, lookId: null, lookLast: null, fire: false };
     this.isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -39,6 +40,7 @@ export class Input {
 
     canvas.addEventListener('mousedown', (e) => {
       if (!this.enabled || this.isTouchEvent) return;
+      if (this.blockClicks?.()) return; // spectating, or a card is open: the mouse stays free
       if (!this.locked) {
         // The first click only grabs the mouse. If locking keeps failing (some app views don't
         // allow it), clicks still throw, and every click tries to lock again.

@@ -37,6 +37,7 @@ const SanitizeShader = {
 };
 
 const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // Low: no shadow map, blob shadows. Medium: shadows baked once (static scenery) plus blob
 // shadows. High: shadows every frame for everything, plus bloom. All tiers scale resolution
@@ -168,7 +169,7 @@ function boot() {
   const menu = $('menu'), pause = $('pause'), end = $('end'), touch = $('touch');
   let playing = false;
 
-  function enterPlay() {
+  function enterPlay(lock = true) {
     closeStage();
     $('locker').hidden = true;
     game.paused = false;
@@ -177,7 +178,7 @@ function boot() {
     menu.hidden = true; end.hidden = true; pause.hidden = true;
     hud.show(true);
     touch.hidden = !input.isTouch;
-    if (!input.isTouch) input.requestLock(true);
+    if (lock && !input.isTouch) input.requestLock(true);
   }
   let matchOpts = {}; // what "Play again" repeats
   // Bot difficulty: remembered between visits, applied to the next match
@@ -237,6 +238,7 @@ function boot() {
     enterPlay();
   }
   async function toMenu() {
+    $('loadout').hidden = true;
     if (game.online) await game.stopOnline();
     playing = false; input.enabled = false; end.hidden = true; pause.hidden = true; hud.show(false); touch.hidden = true;
     menu.hidden = false; input.exitLock();
@@ -353,45 +355,101 @@ function boot() {
     if (!$('locker').hidden) { openStage(); reveal($('locker')); } else closeStage();
   });
 
-  // Chef's Choice: pick 3 foods that never run out; nothing spawns on the map.
+  // Chef's Choice and the online loadout card share one pick (3 foods and a utensil), remembered.
   let chefPick = [];
   try { chefPick = JSON.parse(localStorage.getItem('tt-chef') || '[]').filter((id) => FOOD_IDS.includes(id)).slice(0, 3); } catch { /* storage blocked */ }
-  const chefGrid = $('chef-grid');
-  chefGrid.innerHTML = FOOD_IDS.map((id) => `<button type="button" data-id="${id}" aria-pressed="false"><img src="${icons[id] || ''}" alt=""><span>${FOODS[id].name}</span><small>${FOODS[id].role.replace(/ · (heal|snack)$/, '')}</small></button>`).join('');
+  const foodGrids = [$('chef-grid'), $('lo-foods')];
+  const foodHtml = FOOD_IDS.map((id) => `<button type="button" data-id="${id}" aria-pressed="false"><img src="${icons[id] || ''}" alt=""><span>${FOODS[id].name}</span><small>${FOODS[id].role.replace(/ · (heal|snack)$/, '')}</small></button>`).join('');
+  for (const el of foodGrids) el.innerHTML = foodHtml;
+  // online: picks made while ready count from your next drop
+  const pushLoadout = () => { if (game.net?.ready && chefPick.length === 3) { game.net.loadout = [...chefPick]; game.net.utensil = chefUtensil || null; } };
   function renderChef() {
-    for (const b of chefGrid.children) {
-      const i = chefPick.indexOf(b.dataset.id);
-      b.setAttribute('aria-pressed', i >= 0 ? 'true' : 'false');
-      b.dataset.n = i >= 0 ? i + 1 : '';
-      b.disabled = i < 0 && chefPick.length >= 3;
+    for (const grid of foodGrids) {
+      for (const b of grid.children) {
+        const i = chefPick.indexOf(b.dataset.id);
+        b.setAttribute('aria-pressed', i >= 0 ? 'true' : 'false');
+        b.dataset.n = i >= 0 ? i + 1 : '';
+        b.disabled = i < 0 && chefPick.length >= 3;
+      }
     }
     const left = 3 - chefPick.length;
     $('chef-play').disabled = left > 0;
     $('chef-play').textContent = left > 0 ? `Pick ${left} more food${left > 1 ? 's' : ''}` : 'Start Chef\'s Choice';
+    renderLoadout();
   }
-  chefGrid.addEventListener('click', (e) => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    const id = b.dataset.id, i = chefPick.indexOf(id);
-    if (i >= 0) chefPick.splice(i, 1); else if (chefPick.length < 3) chefPick.push(id);
-    try { localStorage.setItem('tt-chef', JSON.stringify(chefPick)); } catch { /* storage blocked */ }
-    renderChef();
-  });
-  renderChef();
-  // Chef's Choice: an optional starting utensil
+  for (const grid of foodGrids) {
+    grid.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const id = b.dataset.id, i = chefPick.indexOf(id);
+      if (i >= 0) chefPick.splice(i, 1); else if (chefPick.length < 3) chefPick.push(id);
+      try { localStorage.setItem('tt-chef', JSON.stringify(chefPick)); } catch { /* storage blocked */ }
+      pushLoadout();
+      renderChef();
+    });
+  }
+  // a starting utensil (optional in Chef's Choice; online you bring one too, or none)
   let chefUtensil = '';
   try { chefUtensil = UTENSIL_BY_ID[localStorage.getItem('tt-utensil')] ? localStorage.getItem('tt-utensil') : ''; } catch { /* storage blocked */ }
-  const uGrid = $('chef-utensils');
-  uGrid.innerHTML = `<button type="button" data-id="" aria-pressed="false"><span>None</span><small>Find one on the map</small></button>`
+  const uGrids = [$('chef-utensils'), $('lo-utensils')];
+  const uHtml = `<button type="button" data-id="" aria-pressed="false"><span>None</span><small>Find one on the map</small></button>`
     + UTENSILS.map((u) => `<button type="button" data-id="${u.id}" aria-pressed="false" title="${u.buff} Trade-off: ${u.trade}"><img src="${utensilIcon(u.id)}" alt=""><span>${u.name}</span><small>${u.role}</small></button>`).join('');
-  const syncUtensils = () => { for (const b of uGrid.children) b.setAttribute('aria-pressed', String(b.dataset.id === chefUtensil)); };
-  uGrid.addEventListener('click', (e) => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    chefUtensil = b.dataset.id;
-    try { localStorage.setItem('tt-utensil', chefUtensil); } catch { /* storage blocked */ }
-    syncUtensils();
+  for (const el of uGrids) el.innerHTML = uHtml;
+  const syncUtensils = () => { for (const grid of uGrids) for (const b of grid.children) b.setAttribute('aria-pressed', String(b.dataset.id === chefUtensil)); };
+  for (const grid of uGrids) {
+    grid.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      chefUtensil = b.dataset.id;
+      try { localStorage.setItem('tt-utensil', chefUtensil); } catch { /* storage blocked */ }
+      pushLoadout();
+      syncUtensils();
+      renderLoadout();
+    });
+  }
+
+  // Online: after joining a room, pick what you drop in with (or only watch). It opens again from
+  // the spectator bar between rounds.
+  const loadout = $('loadout');
+  function renderLoadout() {
+    if (loadout.hidden || !game.net) return;
+    const net = game.net, R = game.round, rs = net.roomSettings(), left = 3 - chefPick.length;
+    $('lo-count').textContent = left > 0 ? `${left} more to pick` : 'all set';
+    const bots = rs.bots === 'off' ? 'no bots' : `${rs.bots[0].toUpperCase()}${rs.bots.slice(1)} bots`;
+    const mode = rs.mode === 'chef' ? "Chef's Choice: your 3 foods never run out" : 'Classic: you start with a stack of each, and find more';
+    const room = `Room <b>${esc(net.roomName)}</b> · ${MAPS[rs.map]?.name || 'The Grand Kitchen'} · ${bots}. ${mode}.`;
+    if ($('lo-room').innerHTML !== room) $('lo-room').innerHTML = room;
+    let note;
+    if (!R || R.id < 0) note = 'Finding the room…';
+    else if (game.player?.alive) note = 'You are in this round: a new pick counts from your next drop.';
+    else if (game.joinableNow()) note = 'A round is starting: press Ready to drop in now.';
+    else if (R.state === 'over') note = 'The next round starts in a few seconds.';
+    else note = 'A round is on: you drop in at the next one (watch until then).';
+    if ($('lo-note').textContent !== note) $('lo-note').textContent = note;
+    const btn = $('lo-ready');
+    btn.disabled = left > 0;
+    const label = left > 0 ? `Pick ${left} more food${left > 1 ? 's' : ''}` : game.joinableNow() ? 'Drop in' : 'Ready';
+    if (btn.textContent !== label) btn.textContent = label;
+  }
+  function openLoadout() {
+    loadout.hidden = false;
+    input.exitLock();
+    renderChef(); syncUtensils();
+    requestAnimationFrame(() => loadout.scrollTop = 0);
+  }
+  $('lo-ready').addEventListener('click', () => {
+    const net = game.net;
+    if (chefPick.length !== 3 || !net) return;
+    net.loadout = [...chefPick]; net.utensil = chefUtensil || null; net.ready = true;
+    loadout.hidden = true;
+    game.joinNow(); // in a young round, drop in right away
+    if (game.player?.alive && !input.isTouch) input.requestLock(true);
   });
+  $('lo-watch').addEventListener('click', () => { if (game.net) game.net.ready = false; loadout.hidden = true; });
+  $('lo-leave').addEventListener('click', toMenu);
+  game.spectator.onPlay = () => { if (game.online) openLoadout(); else start(); };
+  game.spectator.onLeave = toMenu;
+  renderChef();
   syncUtensils();
   $('chef-play').addEventListener('click', () => { if (chefPick.length === 3) start({ mode: 'chef', loadout: [...chefPick], utensil: chefUtensil || null }); });
   $('end-menu').addEventListener('click', toMenu);
@@ -425,19 +483,21 @@ function boot() {
       const net = new Net(game);
       const nick = $('nick').value || 'Titan';
       // what I'd host with (if the room has no host yet); joiners take the room's settings
-      await net.connect(lobby, cleanRoom($('roomcode').value), nick, { map: mapId, mode: onlineMode, bots: onlineBots, loadout: chefPick.length === 3 ? [...chefPick] : null });
+      await net.connect(lobby, cleanRoom($('roomcode').value), nick, { map: mapId, mode: onlineMode, bots: onlineBots, loadout: chefPick.length === 3 ? [...chefPick] : null, utensil: chefUtensil || null });
       try { localStorage.setItem('tt-nick', nick); } catch { /* storage blocked */ }
       game.startOnline(net);
       status.textContent = '';
-      enterPlay();
+      enterPlay(false);
+      openLoadout(); // pick 3 foods and a utensil (or spectate)
     } catch (err) {
       status.className = 'err';
       status.textContent = `Couldn't join that room (${(err && (err.code || err.message)) || 'unknown error'}). Check the room code and try again.`;
     } finally { btn.disabled = false; }
   });
   $('spectate').addEventListener('click', () => { end.hidden = true; });
-  $('resume').addEventListener('click', () => { pause.hidden = true; game.paused = false; if (!input.isTouch) input.requestLock(true); });
-  input.wantLock = () => playing && !game.paused && pause.hidden && end.hidden && !input.isTouch;
+  $('resume').addEventListener('click', () => { pause.hidden = true; game.paused = false; if (!input.isTouch && !game.spectator.active) input.requestLock(true); });
+  input.wantLock = () => playing && !game.paused && pause.hidden && end.hidden && loadout.hidden && !game.spectator.active && !input.isTouch;
+  input.blockClicks = () => game.spectator.active || !loadout.hidden; // clicks there are for the spectator bar and the card
 
 
   input.onLockChange = (locked) => {
@@ -449,6 +509,7 @@ function boot() {
   });
 
   game.onMatchEvent = (type, data) => {
+    if (type === 'joined') { loadout.hidden = true; return; } // online: dropped into a round
     if (!playing || !game.player) {
       if (type === 'over') setTimeout(() => { if (!playing) game.newMatch(false); }, 5000);
       return;
@@ -662,7 +723,7 @@ function boot() {
   warm.position.set(0, -30, 0);
   scene.add(warm);
   renderer.compileAsync(scene, camera).catch(() => {}).finally(() => scene.remove(warm));
-  let last = performance.now(), frameNo = 0;
+  let last = performance.now(), frameNo = 0, specOn = false, loadoutT = 0;
   renderer.info.autoReset = false; // count draw calls across all passes for the perf readout
   renderer.setAnimationLoop((now) => {
     renderer.info.reset();
@@ -670,6 +731,12 @@ function boot() {
     last = now;
     if (input.aimEdge && (input.aimEdge.x || input.aimEdge.y)) input.look(input.aimEdge.x * 320 * dt, input.aimEdge.y * 200 * dt, 0.006 * input.zoomSens);
     game.update(dt);
+    const spec = playing && game.spectator.active; // watching: free the mouse for the spectator bar, no touch controls
+    if (spec !== specOn) {
+      specOn = spec;
+      if (spec) { input.exitLock(); touch.hidden = true; } else if (playing) touch.hidden = !input.isTouch;
+    }
+    if (!loadout.hidden && (loadoutT -= dt) <= 0) { loadoutT = 0.4; renderLoadout(); }
     if (game.world.shadowDirty && quality.shadows && !quality.dynamicShadows) { renderer.shadowMap.needsUpdate = true; game.world.shadowDirty = false; }
     // High: moving shadows refresh at 30 Hz instead of every frame (half the shadow cost).
     if (quality.dynamicShadows) renderer.shadowMap.needsUpdate = (frameNo++ & 1) === 0;

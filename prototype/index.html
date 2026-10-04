@@ -221,6 +221,86 @@ button { font: inherit; color: inherit; }
 .fx-overlay.lowhp { box-shadow: inset 0 0 90px 20px rgba(200, 20, 20, 0.45); }
 .fx-overlay.hurt { background: rgba(240, 80, 58, 0.18); }
 
+/* ------------------------------------------------------------------ spectator (0.24) */
+#hud.spectating .vrow, #hud.spectating .statuses, #hud.spectating .scores, #hud.spectating .crosshair, #hud.spectating .bottom,
+#hud.spectating .lockhint, #hud.spectating .hitmarker, #hud.spectating .radar, #hud.spectating .fx-overlay { display: none !important; }
+.spec { position: absolute; inset: 0; pointer-events: none; }
+.mm { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); pointer-events: auto; border-radius: 12px; overflow: hidden;
+  background: var(--ink-glass); box-shadow: 0 0 0 2px rgba(143, 216, 240, 0.5), 0 6px 18px rgba(0, 0, 0, 0.35); touch-action: none; }
+.mm canvas { display: block; width: min(250px, 30vw); cursor: pointer; }
+.mm span { position: absolute; left: 7px; top: 5px; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--paper); text-shadow: 0 1px 2px var(--ink), 0 0 4px var(--ink); pointer-events: none; }
+.spec-foot { position: absolute; left: 0; right: 0; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 8px;
+  padding: 0 calc(12px + env(safe-area-inset-right, 0px)) 0 calc(12px + env(safe-area-inset-left, 0px)); }
+.spec-card { display: grid; gap: 6px; min-width: min(300px, 100%); max-width: min(560px, 100%); box-sizing: border-box; padding: 9px 14px; border-radius: 14px; background: var(--ink-glass); border: 2px solid rgba(255, 212, 71, 0.35); }
+.sc-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sc-dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 2px var(--paper); flex-shrink: 0; }
+.sc-name { font-family: var(--display); font-weight: 400; font-size: 22px; line-height: 1; color: var(--butter); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-tag, .pchip small { font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--paper-dim); border: 1.5px solid currentColor; border-radius: 6px; padding: 0 4px; line-height: 14px; }
+.sc-hp { margin-left: auto; width: 90px; height: 8px; border-radius: 4px; background: rgba(34, 20, 42, 0.9); box-shadow: inset 0 0 0 1px rgba(255,244,226,0.2); overflow: hidden; flex-shrink: 0; }
+.sc-hp i { display: block; height: 100%; background: linear-gradient(180deg, #ff8a72, var(--tomato)); }
+.sc-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--paper-dim); align-items: center; }
+.sc-stats span { display: inline-flex; align-items: center; gap: 5px; }
+.sc-stats b { font-family: var(--display); font-weight: 400; font-size: 17px; line-height: 1; color: var(--paper); }
+.sc-items { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.sc-it { position: relative; width: 38px; height: 38px; border-radius: 50%; background: radial-gradient(circle, #fffaf2 0 60%, #e9dccb 61%); display: grid; place-items: center; }
+.sc-it img { width: 80%; height: 80%; object-fit: contain; }
+.sc-it em { position: absolute; right: -6px; bottom: -4px; min-width: 18px; padding: 0 4px; box-sizing: border-box; font-style: normal; font-family: var(--display); font-size: 12px; line-height: 17px; text-align: center; border-radius: 9px; background: var(--tomato); color: var(--paper); }
+.sc-it.sel { box-shadow: 0 0 0 3px var(--butter); }
+.sc-it.ut.sel { box-shadow: 0 0 0 3px var(--uc, var(--butter)); }
+.sc-sep { width: 2px; height: 26px; background: rgba(255, 244, 226, 0.25); margin: 0 3px; }
+.sc-none { font-size: 12px; color: var(--paper-dim); }
+.sc-cine { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: 15px; } .sc-cine > b { color: var(--butter); } .sc-cine em { font-style: normal; color: var(--paper-dim); }
+.sc-left { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding-left: 10px; font-size: 13px; color: var(--paper-dim); }
+.sc-left b { font-family: var(--display); font-weight: 400; font-size: 16px; line-height: 1; color: var(--paper); }
+.sc-hint { font-size: 12px; color: var(--paper-dim); }
+.sc-status { font-size: 12.5px; font-weight: 700; color: var(--glaze); }
+.spec-bar { pointer-events: auto; display: flex; align-items: center; gap: 8px; max-width: 100%; box-sizing: border-box; padding: 5px; border-radius: 999px; background: var(--ink-glass); }
+.spec-cams, .spec-acts { display: flex; gap: 4px; flex-shrink: 0; }
+.spec-cams button, .sbtn { border: 0; border-radius: 999px; padding: 7px 12px; font-weight: 800; font-size: 13px; cursor: pointer; background: transparent; color: var(--paper-dim); box-shadow: inset 0 0 0 2px rgba(255, 244, 226, 0.25); white-space: nowrap; }
+.spec-cams button[aria-pressed="true"] { background: var(--glaze); color: var(--ink); box-shadow: none; }
+.sbtn.go { background: var(--butter); color: var(--ink); box-shadow: none; }
+.spec-names { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; min-width: 0; }
+.spec-names::-webkit-scrollbar { display: none; }
+.pchip { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; border: 0; border-radius: 999px; padding: 6px 10px 6px 8px; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--paper); background: rgba(255, 244, 226, 0.1); }
+.pchip .pdot { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--ink); }
+.pchip b { display: inline-flex; align-items: center; gap: 2px; }
+.pchip .ico { width: 12px; height: 12px; }
+.pchip span { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pchip b { font-family: var(--display); font-weight: 400; font-size: 14px; line-height: 1; color: var(--butter); }
+.pchip:hover { background: rgba(255, 244, 226, 0.2); }
+.pchip.sel { background: var(--butter); color: var(--ink); } .pchip.sel b { color: var(--tomato); } .pchip.sel small { color: var(--ink); }
+.pnone { font-size: 13px; color: var(--paper-dim); padding: 0 8px; white-space: nowrap; }
+@media (min-width: 821px) { .spec-card { justify-self: start; } } /* lower left, out of the way of the action */
+@media (max-width: 720px) {
+  .spec-bar { flex-wrap: wrap; border-radius: 16px; justify-content: space-between; }
+  .spec-names { order: -1; flex-basis: 100%; }
+}
+@media (pointer: coarse) and (max-width: 560px) {
+  .mm canvas { width: min(150px, 40vw); }
+  .spec-card { padding: 7px 10px; }
+  .sc-name { font-size: 18px; }
+  .sc-it { width: 32px; height: 32px; }
+}
+@media (max-height: 500px) { /* a phone on its side: a smaller map, a shorter loadout card */
+  .mm canvas { width: min(165px, 24vw); }
+  .card.loadout h3 { display: none; }
+  .card.loadout .lo-room { font-size: 13px; }
+}
+/* the loadout card: what you bring into an online round */
+.card.loadout { width: min(880px, 100%); gap: 10px; padding: 20px 22px 0; }
+.card.loadout h3 { font-size: 34px; }
+.card.loadout .lo-acts { position: sticky; bottom: -16px; z-index: 1; margin: 0 -22px; padding: 10px 22px 16px; border-radius: 0 0 22px 22px; background: var(--ink); box-shadow: 0 -12px 14px -8px var(--ink); }
+.lo-cols { display: grid; grid-template-columns: 1fr 1.25fr; gap: 16px; align-items: start; }
+@media (max-width: 760px) { .lo-cols { grid-template-columns: 1fr; } }
+.card p.lo-h { margin: 0 0 6px; color: var(--paper); }
+.lo-h span { color: var(--paper-dim); font-size: 13px; margin-left: 6px; }
+.lo-grid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)) !important; }
+.lo-grid.uchoice { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)) !important; }
+.lo-grid button { padding: 5px 3px; gap: 1px; font-size: 11.5px; }
+.lo-grid button img { width: 32px; height: 32px; }
+.card p.lo-note { font-size: 13px; color: var(--glaze); font-weight: 700; }
+.lo-room b { color: var(--butter); }
+
 /* ------------------------------------------------------------------ touch */
 .touch { position: fixed; inset: 0; pointer-events: none; --sb: env(safe-area-inset-bottom, 0px); --sr: env(safe-area-inset-right, 0px); }
 .stick { position: fixed; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 3px solid rgba(255,244,226,0.4); background: rgba(34,20,42,0.3); opacity: 0; transition: opacity 0.15s; }
@@ -399,6 +479,23 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <div id="sniff" class="sniffdot ready" title="Sniff (B)"><span>B</span></div>
     </div>
   </div>
+  <div id="spec" class="spec" hidden>
+    <div class="mm"><canvas id="minimap" data-touch-btn aria-label="Map: the Soap Tide and every Titan still in. Tap a Titan to follow them."></canvas><span>Map</span></div>
+    <div class="spec-foot">
+      <div id="spec-card" class="spec-card"></div>
+      <div class="spec-bar">
+        <div id="spec-cams" class="spec-cams" role="group" aria-label="Camera">
+          <button type="button" data-cam="cinematic" aria-pressed="true" title="Cinematic (C): follows the action">Cinematic</button>
+          <button type="button" data-cam="overview" aria-pressed="false" title="Overview (O): the whole arena">Overview</button>
+        </div>
+        <div id="spec-names" class="spec-names" role="group" aria-label="Titans still in: pick one to watch (or use the arrow keys)"></div>
+        <div class="spec-acts">
+          <button type="button" id="spec-play" class="sbtn go">Play</button>
+          <button type="button" id="spec-leave" class="sbtn">Leave</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <div id="toast" class="toast"></div>
   <div id="banner" class="banner"></div>
   <div id="fps" class="fps"></div>
@@ -419,7 +516,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 
 <section id="menu" class="menu" aria-label="Main menu">
   <div class="menu-panel">
-    <p class="eyebrow">Prototype 0.23 · The Grand Kitchen & the Backyard BBQ</p>
+    <p class="eyebrow">Prototype 0.24 · Loadouts & spectator mode</p>
     <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
     <p class="lede">You're frog-sized, and the whole kitchen is the arena: a 120&nbsp;m island, a 440&nbsp;m back counter with the sink and stove, a dining table to hide under and a floor the size of a town. <b>Food is the only weapon.</b> Play in first person against 11 bots until the Soap Tide closes in, or online against your friends (with bots too). Two maps: the kitchen and the Backyard BBQ. Blueberries fire like a machine gun.</p>
     <div class="row">
@@ -459,7 +556,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
             <button type="button" data-mode="chef" aria-pressed="false">Chef's Choice</button>
           </div>
         </div>
-        <p class="botlevel-note online-only">The first player in a room sets its map, mode and bots; everyone who joins plays by the room's settings. Chef's Choice uses your 3 foods from Play vs bots (or 3 random ones).</p>
+        <p class="botlevel-note online-only">The first player in a room sets its map, mode and bots; everyone who joins plays by the room's settings. After joining you pick 3 foods and a utensil, or just watch.</p>
       </div>
       <p><b>Choose a mode</b></p>
       <div class="modes">
@@ -479,7 +576,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <label for="roomcode">Room code (friends type the same one)<input id="roomcode" maxlength="40" value="kitchen" autocapitalize="off" spellcheck="false"></label>
       <div id="online-settings"></div>
       <div class="row"><button id="online-join" class="btn" type="submit">Join room</button></div>
-      <p id="online-status">Everyone who opens this game and types the same room code plays together, in Soap Tide rounds like Play vs bots (if you arrive mid-round, you drop in at the next one). To invite friends, share this page with them from the Share menu; they need to be signed in to Claude.</p>
+      <p id="online-status">Everyone who opens this game and types the same room code plays together, in Soap Tide rounds like Play vs bots. You pick 3 foods and a utensil to drop in with, or spectate: a cinematic camera follows the fights, with a map and every Titan's splats and items. To invite friends, share this page with them from the Share menu; they need to be signed in to Claude.</p>
     </form>
     <h2>Controls</h2>
     <dl class="keys desk-only">
@@ -511,6 +608,29 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     <p class="foot">Prototype of the Tiny Titans design document: 12 of 30 foods, the whole kitchen, 12 Titans, bots only.</p>
   </div>
   <p class="live">Bots are fighting live behind this menu</p>
+</section>
+
+<section id="loadout" class="overlay" hidden aria-label="Choose what you bring">
+  <div class="card loadout">
+    <h3>Your loadout</h3>
+    <p id="lo-room" class="lo-room"></p>
+    <div class="lo-cols">
+      <div>
+        <p class="lo-h"><b>Pick 3 foods</b><span id="lo-count"></span></p>
+        <div id="lo-foods" class="chef-grid lo-grid" role="group" aria-label="Pick 3 foods"></div>
+      </div>
+      <div>
+        <p class="lo-h"><b>Pick a utensil</b><span>it boosts the food you throw</span></p>
+        <div id="lo-utensils" class="chef-grid uchoice lo-grid" role="group" aria-label="Pick a utensil"></div>
+      </div>
+    </div>
+    <p id="lo-note" class="lo-note"></p>
+    <div class="row lo-acts">
+      <button id="lo-ready" class="btn" type="button" disabled>Pick 3 foods</button>
+      <button id="lo-watch" class="btn ghost" type="button">Spectate</button>
+      <button id="lo-leave" class="btn ghost" type="button">Leave room</button>
+    </div>
+  </div>
 </section>
 
 <section id="pause" class="overlay" hidden>

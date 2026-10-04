@@ -243,6 +243,9 @@ export class World {
       this._atmosphere();
       this._spawns();
     }
+    // where a spectator camera may go: inside the walls (or the fence) and under the kitchen ceiling
+    this.camBox = this.mapId === 'backyard' ? { minX: -239, maxX: 239, minZ: -175, maxZ: 165, maxY: F + 220 }
+      : { minX: -242, maxX: 242, minZ: -175, maxZ: 167, maxY: F + 104 };
     this.drawCallsBefore = this._countMeshes();
     this._mergeStatic();
     // food stains on every surface (built after all colliders exist)

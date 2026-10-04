@@ -18,11 +18,16 @@
 // settings (rs: map, mode, bots), the round (rd: number, state, Soap Tide) and its bots (b), which
 // it simulates like Play vs bots; their throws and knockouts go out as the host's events. Hits on
 // a bot are decided by the host's game, just as hits on a player are decided by that player's.
+//
+// Loadouts and spectators (0.24): each player says whether they want to play (w) or only watch;
+// only players who want to play drop in, and the host fills the room with bots around them. Every
+// Titan's state also carries what it carries (foods and utensils, as short codes), so someone
+// spectating can see a player's items.
 import * as THREE from 'three';
 import { clamp, rand, FLOOR_BOUNDS } from './core.js';
-import { FOODS } from './foods.js';
+import { FOODS, FOOD_IDS } from './foods.js';
 import { Actor } from './actors.js';
-import { UTENSIL_BY_ID } from './utensils.js';
+import { UTENSIL_BY_ID, UTENSIL_IDS } from './utensils.js';
 
 const COLORS = ['#ff9a1f', '#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5', '#f2f2f2'];
 const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048 };
@@ -37,10 +42,33 @@ const cleanRS = (rs) => (rs && typeof rs === 'object' ? {
 const STATES = ['drop', 'play', 'over'];
 const cleanRD = (rd) => (Array.isArray(rd) ? [num(rd[0], 0, 1e6) | 0, STATES.includes(rd[1]) ? rd[1] : 'play',
   num(rd[2], -300, 300), num(rd[3], -300, 300), num(rd[4], 0, 400, 330), num(rd[5], 0, 10) | 0, rd[6] === 'shrink' ? 'shrink' : 'wait',
-  num(rd[7], 0, 120), cleanName(rd[8]).slice(0, 16), num(rd[9], 0, 1e4), num(rd[10], -300, 300), num(rd[11], -300, 300), num(rd[12], 0, 400)] : null);
+  num(rd[7], 0, 120), cleanName(rd[8]).slice(0, 16), num(rd[9], 0, 1e4), num(rd[10], -300, 300), num(rd[11], -300, 300), num(rd[12], 0, 400), rd[13] === 1 ? 1 : 0] : null);
 const r2 = (v) => Math.round(v * 100) / 100;
 const num = (v, lo, hi, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? clamp(v, lo, hi) : d);
 const cleanName = (s) => String(s || '').replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁯]/g, '').trim().slice(0, 16) || 'Titan';
+// What a Titan carries, as short codes: foods "<food code><count or *>" per slot, then the slot in
+// hand ("04,3*,,,|0"); utensils "<utensil code>" per slot, then the one in hand ("a,,5|0").
+const INV_IDS = [...FOOD_IDS, 'peel'];
+const invCode = (a) => a.inv.map((s) => (s && INV_IDS.includes(s.id) ? INV_IDS.indexOf(s.id).toString(36) + (s.inf ? '*' : Math.min(999, s.count | 0)) : '')).join(',') + '|' + (a.sel | 0);
+const kitCode = (a) => (a.utensils || []).map((id) => (id && UTENSIL_IDS.includes(id) ? UTENSIL_IDS.indexOf(id).toString(36) : '')).join(',') + '|' + (a.uSel | 0);
+function readInv(code) {
+  if (typeof code !== 'string' || code.length > 60) return null;
+  const [list = '', sel = '0'] = code.split('|');
+  const slots = list.split(',').slice(0, 5).map((t) => {
+    const id = t ? INV_IDS[parseInt(t[0], 36)] : null;
+    if (!id) return null;
+    return t.slice(1) === '*' ? { id, count: 1, inf: true } : { id, count: clamp(parseInt(t.slice(1), 10) || 0, 0, 999) };
+  });
+  while (slots.length < 5) slots.push(null);
+  return { slots, sel: clamp(parseInt(sel, 10) || 0, 0, 4) };
+}
+function readKit(code) {
+  if (typeof code !== 'string' || code.length > 30) return null;
+  const [list = '', sel = '0'] = code.split('|');
+  const ids = list.split(',').slice(0, 3).map((t) => (t ? UTENSIL_IDS[parseInt(t, 36)] || null : null));
+  while (ids.length < 3) ids.push(null);
+  return { ids, sel: clamp(parseInt(sel, 10) || 0, 0, 2) };
+}
 export const cleanRoom = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9_.-]/g, '').slice(0, 40) || 'kitchen';
 
 // A stand-in "room" for local testing across browser tabs (BroadcastChannel). Never used on
@@ -105,7 +133,9 @@ export class Net {
     this.name = 'Titan'; this.color = COLORS[0]; this.roomName = 'kitchen';
     this.lastSent = null;
     this.settings = { map: 'kitchen', mode: 'classic', bots: 'medium' }; // what I'd host with
-    this.loadout = null;          // my Chef's Choice foods
+    this.loadout = null;          // my 3 foods (picked after joining)
+    this.utensil = null;          // ... and my utensil
+    this.ready = false;           // I want to play (false: only watching)
     this.isHost = false; this.hostPeer = null; this.hostSince = 0;
     this.hostSettings = null; this.hostRound = null; // the room's, from the host
     this.botProxies = new Map();  // `${hostPeer}|b${id}` -> proxy of one of the host's bots
@@ -117,6 +147,7 @@ export class Net {
   async connect(lobby, roomName, name, settings = {}) {
     this.settings = cleanRS({ ...this.settings, ...settings });
     this.loadout = Array.isArray(settings.loadout) && settings.loadout.length === 3 ? settings.loadout.filter((id) => FOODS[id]) : null;
+    this.utensil = UTENSIL_BY_ID[settings.utensil] ? settings.utensil : null;
     this.joinedAt = performance.now();
     this.name = cleanName(name);
     this.roomName = cleanRoom(roomName);
@@ -174,11 +205,11 @@ export class Net {
     const p = this.game.player, g = this.game;
     const t = this.game.time;
     this.log = this.log.filter((e) => t - e[e.length - 1] < LOG_KEEP).slice(-LOG_MAX);
-    const msg = { n: this.name, c: this.color, k: this.game.playerSkin, s: this._stateOf(p, this.game.input.pitch), e: this.log.map((e) => e.slice(0, -1)) };
+    const msg = { n: this.name, c: this.color, k: this.game.playerSkin, w: this.ready ? 1 : 0, s: this._stateOf(p, this.game.input.pitch), e: this.log.map((e) => e.slice(0, -1)) };
     if (this.isHost) {
       const R = g.round, T = g.tide, to = T.to || { x: T.x, z: T.z, r: T.r };
       msg.rs = { ...this.roomSettings(), since: this.hostSince };
-      msg.rd = [Math.max(0, R.id), STATES.includes(R.state) ? R.state : 'drop', r2(T.x), r2(T.z), r2(T.r), T.phase, T.mode, r2(Math.max(0, T.t)), R.winner || '', r2(R.t), r2(to.x), r2(to.z), r2(to.r)];
+      msg.rd = [Math.max(0, R.id), STATES.includes(R.state) ? R.state : 'drop', r2(T.x), r2(T.z), r2(T.r), T.phase, T.mode, r2(Math.max(0, T.t)), R.winner || '', r2(R.t), r2(to.x), r2(to.z), r2(to.r), R.fresh ? 1 : 0];
       msg.b = this._localBots().map((a) => [a.id, a.name, a.color, a.skinId, ...this._stateOf(a, Math.asin(clamp(a.aimDir.y, -1, 1)))]);
     }
     this.room.presence(msg).catch(() => {});
@@ -199,7 +230,7 @@ export class Net {
     if (t < p.juicedUntil) f |= FLAG.juiced;
     if (p.onGround) f |= FLAG.ground;
     return [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.vel.x), r2(p.vel.y), r2(p.vel.z), r2(p.yaw), r2(pitch),
-      Math.round(p.hp), Math.round(p.glaze), p.alive ? 1 : 0, p.selected()?.id || '', f, p.kills, r2(Math.min(99, t - p.noiseAt)), p.utensil || ''];
+      Math.round(p.hp), Math.round(p.glaze), p.alive ? 1 : 0, p.selected()?.id || '', f, p.kills, r2(Math.min(99, t - p.noiseAt)), p.utensil || '', invCode(p), kitCode(p)];
   }
 
   // ---------------------------------------------------------------- incoming
@@ -332,6 +363,7 @@ export class Net {
 
   _apply(pr, pres, peer) {
     pr.presence = pres;
+    pr.ready = pres.w !== 0; // wants to play (older games always did)
     pr.actor.name = cleanName(pres.n);
     this._applyState(pr, pres.s);
 
@@ -388,6 +420,8 @@ export class Net {
     a.kills = num(s[13], 0, 9999) | 0;
     a.noiseAt = now - num(s[14], 0, 99, 99);
     a.utensil = typeof s[15] === 'string' && UTENSIL_BY_ID[s[15]] ? s[15] : null; // drawn in their left hand
+    a.netInv = readInv(s[16]); // what they carry (shown to spectators)
+    a.netKit = readKit(s[17]);
   }
 
   _event(pr, type, d, peer) {
