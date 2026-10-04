@@ -37,7 +37,7 @@ import { UTENSIL_BY_ID, UTENSIL_IDS } from './utensils.js';
 import { TEAMS, cleanSize } from './teams.js';
 
 const COLORS = ['#ff9a1f', '#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5', '#f2f2f2'];
-const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048, ladle: 4096 };
+const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048, ladle: 4096, turret: 8192 };
 const SEND_EVERY = 1 / 30;
 const LOG_KEEP = 0.7;   // seconds an event stays in the rolling log
 const LOG_MAX = 90;
@@ -243,6 +243,7 @@ export class Net {
     if (t < p.juicedUntil) f |= FLAG.juiced;
     if (p.onGround) f |= FLAG.ground;
     if (p.ladleT > 0) f |= FLAG.ladle;
+    if (p.inTurret) f |= FLAG.turret;
     return [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.vel.x), r2(p.vel.y), r2(p.vel.z), r2(p.yaw), r2(pitch),
       Math.round(p.hp), Math.round(p.glaze), p.alive ? 1 : 0, p.selected()?.id || '', f, p.kills, r2(Math.min(99, t - p.noiseAt)), p.utensil || '', invCode(p), kitCode(p), p.team ?? -1, p.carry ?? -1];
   }
@@ -448,6 +449,7 @@ export class Net {
     const carry = num(s[19], -1, TEAMS.length - 1, -1) | 0;
     game.pots.setCarry(a, game.pots.active && a.alive && carry >= 0 ? carry : null);
     if (f & FLAG.ladle && !(a.ladleT > 0)) a.ladleT = 0.3;
+    a.netTurret = !!(f & FLAG.turret); // sitting in their pot's turret (it turns with them)
   }
 
   _event(pr, type, d, peer) {

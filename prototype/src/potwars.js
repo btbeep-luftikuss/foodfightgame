@@ -5,6 +5,9 @@
 //    meanwhile.
 //  - A pot spits out food every few seconds. You respawn next to your pot, as long as it stands.
 //  - Every Titan carries a ladle (G): a melee swing that only hurts pots, and the only thing that does.
+//  - (0.27) A carried pot goes back to its spot if its carrier goes down; while it's carried, its
+//    team's knocked-out Titans watch the carrier and come back only if the carrier falls.
+//  - (0.27) Turrets fire only when someone climbs in (T at your pot) and aims them.
 //  - Smash a pot and it goes on your back. Carry it home without getting splatted: your pot gets
 //    more health, spits food faster, and its turret gets stronger.
 //  - The turret on top of your pot fires your own food when you stand at the pot (only your team
@@ -101,7 +104,7 @@ export class PotWars {
     this.active = true; this.over = false;
     this.setupUntil = g.time + SETUP; this.setup = true;
     this.raidAllAt = g.time + SETUP + 70; // after a while every bot goes raiding
-    this.pots = TEAMS.slice(0, n).map((t, i) => ({ team: i, ...t, placed: false, alive: true, hp: POT_LIFE, maxHp: POT_LIFE, captures: 0, pos: new THREE.Vector3(), mesh: null, collider: null, spitAt: 0, flash: 0, firedAt: -9, label: null, out: false }));
+    this.pots = TEAMS.slice(0, n).map((t, i) => ({ team: i, ...t, placed: false, alive: true, carried: false, carrier: null, gunner: null, hp: POT_LIFE, maxHp: POT_LIFE, captures: 0, pos: new THREE.Vector3(), mesh: null, collider: null, spitAt: 0, flash: 0, firedAt: -9, label: null, out: false }));
     const seen = new Array(n).fill(0);
     for (const a of g.actors) {
       if (a.team == null) continue;
@@ -211,7 +214,8 @@ export class PotWars {
   _smash(p, a) {
     const g = this.game;
     if (!p.alive && !p.mesh?.parent) return;
-    p.alive = false; p.hp = 0;
+    p.alive = false; p.hp = 0; p.carried = !!a || (!this.auth && p.carried); p.carrier = a || null;
+    this._leaveTurret(p.gunner);
     if (p.mesh) g.scene.remove(p.mesh);
     if (p.collider) p.collider.enabled = false;
     if (p.label) p.label.style.display = 'none';
@@ -226,7 +230,7 @@ export class PotWars {
       g.hud.feed(`<b style="color:${a.color}">${esc(a.name)}</b> <em>smashed</em> <b style="color:${p.color}">${p.name}'s pot</b>`, mine);
       if (a === g.player) g.hud.banner('Pot smashed!', 'Carry it back to your pot', 2.6);
     }
-    if (p.team === g.player?.team && a !== g.player) g.hud.banner('Your pot is gone!', 'No more respawns: stay alive', 3);
+    if (p.team === g.player?.team && a !== g.player) g.hud.banner('Your pot was smashed!', 'Splat the carrier before they get it home, and it comes back', 3.2);
     this._checkWin();
   }
   // A smashed pot rides on a Titan's back (team) or not (null).
@@ -253,6 +257,7 @@ export class PotWars {
   }
   capture(mine, from, a) {
     const g = this.game;
+    from.carried = false; from.carrier = null; // gone for good: its team respawns no more
     mine.captures++; mine.maxHp += CAPTURE_HP; mine.hp = Math.min(mine.maxHp, mine.hp + CAPTURE_HP);
     g.sfx.play('pickup', mine.pos, 1.4);
     g.hud.feed(`<b style="color:${a.color}">${esc(a.name)}</b> brought <b style="color:${from.color}">${from.name}'s pot</b> home`, a.team === g.player?.team);
@@ -261,18 +266,17 @@ export class PotWars {
   // (host) Another player brought a pot home.
   remoteCapture(a, fromTeam) {
     const mine = this.pots[a.team], from = this.pots[fromTeam];
-    if (!mine || !from || !mine.alive || from.alive || a.capturedFrom === fromTeam + 100 * from.captures) return;
+    if (!mine || !from || !mine.alive || from.alive || !from.carried || a.capturedFrom === fromTeam + 100 * from.captures) return;
     if (Math.hypot(a.pos.x - mine.pos.x, a.pos.z - mine.pos.z) > POT_R + 8) return;
     a.capturedFrom = fromTeam + 100 * from.captures; // once per smashed pot
     this.capture(mine, from, a);
   }
 
-  // The turret: a teammate standing at their own pot fires from it, harder and faster.
+  // The turret: whoever sits in their own pot's turret fires from it, harder and faster.
   turretFor(owner) {
-    if (!this.active || this.setup || !owner || owner.team == null || owner.isRemote) return null;
-    const p = this.pots[owner.team];
+    if (!this.active || this.setup || !owner || owner.isRemote) return null;
+    const p = owner.inTurret;
     if (!p || !p.alive || !p.placed) return null;
-    if (Math.hypot(owner.pos.x - p.pos.x, owner.pos.z - p.pos.z) > POT_R + TURRET_REACH || Math.abs(owner.pos.y - p.pos.y) > 3) return null;
     const lv = 1 + p.captures;
     const yaw = Math.atan2(-owner.aimDir.x, -owner.aimDir.z);
     p.mesh.userData.turret.rotation.y = yaw;
@@ -281,13 +285,54 @@ export class PotWars {
     return { mult: 1.6 + 0.4 * (lv - 1), speed: 1.2 + 0.05 * (lv - 1), muzzle, level: lv };
   }
 
+  // (offline or host) The carrier went down (or left): the pot goes back to its spot, half full.
+  _restore(p) {
+    const g = this.game;
+    if (p.alive) return;
+    p.alive = true; p.carried = false; p.carrier = null;
+    if (this.auth) p.hp = Math.max(p.hp, p.maxHp * 0.5);
+    if (p.mesh) g.scene.add(p.mesh);
+    if (p.collider) p.collider.enabled = true;
+    if (p.label) p.label.style.display = '';
+    for (const a of g.actors) if (a.carry === p.team && !a.isRemote) this.setCarry(a, null);
+    g.fx.burst('steam', _v.set(p.pos.x, p.pos.y + POT_H, p.pos.z), 1.5);
+    g.sfx.play('pickup', p.pos, 1.2);
+    g.hud.feed(`<b style="color:${p.color}">${p.name}'s pot</b> is back at its spot`, p.team === g.player?.team);
+    if (p.team === g.player?.team) g.hud.banner('Your pot is back!', 'Its carrier went down', 2.6);
+  }
+
+  // T at your own pot: climb into its turret (and T again to climb out). One gunner per turret.
+  toggleTurret(a) {
+    const g = this.game;
+    if (!this.active || !a.alive || a.team == null) return;
+    if (a.inTurret) { this._leaveTurret(a); return; }
+    const p = this.pots[a.team];
+    if (this.setup || !p || !p.alive || !p.placed) { if (a === g.player) g.hud.toast(this.setup ? 'The turrets open when the pots are down' : 'Your pot is gone: no turret'); return; }
+    if (Math.hypot(a.pos.x - p.pos.x, a.pos.z - p.pos.z) > POT_R + TURRET_REACH || Math.abs(a.pos.y - p.pos.y) > 3) { if (a === g.player) g.hud.toast('Go to your pot to get in its turret'); return; }
+    if (p.gunner && p.gunner !== a && p.gunner.alive && p.gunner.inTurret === p) { if (a === g.player) g.hud.toast(`${p.gunner.name} is in the turret`); return; }
+    p.gunner = a; a.inTurret = p;
+    a.pos.set(p.pos.x, p.pos.y + POT_H, p.pos.z); a.vel.set(0, 0, 0);
+    if (a === g.player) g.hud.banner('In the turret', `Aim and throw: ${(1.6 + 0.4 * p.captures).toFixed(1)}× damage · T to climb out`, 2.6);
+  }
+  _leaveTurret(a) {
+    if (!a || !a.inTurret) return;
+    const p = a.inTurret;
+    if (p.gunner === a) p.gunner = null;
+    a.inTurret = null;
+    if (a.alive && p.placed) { a.pos.set(p.pos.x + POT_R + 1.2, p.pos.y, p.pos.z); a.pos.y = groundHeight(a.pos.x, a.pos.z, a.pos.y + 1); }
+  }
+
   // ---------------------------------------------------------------- deaths and respawns
   // Returns true if this Titan will respawn at their pot.
+  // 'back': respawns at the pot; 'wait': the pot is being carried (back only if its carrier falls); false: out.
   onDeath(a) {
     this._dropCarry(a);
+    this._leaveTurret(a);
     const p = this.pots[a.team];
-    if (p && (p.alive || this.setup)) { a.respawnAt = this.game.time + RESPAWN; return true; }
+    a.waiting = false;
+    if (p && (p.alive || this.setup)) { a.respawnAt = this.game.time + RESPAWN; return 'back'; }
     a.respawnAt = 0;
+    if (p && p.carried) { a.waiting = true; return 'wait'; }
     return false;
   }
   _respawn(a) {
@@ -309,7 +354,7 @@ export class PotWars {
     if (a === g.player) { g.input.yaw = a.yaw; g.camPivotY = a.pos.y; g.hud.banner('Back in!', 'Respawned at your pot', 1.6); }
   }
 
-  teamAlive(t) { return !!this.pots[t] && (this.pots[t].alive || this.game.actors.some((a) => a.team === t && a.alive)); }
+  teamAlive(t) { const p = this.pots[t]; return !!p && (p.alive || p.carried || this.game.actors.some((a) => a.team === t && a.alive)); }
 
   _checkWin() {
     const g = this.game;
@@ -328,9 +373,9 @@ export class PotWars {
   }
 
   // ---------------------------------------------------------------- online: the host shares the pots
-  // [seconds of setup left, then per pot: placed, alive, hp, max hp, pots carried home, x, y, z]
+  // [seconds of setup left, then per pot: placed, alive (1; 2: carried off; 0: gone), hp, max hp, pots carried home, x, y, z]
   state() {
-    return [Math.max(0, Math.round(this.setupLeft() * 10) / 10), ...this.pots.map((p) => [p.placed ? 1 : 0, p.alive ? 1 : 0, Math.round(p.hp), Math.round(p.maxHp), p.captures, r1(p.pos.x), r1(p.pos.y), r1(p.pos.z)])];
+    return [Math.max(0, Math.round(this.setupLeft() * 10) / 10), ...this.pots.map((p) => [p.placed ? 1 : 0, p.alive ? 1 : p.carried ? 2 : 0, Math.round(p.hp), Math.round(p.maxHp), p.captures, r1(p.pos.x), r1(p.pos.y), r1(p.pos.z), p.gunner?.alive ? 1 : 0])];
   }
   applyState(st, num) {
     if (!this.active || !Array.isArray(st)) return;
@@ -342,7 +387,9 @@ export class PotWars {
       if (!Array.isArray(e)) return;
       if (e[0] === 1 && !p.placed) this._place(i, new THREE.Vector3(num(e[5], -300, 300), num(e[6], -40, 120), num(e[7], -300, 300)));
       p.hp = num(e[2], 0, 5000); p.maxHp = num(e[3], 1, 5000, POT_LIFE); p.captures = num(e[4], 0, 20) | 0;
-      if (e[1] === 0 && p.alive && p.placed) this._smash(p, null);
+      if (e[1] !== 1 && p.alive && p.placed) this._smash(p, null);
+      p.carried = e[1] === 2;
+      if (e[1] === 1 && !p.alive && p.placed) this._restore(p);
     });
   }
   // The host says who smashed a pot: if it was me, it goes on my back.
@@ -360,6 +407,11 @@ export class PotWars {
     if (!this.active || this.setup || a.team == null) return null;
     const mine = this.pots[a.team];
     if (a.carry != null) return mine.alive ? { pos: mine.pos, kind: 'home' } : null;
+    if (mine.carried) { // our pot is on someone's back: get it back
+      const c = this.game.actors.find((x) => x.alive && x.carry === a.team);
+      if (c) return { pos: c.pos, kind: 'hunt' };
+    }
+    if (a.inTurret) return null;
     if (target && targetD < 16) return null;
     const raid = a.potRole === 'raid' || !mine.alive || this.game.time > this.raidAllAt;
     if (raid) {
@@ -392,7 +444,7 @@ export class PotWars {
       }
     }
     if (this.setup !== this.wasSetup && !this.setup && this.wasSetup !== undefined) {
-      g.hud.banner('Pots are down!', 'Smash their pots with your ladle (G) · stand at yours to use its turret', 3.2);
+      g.hud.banner('Pots are down!', 'Smash their pots with your ladle (G) · press T at yours to get in its turret', 3.2);
       g.sfx.play('tide', null, 0.6);
     }
     this.wasSetup = this.setup;
@@ -408,15 +460,40 @@ export class PotWars {
       p.flash = Math.max(0, p.flash - dt * 5);
       p.mesh.userData.body.material.emissive?.setRGB(p.flash * 0.6, p.flash * 0.2, 0);
     }
+    if (this.auth) for (const p of this.pots) {
+      if (p.carried && (!p.carrier || !p.carrier.alive || !g.actors.includes(p.carrier))) this._restore(p); // its carrier fell
+    }
+    const P = g.player, sp = g.spectator;
+    if (P && !P.alive && P.waiting) { // my pot is on someone's back: watch them
+      const c = g.actors.find((x) => x.alive && x.carry === P.team);
+      if (c && sp.active && sp.target !== c) { sp.follow(c); g.hud.toast(`Watching ${c.name}: if they go down, you're back`); }
+    }
     for (const a of g.actors) {
       if (a.isRemote || a.team == null) continue; // other players look after their own Titans
+      const mine = this.pots[a.team];
+      if (!a.alive && a.waiting) { // carried off: back if it comes home, out if it's carried into their pot
+        if (mine.alive) { a.waiting = false; a.respawnAt = now + 1.5; }
+        else if (!mine.carried) {
+          a.waiting = false;
+          if (a === P && !g.online) g.onMatchEvent?.('playerDown', { killer: a.koBy, placement: a.placement, note: 'Your pot was carried off, so no more respawns.' });
+          else if (a === P) g.hud.banner('Out!', 'Your pot was carried off', 2.6);
+        }
+      }
+      if (a.inTurret) { // sitting in the turret: stays put on the lid
+        const p = a.inTurret;
+        if (!a.alive || !p.alive) this._leaveTurret(a);
+        else { a.pos.x = p.pos.x; a.pos.z = p.pos.z; a.vel.x = a.vel.z = 0; }
+      } else if (a.isBot && a.alive && a.potRole === 'guard' && mine.alive && mine.placed && !mine.gunner?.inTurret && Math.hypot(a.pos.x - mine.pos.x, a.pos.z - mine.pos.z) < POT_R + 3) {
+        this.toggleTurret(a); // a guarding bot mans the turret
+      }
       // a pot carried home
       if (a.alive && a.carry != null) {
         const mine = this.pots[a.team];
         if (mine.alive && Math.hypot(a.pos.x - mine.pos.x, a.pos.z - mine.pos.z) < POT_R + 3 && Math.abs(a.pos.y - mine.pos.y) < 3) this._deliver(a);
       }
       if (!a.alive && a.respawnAt && now >= a.respawnAt && !this.over && g.state !== 'over') {
-        if (this.pots[a.team].alive) this._respawn(a); else a.respawnAt = 0;
+        if (mine.alive) this._respawn(a);
+        else { a.respawnAt = 0; a.waiting = mine.carried; }
       }
     }
     this._checkWin();
@@ -428,7 +505,9 @@ export class PotWars {
     const g = this.game;
     for (const p of this.pots) {
       if (!p.alive || !p.placed) continue;
-      if (g.time - p.firedAt > 1.5) p.mesh.userData.turret.rotation.y += dt * 0.4; // idling turret looks around
+      const gun = p.gunner?.inTurret === p ? p.gunner : g.actors.find((a) => a.isRemote && a.alive && a.netTurret && a.team === p.team);
+      if (gun) p.mesh.userData.turret.rotation.y = gun.isRemote ? gun.yaw : Math.atan2(-gun.aimDir.x, -gun.aimDir.z); // aimed by whoever sits in it
+      else if (g.time - p.firedAt > 1.5) p.mesh.userData.turret.rotation.y += dt * 0.4; // empty: it idles
       _v.set(p.pos.x, p.pos.y + POT_H + 1.6, p.pos.z);
       const s = camera.position.distanceTo(_v) < 120 ? hud._project(_v, camera) : null;
       if (!s) { p.label.style.display = 'none'; continue; }

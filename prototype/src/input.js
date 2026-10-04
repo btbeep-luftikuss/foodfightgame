@@ -11,7 +11,7 @@ export class Input {
     this.yaw = 0; this.pitch = -0.12;
     this.sens = 0.0024;
     this.lmb = false; this.rmbPressed = false;
-    this.pressed = { jump: false, dodge: false, alt: false, sniff: false, view: false, ladle: false };
+    this.pressed = { jump: false, dodge: false, alt: false, sniff: false, view: false, ladle: false, turret: false };
     this.slot = -1; this.cycle = 0; this.uslot = -1; this.ucycle = 0;
     this.locked = false;
     this.lockFails = 0; // failed lock attempts since the mouse was last locked
@@ -35,6 +35,7 @@ export class Input {
       if (/^Digit[6-8]$/.test(e.code)) this.uslot = Number(e.code.slice(5)) - 6;
       if (e.code === 'KeyR') this.ucycle = 1;
       if (e.code === 'KeyG') this.pressed.ladle = true;
+      if (e.code === 'KeyT') this.pressed.turret = true;
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => { this.keys.clear(); this.lmb = false; });
@@ -165,9 +166,9 @@ export class Input {
     const it = {
       moveX: mx, moveZ: mz, sprint,
       jump: this.pressed.jump, dodge: this.pressed.dodge, alt: this.pressed.alt, sniff: this.pressed.sniff, view: this.pressed.view,
-      primary: this.lmb || this.touch.fire, ladle: this.pressed.ladle, slot: this.slot, cycle: this.cycle, uslot: this.uslot, ucycle: this.ucycle,
+      primary: this.lmb || this.touch.fire, ladle: this.pressed.ladle, turret: this.pressed.turret, slot: this.slot, cycle: this.cycle, uslot: this.uslot, ucycle: this.ucycle,
     };
-    this.pressed.jump = this.pressed.dodge = this.pressed.alt = this.pressed.sniff = this.pressed.view = this.pressed.ladle = false;
+    this.pressed.jump = this.pressed.dodge = this.pressed.alt = this.pressed.sniff = this.pressed.view = this.pressed.ladle = this.pressed.turret = false;
     this.slot = -1; this.cycle = 0; this.uslot = -1; this.ucycle = 0;
     return it;
   }

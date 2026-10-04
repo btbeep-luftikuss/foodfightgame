@@ -301,6 +301,8 @@ button { font: inherit; color: inherit; }
 .php i { display: block; height: 100%; background: var(--c); }
 .plate.potplate .name { color: var(--c); font-size: 13px; }
 .plate.potplate .mini { width: 70px; height: 7px; }
+.tbtn.turretb { width: 50px; height: 50px; right: calc(170px + var(--sr)); bottom: calc(262px + var(--sb)); background: #9fd3f2; font-size: 10px; }
+@media (pointer: coarse) and (max-width: 560px) { .tbtn.turretb { width: 46px; height: 46px; right: calc(160px + var(--sr)); bottom: calc(318px + var(--sb)); } }
 .tbtn.ladle { width: 54px; height: 54px; right: calc(170px + var(--sr)); bottom: calc(196px + var(--sb)); background: #f3c89a; font-size: 10px; }
 @media (pointer: coarse) and (max-width: 560px) { .tbtn.ladle { width: 48px; height: 48px; right: calc(160px + var(--sr)); bottom: calc(262px + var(--sb)); } .pots ul { gap: 6px; } .pots li { font-size: 11px; } .php { width: 30px; } }
 /* the loadout card: what you bring into an online round */
@@ -559,13 +561,14 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
   <button data-touch-btn id="tAlt" class="tbtn alt" type="button">Alt</button>
   <button data-touch-btn id="tSniff" class="tbtn sniffb" type="button">Sniff</button>
   <button data-touch-btn id="tLadle" class="tbtn ladle" type="button" hidden>Ladle</button>
+  <button data-touch-btn id="tTurret" class="tbtn turretb" type="button" hidden>Turret</button>
 </div>
 
 <section id="menu" class="menu" aria-label="Main menu">
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.26 · Teams, online Pot Wars</p>
+      <p class="eyebrow">Prototype 0.27 · Pot Wars: carriers and turrets</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in, or smash the other teams' pots in Cooking Pot Wars.</p>
       <nav class="homenav" aria-label="Main menu">
@@ -684,6 +687,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
         <dt><kbd>B</kbd></dt><dd>Sniff: point at Titans making noise (10 s cooldown)</dd>
         <dt><kbd>V</kbd></dt><dd>Switch first / third person</dd>
         <dt><kbd>G</kbd></dt><dd>Cooking Pot Wars: set your team's pot down (first 30 s), then swing your ladle at enemy pots</dd>
+        <dt><kbd>T</kbd></dt><dd>Cooking Pot Wars: climb into (or out of) your pot's turret, then aim and throw from it</dd>
         <dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd>Pause</dd>
       </dl>
       <dl class="keys touch-only">
@@ -702,7 +706,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <p class="foot">Hazards: the three burners cycle on (don't stand on them), the sink and spilled water make you Wet (cleanses sticky and fire, but freezes last longer), honey pools refill your Glaze shield, and the red spatula pads on the floor fling you up onto the counters and the table. Smash the giant tomato for extra ammo. The floor is scattered with giant fallen food and knocked-over chairs to hide behind and climb, a pickle jar you can walk into, and a cracked egg whose white is slippery.</p>
       
       <h3 class="sub">Teams and modes</h3>
-      <p class="foot">Every mode plays Solo (every Titan for themselves) or in Duos, Trios or Squads: 6 teams of 2, 4 of 3 or 3 of 4, 12 Titans in all. Teammates can't hurt each other and start together; the last team with anyone standing wins. In Cooking Pot Wars each team sets its pot down in the first 30 s (press G), respawns beside it while it stands, smashes the others' pots with the ladle (G) and carries them home for a stronger pot and turret.</p>
+      <p class="foot">Every mode plays Solo (every Titan for themselves) or in Duos, Trios or Squads: 6 teams of 2, 4 of 3 or 3 of 4, 12 Titans in all. Teammates can't hurt each other and start together; the last team with anyone standing wins. In Cooking Pot Wars each team sets its pot down in the first 30 s (press G) and respawns beside it while it stands. Smash the others' pots with the ladle (G) and carry them home for a stronger pot; if the carrier is splatted, the pot goes back to its spot. While your pot is being carried you watch its carrier: back in if they fall, out if they get it home. Press T at your pot to climb into its turret and fire your food from it.</p>
     </div>
   </div>
   <p class="live">Bots are fighting live behind this menu</p>

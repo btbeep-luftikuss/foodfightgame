@@ -179,7 +179,7 @@ function boot() {
     menu.hidden = true; end.hidden = true; pause.hidden = true;
     hud.show(true);
     touch.hidden = !input.isTouch;
-    $('tLadle').hidden = game.mode !== 'pots';
+    $('tLadle').hidden = $('tTurret').hidden = game.mode !== 'pots';
     if (lock && !input.isTouch) input.requestLock(true);
   }
   let matchOpts = {}; // what "Play again" repeats
@@ -651,6 +651,7 @@ function boot() {
   hold('tAlt', () => { input.pressed.alt = true; });
   hold('tSniff', () => { input.pressed.sniff = true; });
   hold('tLadle', () => { input.pressed.ladle = true; });
+  hold('tTurret', () => { input.pressed.turret = true; });
   const stick = $('stick');
   input.onStick = (phase, x, y) => {
     if (phase === 'start') { stick.style.left = `${x}px`; stick.style.top = `${y}px`; stick.classList.add('on'); stick.firstElementChild.style.transform = ''; }

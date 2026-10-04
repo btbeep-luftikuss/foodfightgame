@@ -63,6 +63,13 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.27: Cooking Pot Wars, carriers and manned turrets** (`src/potwars.js`)
+
+- **A carried pot goes home if its carrier falls.** A smashed pot rides on its smasher's back; if they're splatted (or leave), it's back at its spot with half its health and its team respawns again.
+- **Watching the carrier.** While your team's pot is being carried, your team's knocked-out Titans don't respawn. They watch the carrier (the spectator camera follows them) and come back if the carrier falls; if the carrier gets it home, they're out. A team isn't out while its pot is being carried. Bots go after whoever carries their pot.
+- **Turrets need a gunner.** Press **T** at your own pot (phones: the Turret button) to climb in. You sit on the lid, the barrel turns with your aim, and your throws come out of it with the turret's power. Press **T** again to climb out. One gunner per turret; a smashed pot throws its gunner out. Guarding bots man their team's turret.
+- **Online:** the host's pot state now says whether a pot stands, is carried off, or is gone. The host puts a pot back when its carrier is down. Every Titan's state says whether it sits in a turret, so the barrel turns for everyone.
+
 **Version 0.26: teams in every mode, Cooking Pot Wars online, a menu in screens** (`src/teams.js`, `src/potwars.js`, `src/game.js`, `src/net.js`, `src/main.js`, `index.html`)
 
 - **Teams everywhere.** Classic, Chef's Choice and Cooking Pot Wars all play Solo (Pot Wars excepted), Duos (6 teams of 2), Trios (4 of 3) or Squads (3 of 4), with 12 Titans in all.

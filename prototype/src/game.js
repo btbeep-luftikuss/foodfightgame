@@ -690,18 +690,19 @@ export class Game {
       if (victim === this.player) {
         this.net.event('d', killer ? this.net._peerOf(killer) : '', food || '');
         this.spectator.focusNext = killer && killer.alive ? killer : null;
-        this.hud.banner('Splatted!', back ? 'Back at your pot in 5 s' : `${killer ? `by ${esc(killer.name)} · ` : ''}you're back next round`, 2.8);
+        this.hud.banner('Splatted!', back === 'back' ? 'Back at your pot in 5 s' : back === 'wait' ? 'Your pot is being carried: you\'re back if its carrier goes down' : `${killer ? `by ${esc(killer.name)} · ` : ''}you're back next round`, 2.8);
       } else if (victim.isBot && this.net.isHost) {
         this.net.event('bd', victim.id, killer ? this.net._peerOf(killer) : '', food || '');
       }
-      if (killer === this.player && victim !== this.player) this.hud.banner('Splat!', `${esc(victim.name)} ${back ? 'is back at their pot soon' : 'is out'}`, 1.6);
+      if (killer === this.player && victim !== this.player) this.hud.banner('Splat!', `${esc(victim.name)} ${back === 'back' ? 'is back at their pot soon' : 'is out'}`, 1.6);
       return;
     }
     if (this.pots.active) {
-      if (killer === this.player) this.hud.banner('Splat!', `${esc(victim.name)} ${back ? 'is back at their pot soon' : 'is out'}`, 1.6);
+      if (killer === this.player) this.hud.banner('Splat!', `${esc(victim.name)} ${back === 'back' ? 'is back at their pot soon' : 'is out'}`, 1.6);
       if (victim === this.player) {
         this.spectator.focusNext = killer && killer.alive ? killer : null;
-        if (back) this.hud.banner('Splatted!', 'Back at your pot in 5 s', 2.4);
+        if (back === 'back') this.hud.banner('Splatted!', 'Back at your pot in 5 s', 2.4);
+        else if (back === 'wait') this.hud.banner('Splatted!', 'Your pot is being carried: you\'re back if its carrier goes down', 3);
         else this.onMatchEvent?.('playerDown', { killer, placement: victim.placement, food, note: 'Your pot is gone, so no more respawns.' });
       }
       this.pots._checkWin();
@@ -787,7 +788,7 @@ export class Game {
       const intent = this.input.enabled ? this.input.intent() : null;
       for (let s = 0; s < steps; s++) {
         // edge-triggered presses only count once per frame
-        if (s === 1 && intent) Object.assign(intent, { jump: false, dodge: false, alt: false, sniff: false, view: false, ladle: false, slot: -1, cycle: 0, uslot: -1, ucycle: 0 });
+        if (s === 1 && intent) Object.assign(intent, { jump: false, dodge: false, alt: false, sniff: false, view: false, ladle: false, turret: false, slot: -1, cycle: 0, uslot: -1, ucycle: 0 });
         this._step(dt, intent);
       }
     }
