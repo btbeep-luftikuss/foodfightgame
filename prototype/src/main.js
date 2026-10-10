@@ -6,7 +6,8 @@ import { HUD } from './hud.js';
 import { Input } from './input.js';
 import { Sfx } from './fx.js';
 import { FOODS, FOOD_IDS, makeFoodMesh, setFoodShadows } from './foods.js';
-import { SKINS, SKIN_BY_ID, RARITY } from './skins.js';
+import { SKINS, SKIN_BY_ID, RARITY, PACKS } from './skins.js';
+import { Wallet, priceOf, packSkins, packPrice, packFullPrice, matchReward } from './coins.js';
 import { titanPreview } from './actors.js';
 import { TITANS } from './game.js';
 import { BOT_LEVELS } from './bots.js';
@@ -287,11 +288,12 @@ function boot() {
     game.setMap(mapId); // an online room may have played the other map
     game.newMatch(false);
   }
+  let tryId = null; // the Locker: a skin being tried on (not owned)
   // Menu screens: home, Play vs bots, Play online, Locker, Settings, How to play.
   const panel = document.querySelector('.menu-panel');
   function showScreen(name) {
     for (const el of document.querySelectorAll('.screen')) el.hidden = el.dataset.screen !== name;
-    if (name === 'locker') openStage(); else closeStage();
+    if (name === 'locker') openStage(); else { closeStage(); if (tryId) { tryId = null; renderLocker(); } }
     if (name === 'play') placeSettings(false);
     if (name === 'online') placeSettings(true);
     panel.scrollTop = 0;
@@ -316,25 +318,72 @@ function boot() {
   $('again').addEventListener('click', () => start());
 
   // Locker: pick a skin. Remembered on this device and shown to everyone online.
+  // 0.30: coins and skin packs. Pack skins are bought with coins (one by one, or the rest of the pack
+  // for less); tapping one you don't own tries it on the stage.
+  const wallet = new Wallet();
+  game.wallet = wallet;
   let skinId = 'chef';
   try { skinId = SKIN_BY_ID[localStorage.getItem('tt-skin')] ? localStorage.getItem('tt-skin') : 'chef'; } catch { /* storage blocked */ }
+  if (!wallet.owns(skinId)) skinId = 'chef';
   game.playerSkin = skinId;
-  const lockerGrid = $('locker-grid');
-  lockerGrid.innerHTML = SKINS.map((s) => `<button type="button" data-id="${s.id}" aria-pressed="false" style="--rar:${RARITY[s.rarity].color}" title="${s.desc}"><img src="${icons['skin:' + s.id] || ''}" alt=""><b>${s.name}</b><small>${RARITY[s.rarity].name}</small></button>`).join('');
+  const fmt = (n) => Math.round(n).toLocaleString('en-US');
+  const coins = (n) => `<i class="coin" aria-hidden="true"></i>${fmt(n)}`;
+  const lockerGrid = $('locker-grid'), packsEl = $('locker-packs'), buyEl = $('locker-buy');
+  const card = (s) => {
+    const own = wallet.owns(s.id);
+    return `<button type="button" data-id="${s.id}" aria-pressed="false" class="${own ? '' : 'locked'}" style="--rar:${RARITY[s.rarity].color}" title="${s.desc}"><img src="${icons['skin:' + s.id] || ''}" alt=""><b>${s.name}</b><small>${own ? RARITY[s.rarity].name : coins(priceOf(s.id))}</small></button>`;
+  };
   function renderLocker() {
-    for (const b of lockerGrid.children) b.setAttribute('aria-pressed', b.dataset.id === skinId ? 'true' : 'false');
-    const s = SKIN_BY_ID[skinId];
-    $('locker-now').innerHTML = `Wearing <b style="color:${RARITY[s.rarity].color}">${s.name}</b>: ${s.desc}`;
-    $('locker-open').querySelector('span').textContent = `Wearing ${s.name} · pick your skin`;
+    lockerGrid.innerHTML = SKINS.filter((s) => wallet.owns(s.id)).map(card).join('');
+    packsEl.innerHTML = PACKS.map((P) => {
+      const left = packSkins(P.id).filter((s) => !wallet.owns(s.id));
+      if (!left.length) return '';
+      const cost = packPrice(P.id, wallet.owned), full = left.reduce((t, s) => t + priceOf(s.id), 0);
+      const all = left.length === packSkins(P.id).length;
+      return `<section class="pack" data-pack="${P.id}"><div class="pack-head"><h3>${P.name}</h3><span class="coinpill">${left.length} skin${left.length > 1 ? 's' : ''}${all ? '' : ' left'}</span>`
+        + `<button type="button" class="btn" data-buypack="${P.id}" ${wallet.coins < cost ? 'disabled' : ''}>${all ? 'Buy the pack' : 'Buy the rest'} · ${coins(cost)}</button>`
+        + `<p>${P.desc} <b>${all ? `Save ${fmt(full - cost)}` : `Save ${fmt(full - cost)} on the rest`}</b> (<s>${fmt(full)}</s>)${wallet.coins < cost ? ` · ${fmt(cost - wallet.coins)} more coins to go` : ''}</p></div>`
+        + `<div class="locker-grid" role="group" aria-label="${P.name}">${left.map(card).join('')}</div></section>`;
+    }).join('');
+    const shown = tryId || skinId;
+    for (const b of document.querySelectorAll('#locker [data-id]')) b.setAttribute('aria-pressed', b.dataset.id === shown ? 'true' : 'false');
+    const s = SKIN_BY_ID[shown];
+    $('locker-now').innerHTML = `${tryId ? 'Trying on' : 'Wearing'} <b style="color:${RARITY[s.rarity].color}">${s.name}</b>: ${s.desc}`;
+    if (tryId) {
+      const cost = priceOf(tryId), short = cost - wallet.coins;
+      buyEl.hidden = false;
+      buyEl.innerHTML = `<p>${short > 0 ? `You need <b>${fmt(short)}</b> more coins for ${s.name}. Play a few matches to earn them.` : `Make ${s.name} yours?`}</p>`
+        + `<button type="button" class="btn" data-buy="${tryId}" ${short > 0 ? 'disabled' : ''}>Buy · ${coins(cost)}</button><button type="button" class="btn ghost" data-untry>Back to ${SKIN_BY_ID[skinId].name}</button>`;
+    } else { buyEl.hidden = true; buyEl.innerHTML = ''; }
+    $('locker-coins').innerHTML = coins(wallet.coins);
+    $('home-coins').innerHTML = coins(wallet.coins);
+    $('locker-open').querySelector('span').textContent = `Wearing ${SKIN_BY_ID[skinId].name} · skins and the Snack Pack`;
   }
-  lockerGrid.addEventListener('click', (e) => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    skinId = b.dataset.id; game.playerSkin = skinId;
-    try { localStorage.setItem('tt-skin', skinId); } catch { /* storage blocked */ }
+  const wear = (id) => {
+    skinId = id; tryId = null; game.playerSkin = id;
+    try { localStorage.setItem('tt-skin', id); } catch { /* storage blocked */ }
+  };
+  $('locker').addEventListener('click', (e) => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.dataset.buypack) {
+      if (!wallet.buyPack(t.dataset.buypack)) return;
+      sfx.play('win');
+      wear(tryId && wallet.owns(tryId) ? tryId : packSkins(t.dataset.buypack)[0].id);
+    } else if (t.dataset.buy) {
+      if (!wallet.buySkin(t.dataset.buy)) return;
+      sfx.play('win');
+      wear(t.dataset.buy);
+    } else if (t.hasAttribute('data-untry')) {
+      tryId = null;
+    } else if (t.dataset.id) {
+      if (wallet.owns(t.dataset.id)) wear(t.dataset.id); else tryId = t.dataset.id;
+      panel.scrollTo({ top: 0, behavior: 'smooth' }); // the stage, on phones scrolled away
+    } else return;
     renderLocker();
-    showOnStage(skinId);
+    showOnStage(tryId || skinId);
   });
+  wallet.onChange = () => renderLocker();
   renderLocker();
 
   // Locker stage: the selected skin on a live turntable (idles, blinks, waves when picked; drag to spin).
@@ -604,7 +653,25 @@ function boot() {
     if (e.code === 'KeyP' && playing && !input.isTouch && !game.online) { game.paused = !game.paused; pause.hidden = !game.paused; }
   });
 
+  // Coins: paid once per match (vs bots) or per round played (online), when you're out or it ends.
+  const pay = { due: false, kills: 0 };
+  const payOut = (placement, won) => {
+    if (!pay.due || !game.player) return null;
+    pay.due = false;
+    const r = matchReward({ kills: Math.max(0, game.player.kills - pay.kills), placement, titans: TITANS, won });
+    wallet.earn(r.total);
+    $('end-coins').textContent = `+${fmt(r.total)}`;
+    $('end-receipt').innerHTML = `${r.lines.map(([k, n]) => `${k} <b>+${n}</b>`).join(' · ')} · you have ${coins(wallet.coins)}`;
+    return r;
+  };
   game.onMatchEvent = (type, data) => {
+    if (type === 'start') { pay.due = !game.online; pay.kills = game.player?.kills || 0; $('end-coins').textContent = '+0'; $('end-receipt').textContent = ''; }
+    if (type === 'joined') { pay.due = true; pay.kills = game.player?.kills || 0; }
+    if (type === 'roundOver') { // online: the round ended; coins for it if I played
+      const r = playing ? payOut(data.placement, data.won) : null;
+      if (r) setTimeout(() => { if (playing) game.hud.banner(`+${r.total} coins`, r.lines.map(([k, n]) => `${k} +${n}`).join(' · '), 3.2); }, 2600); // after "Round over"
+      return;
+    }
     if (type === 'joined') { loadout.hidden = true; return; } // online: dropped into a round
     if (!playing || !game.player) {
       if (type === 'over') setTimeout(() => { if (!playing) game.newMatch(false); }, 5000);
@@ -616,6 +683,7 @@ function boot() {
       $('end-sub').textContent = data.note ? `${k}. ${data.note}` : `${k}. You placed #${data.placement} of ${TITANS}.`;
       $('end-kills').textContent = game.player.kills;
       $('end-place').textContent = `#${data.placement}`;
+      payOut(data.placement, false);
       $('spectate').hidden = false;
       setTimeout(() => { end.hidden = false; touch.hidden = true; input.exitLock(); }, 1400);
     }
@@ -626,6 +694,7 @@ function boot() {
         : won ? 'Last Bite Standing. The whole kitchen is yours.' : `${data.winner ? data.winner.name : 'Nobody'} took the Last Bite.`;
       $('end-kills').textContent = game.player.kills;
       $('end-place').textContent = `#${game.player.placement || 1}`;
+      payOut(won ? 1 : game.player.placement || 2, !!won);
       $('spectate').hidden = true;
       setTimeout(() => { end.hidden = false; touch.hidden = true; input.exitLock(); }, won ? 2600 : 1600);
     }

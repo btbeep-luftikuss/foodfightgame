@@ -229,8 +229,126 @@ export const SKINS = [
       ['speaker', cyl(0.045, 0.045, 0.01, M(-0.075, 1.25, -0.195, HALF)), 'chest'],
     ],
   },
+  // ---- The Snack Pack (0.30): six skins bought with coins (see coins.js), one at a time or all at once.
+  {
+    id: 'burger', name: 'Burger Boss', rarity: 'rare', pack: 'snack', hideHair: true, desc: 'A double-stacked burger hat with lettuce, cheese and sesame seeds.',
+    color: '#d8342c', belly: '#5a3a26', sleeves: 'short', accent: '#ffd447', collar: '#ffd447', belt: '#3a2a1e', buckle: '#ffd447', shoes: '#ffd447', soles: '#5a3a26', laces: '#d8342c',
+    mats: { bun: ['#e0953f', { roughness: 0.6 }], patty: ['#5a3320', { roughness: 0.85 }], cheese: ['#ffcf2e'], lettuce: ['#6cc24a'], seed: ['#fff3d6'] },
+    parts: () => {
+      const p = [
+        ['bun', cyl(0.168, 0.158, 0.05, hm(0, 0.148, -0.004), 28), 'head'],
+        ['lettuce', torus(0.162, 0.016, hm(0, 0.178, -0.004, HALF, 0, 0)), 'head'],
+        ['patty', cyl(0.172, 0.172, 0.045, hm(0, 0.198, -0.004), 28), 'head'],
+        ['cheese', box(0.29, 0.012, 0.29, hm(0, 0.226, -0.004, 0, 0.78, 0)), 'head'],
+        ['bun', sph(0.172, hm(0, 0.232, -0.004, 0, 0, 0, 1, 0.62, 1), Math.PI / 2), 'head'],
+      ];
+      for (let i = 0; i < 7; i++) { const a = i * 2.4, r = 0.05 + (i % 3) * 0.03; p.push(['seed', sph(0.011, hm(Math.cos(a) * r, 0.33 - r * 0.5, Math.sin(a) * r - 0.004, 0, a, 0, 1.6, 0.6, 1)), 'head']); }
+      return p;
+    },
+  },
+  {
+    id: 'donut', name: 'Donut Dynamo', rarity: 'rare', pack: 'snack', hair: 'curly', desc: 'A giant frosted donut float ring and a sprinkle headband.',
+    color: '#ff8fc0', belly: '#7a4bb0', sleeves: 'short', accent: '#fff3d6', collar: '#fff3d6', shoes: '#fff3d6', soles: '#ff8fc0', laces: '#7a4bb0',
+    mats: { dough: ['#d99a52', { roughness: 0.75 }], frost: ['#ff6fae', { roughness: 0.3 }], s1: ['#4fd1ff'], s2: ['#ffe14f'], s3: ['#7cf06a'] },
+    parts: () => {
+      const p = [
+        ['dough', torus(0.235, 0.085, M(0, 1.0, 0, HALF, 0, 0)), 'hips'],
+        ['frost', torus(0.235, 0.074, M(0, 1.05, 0, HALF, 0, 0, 1, 1, 0.7)), 'hips'],
+        ['frost', torus(0.15, 0.016, hm(0, 0.075, -0.004, HALF, 0, 0, 1, 1.12, 1)), 'head'],
+      ];
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2, R = 0.235 + ((i % 2) ? 0.03 : -0.03);
+        p.push([`s${1 + (i % 3)}`, box(0.03, 0.01, 0.01, M(Math.cos(a) * R, 1.103, Math.sin(a) * R, 0, a * 1.7, 0)), 'hips']);
+      }
+      for (let i = 0; i < 6; i++) { const a = -0.9 + i * 0.36; p.push([`s${1 + (i % 3)}`, box(0.022, 0.008, 0.008, hm(Math.sin(a) * 0.162, 0.09, Math.cos(a) * 0.17, 0, a, 0.5)), 'head']); }
+      return p;
+    },
+  },
+  {
+    id: 'icecream', name: 'Ice Cream Ace', rarity: 'epic', pack: 'snack', hideHair: true, desc: 'Three scoops and a cherry on top, with a waffle-cone jetpack.',
+    color: '#fff3d6', belly: '#c98a4b', sleeves: 'long', gloves: '#ff9fc4', accent: '#ff9fc4', collar: '#ff9fc4', boots: '#7a4a2a', belt: '#7a4a2a', buckle: '#ff9fc4',
+    mats: { straw: ['#ff9fc4', { roughness: 0.55 }], mint: ['#8ff0c8', { roughness: 0.55 }], choc: ['#6b3e22', { roughness: 0.55 }], cherry: ['#e0102a', { roughness: 0.2 }], waffle: ['#d9a05b', { roughness: 0.8 }], drip: ['#fff7ec', { roughness: 0.35 }] },
+    parts: () => [
+      ['straw', sph(0.178, hm(0, 0.085, -0.004, 0, 0, 0, 1, 0.92, 1), Math.PI * 0.62), 'head'],
+      ['mint', sph(0.13, hm(0.01, 0.235, -0.01)), 'head'],
+      ['choc', sph(0.1, hm(-0.005, 0.35, -0.005)), 'head'],
+      ['drip', sph(0.06, hm(0, 0.435, 0, 0, 0, 0, 1.3, 0.5, 1.3)), 'head'],
+      ['cherry', sph(0.035, hm(0.012, 0.475, 0.01)), 'head'],
+      ['choc', cyl(0.004, 0.004, 0.06, hm(0.02, 0.52, 0.01, 0, 0, -0.4), 6), 'head'],
+      ['waffle', cone(0.11, 0.34, M(0, 1.2, -0.2, Math.PI), 16), 'chest'],
+      ['straw', sph(0.105, M(0, 1.38, -0.2)), 'chest'],
+      ['drip', torus(0.1, 0.02, M(0, 1.36, -0.2, HALF)), 'chest'],
+    ],
+  },
+  {
+    id: 'pizza', name: 'Pizza Pilot', rarity: 'legendary', pack: 'snack', hair: 'buzz', desc: 'Leather flying cap, goggles, a long scarf and pepperoni pizza wings.',
+    color: '#7a4f2e', belly: '#3d3a33', sleeves: 'long', gloves: '#3a2618', boots: '#3a2618', belt: '#3a2618', buckle: '#c9a24a', accent: '#f4ead2', collar: '#f4ead2',
+    mats: { leather: ['#6a4126', { roughness: 0.6 }], brass: ['#c9a24a', { metalness: 0.8, roughness: 0.3 }], lens: ['#8fd8ff', { metalness: 0.3, roughness: 0.05, emissive: '#1b6a9a', emissiveIntensity: 0.4 }],
+      scarf: ['#f4ead2', { side: THREE.DoubleSide }], cheese: ['#ffc93c', { side: THREE.DoubleSide }], crust: ['#d98a3a'], pep: ['#c8281e'] },
+    parts: () => {
+      const p = [
+        ['leather', sph(0.168, hm(0, 0.012, -0.012, -0.2, 0, 0, 1.03, 1.05, 1.06), Math.PI * 0.55), 'head'],
+        ['leather', box(0.04, 0.11, 0.08, hm(0.15, -0.07, -0.01)), 'head'],
+        ['leather', box(0.04, 0.11, 0.08, hm(-0.15, -0.07, -0.01)), 'head'],
+        ['leather', torus(0.163, 0.01, hm(0, 0.105, 0.0, HALF + 0.35, 0, 0, 1, 1.1, 1)), 'head'],
+        ['scarf', torus(0.105, 0.03, M(0, 1.495, -0.004, HALF)), 'chest'],
+        ['scarf', box(0.07, 0.34, 0.012, M(0.07, 1.3, -0.13, 0.35, 0, -0.2)), 'chest'],
+      ];
+      for (const s of [1, -1]) {
+        p.push(['brass', torus(0.034, 0.009, hm(0.056 * s, 0.13, 0.13, -0.5)), 'head']);
+        p.push(['lens', cyl(0.03, 0.03, 0.01, hm(0.056 * s, 0.13, 0.13, HALF - 0.5)), 'head']);
+        // a slice of pizza for a wing: cheese, crust along the wide end, pepperoni
+        const tip = new THREE.Vector3(0.06 * s, 1.3, -0.15), sw = 0.6 * s;
+        p.push(['cheese', cone(0.17, 0.42, M(tip.x + 0.2 * s, 1.36, -0.16, 0, 0, sw + HALF * s, 1, 1, 0.08), 3), 'chest']);
+        p.push(['crust', cyl(0.025, 0.025, 0.3, M(tip.x + 0.38 * s, 1.47, -0.16, 0, 0, sw), 10), 'chest']);
+        for (const [dx, dy] of [[0.22, 0.05], [0.3, 0.13], [0.15, -0.02]]) p.push(['pep', cyl(0.03, 0.03, 0.03, M(tip.x + dx * s, 1.36 + dy, -0.155, HALF), 14), 'chest']);
+      }
+      return p;
+    },
+  },
+  {
+    id: 'broccoli', name: 'Broccoli Bandit', rarity: 'uncommon', pack: 'snack', hideHair: true, desc: 'A bushy broccoli crown, a bandit mask and a loot sack.',
+    color: '#3f8f3a', belly: '#24402a', sleeves: 'long', gloves: '#1d1a1f', accent: '#9be15d', collar: '#1d1a1f', shoes: '#1d1a1f', soles: '#3f8f3a', laces: '#9be15d',
+    mats: { floret: ['#3d9a3a', { roughness: 0.9 }], floret2: ['#2f7d2e', { roughness: 0.9 }], mask: ['#1d1a1f'], eyes: ['#fffaf2'], sack: ['#9c7a4c', { roughness: 0.95 }], rope: ['#7a5a32'] },
+    parts: () => {
+      const p = [['mask', ecyl(0.153, 0.184, 0.05, hm(0, 0.014, 0.004)), 'head']];
+      for (const s of [1, -1]) p.push(['eyes', sph(0.021, hm(0.058 * s, 0.014, 0.181, 0, 0, 0, 1.2, 0.75, 0.25)), 'head']);
+      const fl = [[0, 0.17, 0, 0.11], [0.09, 0.14, 0.05, 0.08], [-0.09, 0.14, 0.05, 0.08], [0.08, 0.15, -0.08, 0.085], [-0.08, 0.15, -0.08, 0.085], [0, 0.22, -0.04, 0.09], [0.12, 0.08, -0.02, 0.07], [-0.12, 0.08, -0.02, 0.07], [0, 0.13, 0.11, 0.07]];
+      fl.forEach(([x, y, z, r], i) => p.push([i % 2 ? 'floret' : 'floret2', sph(r, hm(x, y, z - 0.01)), 'head']));
+      p.push(['sack', sph(0.13, M(0.05, 1.17, -0.24, 0, 0, 0.25, 1.1, 1, 0.8)), 'chest']);
+      p.push(['sack', cone(0.05, 0.09, M(0.01, 1.32, -0.24, 0, 0, 0.25)), 'chest']);
+      p.push(['rope', torus(0.035, 0.012, M(0.015, 1.29, -0.24, HALF, 0, 0.25)), 'chest']);
+      p.push(['rope', cyl(0.009, 0.009, 0.5, M(0.0, 1.3, -0.04, 0, 0, 0.75), 6), 'chest']);
+      return p;
+    },
+  },
+  {
+    id: 'taco', name: 'Taco Tumbler', rarity: 'uncommon', pack: 'snack', hair: 'buzz', desc: 'A crunchy taco shell backpack, lime-wedge cap and a salsa scarf.',
+    color: '#f2b13c', belly: '#2e5a8a', sleeves: 'short', accent: '#e0302a', collar: '#e0302a', shoes: '#f4f1ea', laces: '#e0302a',
+    mats: { shell: ['#f0c35a', { roughness: 0.7, side: THREE.DoubleSide }], lettuce: ['#6cc24a'], tomato: ['#e8322b'], meat: ['#7a4426', { roughness: 0.9 }], lime: ['#8fd14f'], rind: ['#3f8f2a'], scarf: ['#e0302a'] },
+    parts: () => {
+      const p = [
+        ['shell', arc(0.2, 0.12, -HALF, Math.PI, M(0, 1.36, -0.22, HALF, 0, 0)), 'chest'],
+        ['meat', box(0.34, 0.07, 0.08, M(0, 1.33, -0.22)), 'chest'],
+        ['rind', sph(0.168, hm(0, 0.03, -0.004, -0.1, 0, 0, 1, 1, 1.03), Math.PI * 0.42), 'head'],
+        ['lime', sph(0.158, hm(0, 0.038, -0.004, -0.1, 0, 0, 1, 1, 1.03), Math.PI * 0.42), 'head'],
+        ['rind', cyl(0.11, 0.11, 0.012, hm(0, 0.075, 0.13, 0.2), 20), 'head'],
+        ['scarf', torus(0.1, 0.028, M(0, 1.5, -0.004, HALF)), 'chest'],
+        ['scarf', cone(0.06, 0.1, M(0, 1.43, 0.09, Math.PI, 0, 0, 1, 1, 0.4)), 'chest'],
+      ];
+      for (let i = 0; i < 6; i++) {
+        const x = -0.16 + i * 0.064;
+        p.push(['lettuce', sph(0.036, M(x, 1.375, -0.22 + (i % 2 ? 0.025 : -0.025))), 'chest']);
+        if (i % 2) p.push(['tomato', cyl(0.026, 0.026, 0.016, M(x + 0.03, 1.395, -0.2, 0.3, 0, 0), 12), 'chest']);
+      }
+      return p;
+    },
+  },
 ];
 export const SKIN_BY_ID = Object.fromEntries(SKINS.map((s) => [s.id, s]));
+export const PACKS = [
+  { id: 'snack', name: 'Snack Pack', desc: 'Six food-fight outfits: Burger Boss, Donut Dynamo, Ice Cream Ace, Pizza Pilot, Broccoli Bandit and Taco Tumbler.' },
+];
 
 // Built once per skin: one merged geometry + material per (bone, material), in that bone's space.
 const OUTFIT_CACHE = new Map();

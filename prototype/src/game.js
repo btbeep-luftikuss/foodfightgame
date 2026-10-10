@@ -315,6 +315,11 @@ export class Game {
     this._showRoundOver(w, fresh, tName);
   }
   _showRoundOver(w, fresh, tName = null) {
+    if (!fresh) { // coins for the round (main.js pays the players who played it)
+      const P = this.player;
+      const won = tName ? P?.team != null && TEAMS[P.team]?.name === tName : !!w && w === P;
+      this.onMatchEvent?.('roundOver', { won, placement: won ? 1 : P?.alive ? 2 : P?.placement || this.actors.length });
+    }
     if (fresh) this.hud.banner('New round', 'Everyone who plays drops in · 3 s', 2.6);
     else if (tName) {
       if (this.player?.team != null && TEAMS[this.player.team]?.name === tName) { this.sfx.play('win'); this.hud.banner("Chef's Kiss!", `${tName} wins · next round in ${OVER_FOR} s`, 4); }

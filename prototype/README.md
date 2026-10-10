@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.30: coins and the first skin pack** (`src/coins.js`, `src/skins.js`, `src/main.js`, `src/game.js`, `index.html`)
+
+- **Coins.** Every match vs bots, and every online round you play, pays coins: 10 for playing, 15 per splat, 4 for each Titan you outlast (up to 44) and 60 for a win. The end card shows the receipt; online, a banner shows it after the round. New players start with 500 (enough for a first skin). The wallet is kept on this device, like the chosen skin.
+- **The Snack Pack:** six new skins: Burger Boss (rare; a burger hat), Donut Dynamo (rare; a frosted donut float ring), Ice Cream Ace (epic; three scoops and a cherry, a waffle-cone jetpack), Pizza Pilot (legendary; flying cap, goggles, pizza-slice wings), Broccoli Bandit (uncommon; broccoli crown, bandit mask, loot sack) and Taco Tumbler (uncommon; taco backpack, lime cap).
+- **The Locker is a shop now.** Pack skins cost 300 (uncommon), 500 (rare), 800 (epic) or 1,200 (legendary); the whole pack costs about two thirds of that (2,350 instead of 3,600), and after buying some, the rest of the pack is discounted the same way. Tap a skin you don't own to try it on the stage, then buy it. The 13 earlier skins stay free. Bots wear pack skins too, and online everyone sees the skin you bought.
+
 **Version 0.29: play online with anyone who has the link** (`src/p2p.js`, `src/net.js`, `scripts/build.mjs`, `docs/play/`)
 
 - **No invite or sign-in needed.** Online play now runs first over a free public peer-to-peer service (PeerJS, bundled into the page): the game's traffic goes straight between players' browsers, and the public server only introduces them. Anyone who opens the game and types the same room code joins, whether or not the page was shared with them on claude.ai.
@@ -293,7 +299,8 @@ npm run dev          # http://localhost:5173
 | `src/foods.js` | All food data and behaviour: meshes, throw, impact, alt actions |
 | `src/actors.js` | Titans: movement, statuses, diminishing returns, inventory; drives the rig each frame |
 | `src/human.js` | The human model: lofted, skinned body and face, hair and beards, palette shader, skeleton posing, first-person arm |
-| `src/skins.js` | Skins: rarity, clothing palettes, costume pieces on the head, chest and hip bones |
+| `src/skins.js` | Skins: rarity, clothing palettes, costume pieces on the head, chest and hip bones; skin packs |
+| `src/coins.js` | Coins: match rewards, skin and pack prices, the wallet (kept on this device) |
 | `src/stains.js` | Food stains on every surface: decals cut from the scenery triangles, one atlas, one draw call |
 | `src/net.js`, `src/viewmodel.js` | Online rooms (hosting, shared rounds and bots); first-person arm and held food |
 | `src/p2p.js` | Public peer-to-peer rooms (PeerJS): a hub per room code, hand-over when the hub leaves |

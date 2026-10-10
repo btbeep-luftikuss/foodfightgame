@@ -175,6 +175,28 @@ button { font: inherit; color: inherit; }
 .locker-grid button b { font-size: 12.5px; line-height: 1.15; text-align: center; }
 .locker-grid button small { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--rar); }
 .locker-grid button[aria-pressed="true"] { border-color: var(--butter); box-shadow: 0 0 0 2px var(--butter); }
+.locker-grid button.locked img { filter: saturate(0.75) brightness(0.85); }
+.locker-grid button.locked small { color: var(--butter); text-transform: none; letter-spacing: 0; font-size: 12px; }
+.coin { display: inline-block; width: 0.95em; height: 0.95em; border-radius: 50%; vertical-align: -0.12em; margin-right: 0.25em; flex: none;
+  background: radial-gradient(circle at 35% 30%, #fff6b0 0 18%, #ffd447 40%, #e09a12 100%); box-shadow: inset 0 0 0 0.09em #b8740a; }
+.coinpill { display: inline-flex; align-items: center; gap: 2px; font-style: normal; font-weight: 900; font-variant-numeric: tabular-nums; color: var(--butter);
+  background: #00000040; border: 2px solid #ffd44766; border-radius: 999px; padding: 2px 10px 2px 7px; font-size: 14px; white-space: nowrap; }
+.scr-head .coinpill { margin-left: auto; }
+.navbtn .coinpill { justify-self: start; margin-top: 4px; font-size: 13px; }
+.locker-buy { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; background: #00000030; border-radius: 12px; padding: 10px 12px; }
+.locker-buy p { flex: 1 1 180px; }
+.pack { display: grid; gap: 8px; margin-top: 6px; padding: 12px; border-radius: 14px; border: 2px solid #ffd44755;
+  background: linear-gradient(135deg, #ff6fae33, #ffd44722 50%, #4fd1ff22); }
+.pack-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.pack-head h3 { margin: 0; font-size: 18px; color: var(--paper); }
+.pack-head p { flex: 1 1 100%; margin: 0; }
+.pack-head .btn { margin-left: auto; }
+.pack-head s { opacity: 0.7; }
+.coin-help { font-size: 12px !important; }
+.btn .coin { margin-right: 0.3em; }
+.stats .gold { color: var(--butter); }
+.receipt { margin: -4px 0 10px; font-size: 13px; color: var(--paper-dim); text-align: center; }
+.receipt:empty { display: none; }
 .gfx { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
 .gfx .field { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: var(--paper-dim); }
 .gfx .field select { width: 100%; }
@@ -450,6 +472,7 @@ h3.sub { margin: 4px 0 0; font-size: 12px; letter-spacing: 0.14em; text-transfor
 .btn { border: 0; border-radius: 999px; padding: 13px 26px; font-weight: 800; font-size: 17px; cursor: pointer; background: var(--butter); color: var(--ink); box-shadow: 0 4px 0 #b8901a; transition: transform 0.1s, box-shadow 0.1s; }
 .btn:hover { transform: translateY(-1px); }
 .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #b8901a; }
+.btn:disabled { opacity: 0.5; cursor: default; transform: none; }
 .btn.ghost { background: transparent; color: var(--paper); box-shadow: inset 0 0 0 2px var(--paper-dim); }
 .field { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--paper-dim); }
 select { font: inherit; font-weight: 700; color: var(--paper); background: var(--ink-2); border: 2px solid var(--paper-dim); border-radius: 10px; padding: 7px 10px; }
@@ -572,13 +595,13 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.29 · Play online with anyone</p>
+      <p class="eyebrow">Prototype 0.30 · Coins and the Snack Pack</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in, or smash the other teams' pots in Cooking Pot Wars.</p>
       <nav class="homenav" aria-label="Main menu">
         <button id="play" class="navbtn main" type="button" data-go="play"><b>Play vs bots</b><span>Classic, Chef's Choice or Cooking Pot Wars · Solo, Duos, Trios or Squads</span></button>
         <button id="online-open" class="navbtn" type="button" data-go="online"><b>Play online</b><span>Your friends, a room code, every mode and team size</span></button>
-        <button id="locker-open" class="navbtn" type="button" data-go="locker"><b>Locker</b><span>Pick your skin</span></button>
+        <button id="locker-open" class="navbtn" type="button" data-go="locker"><b>Locker</b><span>Pick your skin</span><em id="home-coins" class="coinpill"></em></button>
         <button id="gfx-open" class="navbtn" type="button" data-go="settings"><b>Settings</b><span>Graphics, ray tracing, resolution</span></button>
         <button id="help-open" class="navbtn" type="button" data-go="help"><b>How to play</b><span>Controls, foods, utensils, the kitchen</span></button>
       </nav>
@@ -666,11 +689,15 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 
     <!-- locker -->
     <div class="screen" data-screen="locker" hidden>
-      <header class="scr-head"><button class="back" type="button" data-go="home" aria-label="Back to the main menu">‹ Back</button><h2>Locker</h2></header>
+      <header class="scr-head"><button class="back" type="button" data-go="home" aria-label="Back to the main menu">‹ Back</button><h2>Locker</h2><em id="locker-coins" class="coinpill" title="Your coins: earn them in every match"></em></header>
       <div id="locker" class="online">
         <p id="locker-now"></p>
         <div id="locker-stage" class="locker-stage" aria-label="Your Titan in the selected skin; drag to spin"></div>
-        <div id="locker-grid" class="locker-grid" role="group" aria-label="Skins"></div>
+        <div id="locker-buy" class="locker-buy" hidden></div>
+        <p class="step-sub"><b>Your skins</b></p>
+        <div id="locker-grid" class="locker-grid" role="group" aria-label="Your skins"></div>
+        <div id="locker-packs"></div>
+        <p class="coin-help">Earn coins in every match, vs bots or online: 10 for playing, 15 per splat, up to 44 for lasting, 60 for a win.</p>
       </div>
     </div>
 
@@ -767,7 +794,9 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
     <div class="stats">
       <div><b id="end-place">#8</b><small>Placement</small></div>
       <div><b id="end-kills">0</b><small>Splats</small></div>
+      <div><b id="end-coins" class="gold">+0</b><small>Coins</small></div>
     </div>
+    <p id="end-receipt" class="receipt"></p>
     <div class="row">
       <button id="again" class="btn" type="button">Play again</button>
       <button id="spectate" class="btn ghost" type="button">Keep watching</button>
