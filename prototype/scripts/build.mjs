@@ -1,5 +1,6 @@
 // Bundles the game into single self-contained HTML files (no CDN needed at runtime):
 //   dist/tiny-titans.html  - a complete page you can open from any static host
+//   ../docs/play/index.html - the full page again, for the public game site (GitHub Pages)
 //   dist/artifact.html     - the same content without the <html>/<head>/<body> wrapper,
 //                            for hosts that supply their own document skeleton
 import { build } from 'esbuild';
@@ -29,4 +30,7 @@ const fragment = full
 await mkdir(new URL('dist/', root), { recursive: true });
 await writeFile(new URL('dist/tiny-titans.html', root), full);
 await writeFile(new URL('dist/artifact.html', root), fragment);
+// the public game site (GitHub Pages serves the repository's docs/ folder)
+await mkdir(new URL('../docs/play/', root), { recursive: true });
+await writeFile(new URL('../docs/play/index.html', root), full);
 console.log(`built dist/tiny-titans.html (${(full.length / 1024).toFixed(0)} KB) and dist/artifact.html`);

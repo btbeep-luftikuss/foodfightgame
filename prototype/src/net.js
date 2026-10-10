@@ -1,5 +1,6 @@
-// Online multiplayer over the claude.ai artifact "room" capability (everyone who has the game
-// open right now). Players pick a room code; each code is its own match.
+// Online multiplayer over a "room": everyone who has the game open right now with the same room
+// code. Each code is its own match. The room is the public peer-to-peer service (p2p.js), or the
+// claude.ai artifact "room" capability where that can't be reached; both work the same way.
 //
 // Model: every client owns its own Titan and shares it through room *presence*, about 30 times
 // a second: position, velocity, aim, health, held food and status flags, plus a short rolling
@@ -35,6 +36,7 @@ import { FOODS, FOOD_IDS } from './foods.js';
 import { Actor } from './actors.js';
 import { UTENSIL_BY_ID, UTENSIL_IDS } from './utensils.js';
 import { TEAMS, cleanSize } from './teams.js';
+import { p2pLobby } from './p2p.js';
 
 const COLORS = ['#ff9a1f', '#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5', '#f2f2f2'];
 const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048, ladle: 4096, turret: 8192 };
@@ -124,12 +126,28 @@ function mockLobby() {
   };
 }
 
-export async function roomAvailable() {
-  if (window.__useMockRoom) return mockLobby();
+// Where online play runs (0.29): first the public peer-to-peer service, which anyone with the game's
+// link can use (signed in or not, on claude.ai or the public game site); if that can't be reached
+// from here, the claude.ai room (people the page is shared with, signed in).
+async function claudeRoom() {
   try {
     if (!window.claude || typeof window.claude.use !== 'function') return null;
     return await window.claude.use('room');
   } catch { return null; }
+}
+export async function roomAvailable() {
+  if (window.__useMockRoom) return mockLobby();
+  const p2p = p2pLobby(window.__peerServer || {});
+  return {
+    async join(name) {
+      if (!window.__noP2P) {
+        try { return await p2p.join(name); } catch { /* blocked here: try the claude.ai room */ }
+      }
+      const lobby = await claudeRoom();
+      if (!lobby) throw Object.assign(new Error('no connection'), { code: 'offline' });
+      return lobby.join(name);
+    },
+  };
 }
 
 export class Net {

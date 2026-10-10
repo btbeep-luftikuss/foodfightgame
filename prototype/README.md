@@ -63,6 +63,14 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.29: play online with anyone who has the link** (`src/p2p.js`, `src/net.js`, `scripts/build.mjs`, `docs/play/`)
+
+- **No invite or sign-in needed.** Online play now runs first over a free public peer-to-peer service (PeerJS, bundled into the page): the game's traffic goes straight between players' browsers, and the public server only introduces them. Anyone who opens the game and types the same room code joins, whether or not the page was shared with them on claude.ai.
+- **How a room works (`src/p2p.js`):** the first player in a room becomes its hub (it claims the id `tinytitans-foodfight-v1-<room code>`); everyone else connects to the hub, which passes each player's presence on to the others. If the hub leaves, the others race to claim the id; one becomes the new hub and the rest reconnect, so the match carries on. It offers the same small room interface as the claude.ai `room` capability, so the game code above it is unchanged. The hub ties each connection to one player and drops oversized or malformed messages; `src/net.js` still checks every value.
+- **Fallback:** where the public service can't be reached (some networks and pages block it), the game uses the claude.ai room as before (people the page is shared with, signed in). Players on the two can't see each other.
+- **Public game page:** the build also writes the full page to `docs/play/index.html` for GitHub Pages: https://btbeep-luftikuss.github.io/foodfightgame/play/ once Pages is switched on for the repository (Settings, Pages, deploy from the branch, folder `/docs`).
+- Tests: a local PeerJS server (the `peer` npm package, not part of the game) with three players in separate browser profiles: everyone sees everyone, the hub leaving hands the room over, and a late joiner gets in after that.
+
 **Version 0.28: pot menus, steady turrets, bigger stacks, more solid scenery**
 
 - **Turret gunners sit still.** Anyone in a turret ignores moving, jumping and dashing. Bots kept hopping on the lid because their usual random jumps and "I'm stuck" hops kept running.
@@ -288,6 +296,7 @@ npm run dev          # http://localhost:5173
 | `src/skins.js` | Skins: rarity, clothing palettes, costume pieces on the head, chest and hip bones |
 | `src/stains.js` | Food stains on every surface: decals cut from the scenery triangles, one atlas, one draw call |
 | `src/net.js`, `src/viewmodel.js` | Online rooms (hosting, shared rounds and bots); first-person arm and held food |
+| `src/p2p.js` | Public peer-to-peer rooms (PeerJS): a hub per room code, hand-over when the hub leaves |
 | `src/map-backyard.js` | The Backyard BBQ map |
 | `src/projectiles.js` | Projectile flight, boomerang steering, rolling, hit detection (body capsule and head) |
 | `src/items.js` | Pickups and spawners, peel traps, stuck carrots |

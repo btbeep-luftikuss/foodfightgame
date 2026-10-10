@@ -13,6 +13,8 @@ import { BOT_LEVELS } from './bots.js';
 import { MAPS } from './world.js';
 import { TEAMS, TEAM_LABEL, teamCount, cleanSize } from './teams.js';
 import { Net, roomAvailable, cleanRoom } from './net.js';
+
+const PUBLIC_URL = 'https://btbeep-luftikuss.github.io/foodfightgame/play/';
 import { UTENSILS, UTENSIL_BY_ID, UTENSIL_IDS, utensilIcon, setUtensilIcons } from './utensils.js';
 import { makeUtensilMesh } from './utensil-models.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -572,12 +574,6 @@ function boot() {
     btn.disabled = true;
     status.className = ''; status.textContent = 'Connecting…';
     const lobby = await roomAvailable();
-    if (!lobby) {
-      status.className = 'err';
-      status.textContent = "Online play isn't available here. It works on the published game page on claude.ai when you're signed in; people you share the page with can join the same room code.";
-      btn.disabled = false;
-      return;
-    }
     try {
       const net = new Net(game);
       const nick = $('nick').value || 'Titan';
@@ -590,7 +586,8 @@ function boot() {
       openLoadout(); // pick 3 foods and a utensil (or spectate)
     } catch (err) {
       status.className = 'err';
-      status.textContent = `Couldn't join that room (${(err && (err.code || err.message)) || 'unknown error'}). Check the room code and try again.`;
+      if (err && err.code === 'offline') status.textContent = `Couldn't reach the online service from here (this network may block it). Try again, or open the public game page: ${PUBLIC_URL}`;
+      else status.textContent = `Couldn't join that room (${(err && (err.code || err.message)) || 'unknown error'}). Check the room code and try again.`;
     } finally { btn.disabled = false; }
   });
   $('spectate').addEventListener('click', () => { end.hidden = true; });
