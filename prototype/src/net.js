@@ -29,6 +29,12 @@
 // shockwave, spikes, a berry spiral, flames) goes out as an 'ab' event and every game applies it to its
 // own Titans. Jump-pad bounces ('jb') wear the pad down on every game.
 //
+// Size (0.33): the claude.ai room takes at most 4 KiB of presence per player and refuses anything
+// bigger (the update is lost), so every update is packed to fit: throws leave out what a receiver
+// assumes anyway, a bot's name, colour and skin come round every third of a second, and the events
+// that have gone out the fewest times go first while they fit (each goes out several times: an
+// update can be missed). Receivers keep the numbers of the events they've had, so order doesn't matter.
+//
 // Teams and Cooking Pot Wars (0.26): the room settings carry the mode and the team size; every
 // Titan's state carries its team and the pot on its back. Players pick their team (state), the host
 // fills the rest with bots. In Cooking Pot Wars the host owns the pots and shares them (pw); players
@@ -45,8 +51,11 @@ import { p2pLobby } from './p2p.js';
 const COLORS = ['#ff9a1f', '#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5', '#f2f2f2'];
 const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048, ladle: 4096, turret: 8192 };
 const SEND_EVERY = 1 / 30;
-const LOG_KEEP = 0.7;   // seconds an event stays in the rolling log
+const LOG_KEEP = 0.7;   // seconds an event stays in the rolling log (pot moves: 3 s)
 const LOG_MAX = 90;
+const MIN_SENT = 6;     // an event leaves the log once it went out this often and is past LOG_KEEP (pot moves: 5x)
+const BUDGET = 3900;    // bytes of one player's presence (the claude.ai room refuses over 4096)
+const THROW_DEFAULTS = { g: 1, r: 0.35, l: 6, c: 1 }; // what a receiver assumes for a throw field left out (others: 0)
 const POT_EVENTS = new Set(['pp', 'lh', 'pc', 'ps']);
 const MAPS_OK = ['kitchen', 'backyard', 'restaurant'], BOTS_OK = ['off', 'easy', 'medium', 'hard'];
 const MODES_OK = ['classic', 'chef', 'pots'];
@@ -59,7 +68,12 @@ const STATES = ['drop', 'play', 'over'];
 const cleanRD = (rd) => (Array.isArray(rd) ? [num(rd[0], 0, 1e6) | 0, STATES.includes(rd[1]) ? rd[1] : 'play',
   num(rd[2], -300, 300), num(rd[3], -300, 300), num(rd[4], 0, 400, 330), num(rd[5], 0, 10) | 0, rd[6] === 'shrink' ? 'shrink' : 'wait',
   num(rd[7], 0, 120), cleanName(rd[8]).slice(0, 16), num(rd[9], 0, 1e4), num(rd[10], -300, 300), num(rd[11], -300, 300), num(rd[12], 0, 400), rd[13] === 1 ? 1 : 0] : null);
-const r2 = (v) => Math.round(v * 100) / 100;
+const r2 = (v) => (Number.isFinite(v) ? Math.round(v * 100) / 100 : 0);
+const r1 = (v) => (Number.isFinite(v) ? Math.round(v * 10) / 10 : 0);
+const fin = (v) => (Number.isFinite(v) ? v : 0);
+// UTF-8 bytes of a string (the room's limits are in bytes)
+const utf8 = (s) => { let n = s.length; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); if (c > 0x7f) n += c > 0x7ff && (c < 0xd800 || c > 0xdfff) ? 2 : 1; } return n; };
+const roundAll = (o) => (typeof o === 'number' ? r2(o) : Array.isArray(o) ? o.map(roundAll) : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined).map(([k, v]) => [k, roundAll(v)])) : o);
 const num = (v, lo, hi, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? clamp(v, lo, hi) : d);
 const cleanName = (s) => String(s || '').replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁯]/g, '').trim().slice(0, 16) || 'Titan';
 // What a Titan carries, as short codes: foods "<food code><count or *>" per slot, then the slot in
@@ -92,6 +106,7 @@ export const cleanRoom = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9_
 function mockLobby() {
   const me = Math.random().toString(36).slice(2, 10);
   return {
+    via: 'mock',
     async join(name) {
       const ch = new BroadcastChannel(`tt-mock-${name}`);
       const peers = new Map(); // peer -> {presence, seen}
@@ -118,7 +133,20 @@ function mockLobby() {
       addEventListener('beforeunload', () => ch.postMessage({ peer: me, bye: true }));
       return {
         name,
-        async presence(patch) { mine = Object.freeze({ ...mine, ...patch }); ch.postMessage({ peer: me, presence: mine }); },
+        // as strict as the claude.ai room: plain JSON, a null field removed, at most 4 KiB in all, else refused
+        async presence(patch) {
+          const next = { ...mine };
+          for (const [k, v] of Object.entries(patch)) if (v === null) delete next[k]; else next[k] = v;
+          const bad = (v, d) => (d > 8 || v === undefined || typeof v === 'function' || (typeof v === 'number' && !Number.isFinite(v))
+            || (v && typeof v === 'object' && (Array.isArray(v) ? v.some((x) => bad(x, d + 1)) : Object.values(v).some((x) => bad(x, d + 1)))));
+          const size = utf8(JSON.stringify(next));
+          if (bad(next, 1) || size > 4096) {
+            window.__mockRefused = (window.__mockRefused || 0) + 1;
+            throw Object.assign(new Error(size > 4096 ? `presence is ${size} bytes; the limit is 4096` : 'presence is not plain JSON'), { code: 'invalid_argument' });
+          }
+          window.__mockMax = Math.max(window.__mockMax || 0, size);
+          mine = Object.freeze(next); ch.postMessage({ peer: me, presence: mine });
+        },
         peers: () => snap,
         onPeers(h) { handlers.add(h); queueMicrotask(() => h({ peers: snap, joined: snap, left: [], updated: [] })); return () => handlers.delete(h); },
         onConnection(h) { queueMicrotask(() => h(true)); return () => {}; },
@@ -130,28 +158,31 @@ function mockLobby() {
   };
 }
 
-// Where online play runs (0.29): first the public peer-to-peer service, which anyone with the game's
-// link can use (signed in or not, on claude.ai or the public game site); if that can't be reached
-// from here, the claude.ai room (people the page is shared with, signed in).
+// Where online play runs (0.33). On claude.ai the page may not reach any outside server (its security
+// policy allows no connections but claude.ai's own), so there it uses the claude.ai room: people signed
+// in to claude.ai whom the game is shared with. Anywhere else (the public game page) it uses the public
+// peer-to-peer service, which anyone with the link can use. One way per page, so that everyone who
+// opens the same link meets in the same place.
+const onClaude = () => !!(window.claude && typeof window.claude.use === 'function');
 async function claudeRoom() {
-  try {
-    if (!window.claude || typeof window.claude.use !== 'function') return null;
-    return await window.claude.use('room');
-  } catch { return null; }
+  if (window.__fakeClaudeRoom) return mockLobby(); // (tests: a stand-in as strict as the claude.ai room)
+  try { return onClaude() ? await window.claude.use('room') : null; } catch { return null; }
 }
 export async function roomAvailable() {
   if (window.__useMockRoom) return mockLobby();
   const p2p = p2pLobby(window.__peerServer || {});
-  return {
+  const lobby = {
+    via: onClaude() && !window.__forceP2P ? 'claude' : 'p2p',
     async join(name) {
-      if (!window.__noP2P) {
-        try { return await p2p.join(name); } catch { /* blocked here: try the claude.ai room */ }
+      if (lobby.via === 'claude') {
+        const room = await claudeRoom();
+        if (!room) throw Object.assign(new Error('the claude.ai room is not available to this viewer'), { code: 'claude_room' });
+        try { return await room.join(name); } catch (e) { throw Object.assign(new Error(e?.message || 'could not join'), { code: e?.code === 'not_granted' || e?.code === 'not_permitted' ? 'claude_room' : e?.code || 'claude_room' }); }
       }
-      const lobby = await claudeRoom();
-      if (!lobby) throw Object.assign(new Error('no connection'), { code: 'offline' });
-      return lobby.join(name);
+      return p2p.join(name); // rejects with code 'p2p_server' or 'p2p_host'
     },
   };
+  return lobby;
 }
 
 export class Net {
@@ -159,7 +190,10 @@ export class Net {
     this.game = game;
     this.room = null; this.connected = false;
     this.proxies = new Map(); // peer -> { actor, lastSeq, presence, recvAt, target, netVel, throws }
-    this.seq = 0; this.log = [];
+    this.seq = 0; this.log = []; // log: { seq, type, arr (as sent), bytes, t, sent }
+    this.frame = 0;
+    this.via = '';                // how this room is reached: 'claude' (the claude.ai room) or 'p2p'
+    this.refused = 0; this.lost = ''; // updates the room refused; why the room ended (if it did)
     this.myPeer = null;
     this.sendT = 0;
     this.name = 'Titan'; this.color = COLORS[0]; this.roomName = 'kitchen';
@@ -185,8 +219,11 @@ export class Net {
     this.name = cleanName(name);
     this.roomName = cleanRoom(roomName);
     this.color = COLORS[(Math.random() * COLORS.length) | 0];
+    this.via = lobby.via || '';
     this.room = await lobby.join(this.roomName);
-    this.room.onConnection((c) => { this.connected = c; }, () => { this.connected = false; });
+    const ended = (e) => this._ended(e);
+    this.room.onConnection((c) => { this.connected = c; }, ended);
+    this.room.onPeers(() => {}, ended); // (keeps the room's list of players coming, and hears if the room ends)
     this.connected = typeof this.room.connected === 'function' ? this.room.connected() : true;
   }
 
@@ -199,6 +236,15 @@ export class Net {
     try { await r?.leave(); } catch { /* already gone */ }
   }
 
+  // The room ended for good (access withdrawn, or the platform closed it).
+  _ended(e) {
+    if (!this.room || this.lost) return;
+    this.connected = false;
+    this.lost = (e && e.code) || 'ended';
+    console.warn('[online] the room ended:', this.lost, e && e.message);
+    this.game.hud.banner('Lost the online room', 'Leave and join again', 4);
+  }
+
   playerCount() { return 1 + this.proxies.size; }
   // local bots (host only)
   _localBots() { return this.isHost ? this.game.actors.filter((a) => a.isBot && !a.isRemote) : []; }
@@ -206,19 +252,25 @@ export class Net {
   // ---------------------------------------------------------------- outgoing
   event(type, ...data) {
     this.seq++;
-    this.log.push([this.seq, type, ...data, this.game.time]);
+    const arr = JSON.parse(JSON.stringify([this.seq, type, ...data])); // (plain JSON: what the room takes)
+    this.log.push({ seq: this.seq, type, arr, bytes: utf8(JSON.stringify(arr)) + 1, t: this.game.time, sent: 0 });
   }
 
   sendThrow(o) {
     const q = (v) => [r2(v.x), r2(v.y), r2(v.z)];
-    const seekPeer = o.seek ? this._peerOf(o.seek) : '';
-    this.event('t', {
-      f: o.food, p: q(o.pos), v: q(o.vel), g: o.gravity, r: o.radius, l: o.life, o: o.orient ? 1 : 0, rl: o.roll ? 1 : 0,
-      c: o.charge, cv: o.curve, b: o.bounces, fu: o.fuse, sk: seekPeer, tu: o.turn, rt: o.retarget, sh: o.shootable ? 1 : 0, br: o.bruise, sp: o.spin,
-      ...(o.u ? { u: o.u, x: o.x || {} } : {}), // utensil-boosted throw
-      ...(o.owner && o.owner !== this.game.player ? { ow: o.owner.id } : {}), // one of my bots threw it
-      ...(o.turret ? { tm: r2(o.turret) } : {}), // fired from a pot's turret
-    });
+    const t = { f: o.food, p: q(o.pos), v: q(o.vel) };
+    // (0.33) only what differs from what a receiver assumes (THROW_DEFAULTS, else 0 or nothing)
+    const put = (k, v) => {
+      if (typeof v === 'boolean') v = v ? 1 : 0;
+      if (typeof v === 'number') { v = r2(v); if (v !== (THROW_DEFAULTS[k] ?? 0)) t[k] = v; } else if (typeof v === 'string' && v) t[k] = v;
+    };
+    put('g', o.gravity); put('r', o.radius ?? FOODS[o.food]?.radius); put('l', o.life); put('o', !!o.orient); put('rl', !!o.roll);
+    put('c', o.charge); put('cv', o.curve); put('b', o.bounces); put('fu', o.fuse); put('sk', o.seek ? this._peerOf(o.seek) : '');
+    put('tu', o.turn); put('rt', o.retarget); put('sh', !!o.shootable); put('br', o.bruise); put('sp', o.spin);
+    if (o.u) { t.u = o.u; t.x = roundAll(o.x || {}); } // utensil-boosted throw
+    if (o.owner && o.owner !== this.game.player) t.ow = o.owner.id; // one of my bots threw it
+    if (o.turret) t.tm = r2(o.turret); // fired from a pot's turret
+    this.event('t', t);
   }
 
   _peerOf(actor) {
@@ -235,28 +287,46 @@ export class Net {
     return this.proxies.get(peer)?.actor || this.botProxies.get(peer)?.actor || null;
   }
 
-  _sendState(now) {
-    const p = this.game.player, g = this.game;
-    const t = this.game.time;
-    this.log = this.log.filter((e) => t - e[e.length - 1] < (POT_EVENTS.has(e[1]) ? 3 : LOG_KEEP)).slice(-LOG_MAX); // (pot moves stay longer: they must not be missed)
-    const msg = { n: this.name, c: this.color, k: this.game.playerSkin, w: this.ready ? 1 : 0, s: this._stateOf(p, this.game.input.pitch), e: this.log.map((e) => e.slice(0, -1)) };
+  _sendState() {
+    const p = this.game.player, g = this.game, t = g.time;
+    this.frame = (this.frame + 1) % 1e6;
+    // every field, every time: what isn't mine (any more) goes out as null, which takes it off my presence
+    const msg = { n: this.name, c: this.color, k: this.game.playerSkin, w: this.ready ? 1 : 0, s: this._stateOf(p, this.game.input.pitch), pm: null, rs: null, rd: null, b: null, pw: null, e: [] };
     if (g.mode === 'pots') msg.pm = (g.potMenu || []).map((id) => FOOD_IDS.indexOf(id).toString(36)).join(''); // my pick for my pot's menu
     if (this.isHost && g.pots.active) msg.pw = [Math.max(0, g.round.id), ...g.pots.state()]; // Cooking Pot Wars: the pots
     if (this.isHost) {
       const R = g.round, T = g.tide, to = T.to || { x: T.x, z: T.z, r: T.r };
       msg.rs = { ...this.roomSettings(), since: this.hostSince };
-      msg.rd = [Math.max(0, R.id), STATES.includes(R.state) ? R.state : 'drop', r2(T.x), r2(T.z), r2(T.r), T.phase, T.mode, r2(Math.max(0, T.t)), R.winner || '', r2(R.t), r2(to.x), r2(to.z), r2(to.r), R.fresh ? 1 : 0];
-      msg.b = this._localBots().map((a) => [a.id, a.name, a.color, a.skinId, ...this._stateOf(a, Math.asin(clamp(a.aimDir.y, -1, 1)))]);
+      msg.rd = [Math.max(0, fin(R.id)), STATES.includes(R.state) ? R.state : 'drop', r2(T.x), r2(T.z), r2(T.r), fin(T.phase), T.mode === 'shrink' ? 'shrink' : 'wait', r2(Math.max(0, T.t)), R.winner || '', r2(R.t), r2(to.x), r2(to.z), r2(to.r), R.fresh ? 1 : 0];
+      // a bot's name, colour and skin only every 10th update (receivers keep them)
+      msg.b = this._localBots().map((a) => [a.id, (this.frame + a.id) % 10 ? 0 : [a.name, a.color, a.skinId || 'chef'], ...this._stateOf(a, Math.asin(clamp(a.aimDir.y, -1, 1)))]);
     }
-    // (0.32) stay under the connection's message limit (about 16 KB): in a storm of throws, the oldest
-    // events go first (pot moves are kept: they must not be missed)
-    for (let k = 0; k < 6 && msg.e.length && JSON.stringify(msg).length > 14000; k++) {
-      const keep = msg.e.filter((e) => POT_EVENTS.has(e[1]));
-      const rest = msg.e.filter((e) => !POT_EVENTS.has(e[1]));
-      rest.splice(0, Math.ceil(rest.length / 3) || rest.length);
-      msg.e = [...keep, ...rest].sort((a, b) => a[0] - b[0]);
+    // the events: drop the stale ones, then pack the rest, those sent the fewest times first (a pot move
+    // counts a fifth: it goes out five times as often), then the oldest first, while they fit
+    const potEv = (ev) => POT_EVENTS.has(ev.type);
+    this.log = this.log.filter((ev) => {
+      const age = t - ev.t, pot = potEv(ev);
+      return age < (pot ? 6 : 2.5) && (ev.sent < MIN_SENT * (pot ? 5 : 1) || age < (pot ? 3 : LOG_KEEP));
+    }).slice(-LOG_MAX);
+    let space = this.budget() - utf8(JSON.stringify(msg));
+    const out = [];
+    for (const ev of [...this.log].sort((a, b) => (potEv(a) ? a.sent / 5 : a.sent) - (potEv(b) ? b.sent / 5 : b.sent) || a.seq - b.seq)) {
+      if (ev.bytes <= space) { out.push(ev); space -= ev.bytes; }
     }
-    this.room.presence(msg).catch(() => {});
+    out.sort((a, b) => a.seq - b.seq);
+    msg.e = out.map((ev) => ev.arr);
+    const json = JSON.stringify(msg);
+    if (utf8(json) > this.budget()) { this._refuse({ code: 'too_big', message: `${utf8(json)} bytes` }); return; } // (can't happen: the base is under 2 KB)
+    for (const ev of out) ev.sent++;
+    this.lastBytes = utf8(json);
+    this.room.presence(JSON.parse(json)).catch((e) => this._refuse(e)); // (plain JSON, nothing the room could call exotic)
+  }
+  budget() { return BUDGET; }
+  // The room refused an update (it's lost, the next one follows): say so once, in the console.
+  _refuse(e) {
+    this.refused++;
+    if (this.refused === 1 || this.refused % 300 === 0) console.warn(`[online] the room refused an update (${this.refused} so far):`, e && (e.code || ''), e && e.message);
+    if (e && ['revoked', 'not_granted', 'capability_disabled', 'capability_removed'].includes(e.code)) this._ended(e);
   }
   _stateOf(p, pitch) {
     const t = this.game.time;
@@ -275,8 +345,8 @@ export class Net {
     if (p.onGround) f |= FLAG.ground;
     if (p.ladleT > 0) f |= FLAG.ladle;
     if (p.inTurret) f |= FLAG.turret;
-    return [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.vel.x), r2(p.vel.y), r2(p.vel.z), r2(p.yaw), r2(pitch),
-      Math.round(p.hp), Math.round(p.glaze), p.alive ? 1 : 0, p.selected()?.id || '', f, p.kills, r2(Math.min(99, t - p.noiseAt)), p.utensil || '', invCode(p), kitCode(p), p.team ?? -1, p.carry ?? -1];
+    return [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r1(p.vel.x), r1(p.vel.y), r1(p.vel.z), r2(p.yaw), r2(pitch),
+      Math.round(fin(p.hp)), Math.round(fin(p.glaze)), p.alive ? 1 : 0, p.selected()?.id || '', f, fin(p.kills), r1(Math.min(99, t - p.noiseAt)), p.utensil || '', invCode(p), kitCode(p), p.team ?? -1, p.carry ?? -1];
   }
 
   // ---------------------------------------------------------------- incoming
@@ -284,7 +354,7 @@ export class Net {
     if (!this.room) return;
     const now = this.game.time;
     this.sendT += dt;
-    if (this.sendT >= SEND_EVERY && this.game.player) { this.sendT = 0; this._sendState(now); }
+    if (this.sendT >= SEND_EVERY && this.game.player) { this.sendT = 0; this._sendState(); }
 
     const list = this.room.peers();
     const seen = new Set();
@@ -353,22 +423,28 @@ export class Net {
   _syncBots(hostPeer, list) {
     const seen = new Set();
     if (Array.isArray(list)) {
+      // each: [id, its name/colour/skin (every 10th update, else 0), ...its state]
       for (const e of list.slice(0, 11)) {
-        if (!Array.isArray(e) || e.length < 20) continue;
+        if (!Array.isArray(e) || e.length < 22) continue;
         const key = `${hostPeer}|b${num(e[0], 1, 11) | 0}`;
-        seen.add(key);
+        const meta = Array.isArray(e[1]) ? e[1] : null;
         let pr = this.botProxies.get(key);
         if (!pr) {
-          const actor = new Actor(this.game, { id: 200 + this.botProxies.size, name: cleanName(e[1]), color: /^#[0-9a-f]{6}$/i.test(e[2]) ? e[2] : '#f2f2f2', isBot: false });
+          if (!meta) continue; // a new bot: it shows up once its name comes round
+          const actor = new Actor(this.game, { id: 200 + this.botProxies.size, name: cleanName(meta[0]), color: /^#[0-9a-f]{6}$/i.test(meta[1]) ? meta[1] : '#f2f2f2', isBot: false });
           actor.isRemote = true; actor.isBotProxy = true; actor.gliding = false;
-          actor.applySkin(typeof e[3] === 'string' ? e[3] : 'chef');
+          actor.applySkin(typeof meta[2] === 'string' ? meta[2] : 'chef');
           pr = { actor, lastSeq: 0, presence: null, recvAt: this.game.time, target: new THREE.Vector3(), netVel: new THREE.Vector3(), throws: [] };
           this.botProxies.set(key, pr);
           this.game.actors.push(actor);
         }
-        pr.actor.name = cleanName(e[1]);
-        if (/^#[0-9a-f]{6}$/i.test(e[2])) pr.actor.ownColor = e[2];
-        this._applyState(pr, e.slice(4));
+        seen.add(key);
+        if (meta) {
+          pr.actor.name = cleanName(meta[0]);
+          if (/^#[0-9a-f]{6}$/i.test(meta[1])) pr.actor.ownColor = meta[1];
+          if (typeof meta[2] === 'string' && meta[2] !== pr.actor.skinId) pr.actor.applySkin(meta[2]);
+        }
+        this._applyState(pr, e.slice(2));
       }
     }
     for (const key of [...this.botProxies.keys()]) if (!seen.has(key)) this._dropBot(key);
@@ -418,17 +494,20 @@ export class Net {
     pr.potMenu = typeof pres.pm === 'string' && pres.pm.length <= 5 ? [...pres.pm].map((c) => FOOD_IDS[parseInt(c, 36)]).filter(Boolean) : null;
     this._applyState(pr, pres.s);
 
-    // events we haven't seen yet
-    const ev = Array.isArray(pres.e) ? pres.e : [];
-    let maxSeq = pr.lastSeq ?? 0;
+    // events we haven't seen yet (0.33: they may come in any order: each is numbered, and we keep the
+    // numbers we've had; everything at or below lastSeq counts as had)
+    const ev = (Array.isArray(pres.e) ? pres.e : []).filter((e) => Array.isArray(e) && typeof e[0] === 'number');
+    if (pr.lastSeq === null) { pr.lastSeq = ev.reduce((m, e) => Math.max(m, e[0]), 0); pr.seen = new Set(); return; } // first sight: skip history
     for (const e of ev) {
-      if (!Array.isArray(e) || typeof e[0] !== 'number') continue;
-      if (pr.lastSeq === null) { maxSeq = Math.max(maxSeq, e[0]); continue; } // first sight: skip history
-      if (e[0] <= pr.lastSeq) continue;
-      maxSeq = Math.max(maxSeq, e[0]);
-      this._event(pr, e[1], e.slice(2), peer);
+      if (e[0] <= pr.lastSeq || pr.seen.has(e[0])) continue;
+      pr.seen.add(e[0]);
+      this._event(pr, e[1], e.slice(2), peer, e[0]);
     }
-    pr.lastSeq = maxSeq;
+    if (pr.seen.size > 300) { // (an update only carries a player's last 90 events: older numbers can go)
+      let top = 0; for (const q of pr.seen) top = Math.max(top, q);
+      pr.lastSeq = Math.max(pr.lastSeq, top - 200);
+      for (const q of pr.seen) if (q <= pr.lastSeq) pr.seen.delete(q);
+    }
   }
 
   // A Titan's shared state (a player's or one of the host's bots).

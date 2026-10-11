@@ -63,6 +63,24 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.33: online play that works, in every mode** (`src/net.js`, `src/p2p.js`, `src/main.js`, `src/hud.js`, `index.html`)
+
+Why online play failed, found by measuring and by the platforms' own rules:
+
+- **On the claude.ai page, the game was over the room's size limit.** The claude.ai `room` capability takes at most 4 KiB of presence per player (UTF-8 JSON) and refuses a bigger update outright (`invalid_argument`), and the game threw the refusals away silently. The host's updates (its 11 bots, the round, the pots and the event log) were the biggest. Measured over 2 minutes of a hard-bot room: the host's updates were about 2 KB on average, 1 in 10 over 3.4 KB, and the biggest 5.3 KB (Classic), 5.7 KB (Cooking Pot Wars) and 7.6 KB (Chef's Choice). Every refused update was lost, with its throws and knockouts.
+- **On the claude.ai page, the public peer-to-peer service can't be reached.** The page runs in a sandbox whose security policy allows no connections but claude.ai's own (`connect-src 'self'`), so PeerJS couldn't reach its server, and only people signed in to claude.ai whom the game is shared with can use the claude.ai room; a friend who opened the link signed out, or as a public link, got a vague "couldn't reach the online service".
+- **The public game page wasn't on.** GitHub Pages isn't enabled for the repository yet (it reports `has_pages: false`), so https://btbeep-luftikuss.github.io/foodfightgame/play/ doesn't exist until the repository owner turns it on (Settings, Pages, Deploy from a branch, this branch, `/docs`).
+- **A player could end up in a different place from the others.** Each page tried the peer-to-peer service first and the claude.ai room second, so one player whose network blocked a direct line to the room's host fell back to the claude.ai room while the others stayed peer-to-peer, and they never met.
+
+What changed:
+
+- **Every update fits in 4 KiB (3,900 bytes, measured in UTF-8).** Throws leave out every field a receiver assumes anyway (about 140 bytes each instead of 190 to 230), velocities go to one decimal, and a bot's name, colour and skin come round every 10th update instead of every one (the host's bots: 1.1 to 1.3 KB instead of 1.4 to 1.6). The events are packed by how often they've gone out: those sent the fewest times first (pot moves count a fifth, so they go out five times as often), each sent several times in case one update is missed. Receivers now keep the numbers of the events they've had, so events may arrive in any order. Any number that isn't finite goes out as 0, and the update is sent as plain JSON.
+- **Fields go away properly.** The room merges each update into the last one, so a player who stopped hosting kept saying they hosted (with old round and bot data); now what isn't yours goes out as `null`, which takes it off (the peer-to-peer rooms do the same now).
+- **One way per page:** on claude.ai the game uses the claude.ai room; anywhere else (the public game page) the peer-to-peer service. Everyone who opens the same link meets in the same place.
+- **Clear messages:** the Play online screen says who can join from where you are; joining says why it failed (on claude.ai: not signed in or not shared with you, with the public page's link; elsewhere: the matchmaking server can't be reached, or the room's host can't be linked to). A refused update, or the room ending, is noted in the browser console, and the top pill says Offline if the room ends.
+- **Peer-to-peer:** more STUN servers (Google's and Cloudflare's) besides PeerJS's relay (TURN) servers, a longer wait for a line through a relay (8 s), and up to 20 s to find the room.
+- Tests: update sizes over 2 minutes of hard-bot rooms in all three modes (biggest 3,899 bytes, none over 4,096), with a stand-in room as strict as claude.ai's (it refuses over 4 KiB or non-JSON values); a storm of 40 extra throws a second from a host running at only 5 frames a second (far fewer updates than a real game's 30 a second): in Classic every throw reached the other player, in Cooking Pot Wars with 13 Titans 792 of 824, and over real peer-to-peer 837 of 842; the claude.ai path end to end (a stand-in claude.ai room: two players, the host's bots, throws seen); the messages for a viewer claude.ai doesn't admit, a matchmaking server that can't be reached, and a host that can't be linked to; and the earlier online tests (Cooking Pot Wars over the mock room and over real peer-to-peer, the alts online, Duos).
+
 **Version 0.32: steadier online rooms, for Cooking Pot Wars above all** (`src/p2p.js`, `src/net.js`, `src/potwars.js`)
 
 - **A room no longer breaks when the host's line to the introduction server hiccups.** Before, any error on that line after the room was up shut the host down completely, so everyone lost the room (long Cooking Pot Wars matches were the most likely to hit it). Now the host keeps every player and quietly reconnects to the server every few seconds so newcomers can join again.
@@ -332,7 +350,7 @@ npm run dev          # http://localhost:5173
 | `src/coins.js` | Coins: match rewards, skin and pack prices, the wallet (kept on this device) |
 | `src/stains.js` | Food stains on every surface: decals cut from the scenery triangles, one atlas, one draw call |
 | `src/net.js`, `src/viewmodel.js` | Online rooms (hosting, shared rounds and bots); first-person arm and held food |
-| `src/p2p.js` | Public peer-to-peer rooms (PeerJS): a hub per room code, hand-over when the hub leaves |
+| `src/p2p.js` | Public peer-to-peer rooms (PeerJS): a hub per room code, hand-over when the hub leaves; STUN and TURN servers |
 | `src/map-backyard.js` | The Backyard BBQ map |
 | `src/map-restaurant.js` | Chez Titan, the Restaurant map |
 | `src/projectiles.js` | Projectile flight, boomerang steering, rolling, hit detection (body capsule and head) |
@@ -392,6 +410,7 @@ What the checks caught along the way:
 
 ## Known limits
 
+- On the claude.ai page, only people signed in to claude.ai whom the game is shared with can play online (that is the claude.ai room's rule, and the page can't reach any other server). Anyone else plays on the public game page, once GitHub Pages is on for the repository.
 - Online rooms are peer-to-peer over presence: the host runs the round and the bots, and each player's game decides hits on themselves, so a player with a slow connection can see a hit land a little differently than the thrower did. Pickups and delivery boxes are per player.
 - Bots steer with simple wall-following and launch pads rather than real pathfinding.
 - The upper cabinets, window sill and ceiling pot rack are scenery; they aren't reachable yet.

@@ -23,6 +23,13 @@ const HUB_LOST_MS = 3500;  // the hub (or a player's line to it) silent this lon
 const MAX_BYTES = 15500;   // one message (PeerJS refuses JSON messages over about 16 KB)
 // A connection error that isn't the connection going: a message too big, or sent a moment early.
 const harmless = (e) => e && (e.type === 'message-too-big' || e.type === 'not-open-yet');
+// Finding a way between two browsers (0.33): STUN servers tell a browser its public address (several, in
+// case one is down); TURN servers relay the game when two networks won't allow a direct line (PeerJS's own).
+const ICE = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+  { urls: 'stun:stun.cloudflare.com:3478' },
+  { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+];
 const rid = () => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -30,7 +37,7 @@ class P2PRoom {
   constructor(name, opts) {
     this.name = name;
     this.hubId = hubIdFor(name);
-    this.opts = { debug: 0, ...opts };
+    this.opts = { debug: 0, config: { iceServers: ICE, sdpSemantics: 'unified-plan' }, ...opts };
     this.me = rid();
     this.mine = Object.freeze({});
     this.others = new Map(); // player id -> { presence, seen }
@@ -44,7 +51,9 @@ class P2PRoom {
 
   // ------------------------------------------------------------------ the room interface
   async presence(patch) {
-    this.mine = Object.freeze({ ...this.mine, ...patch });
+    const next = { ...this.mine };
+    for (const [k, v] of Object.entries(patch)) if (v === null) delete next[k]; else next[k] = v; // (a null field goes, as in the claude.ai room)
+    this.mine = Object.freeze(next);
     const msg = { t: 'p', id: this.me, p: this.mine };
     if (this.isHub) this._broadcast(msg, null);
     else if (this.conn?.open) try { this.conn.send(msg); } catch { /* dropped: the next one follows */ }
@@ -66,13 +75,15 @@ class P2PRoom {
 
   // ------------------------------------------------------------------ connecting
   // Resolves once this player is in the room (as the hub or connected to it); rejects if the
-  // introduction server can't be reached at all.
-  async start(timeoutMs = 7000) {
+  // introduction server can't be reached (code 'p2p_server'), or the room's hub can't be (code 'p2p_host').
+  async start(timeoutMs = 20000) {
     const until = performance.now() + timeoutMs;
     while (!this.closed) {
       const r = await this._attempt();
       if (r === 'ok') return;
-      if (r === 'fatal' || performance.now() > until) throw Object.assign(new Error('peer-to-peer service unreachable'), { code: 'p2p_unreachable' });
+      if (r === 'fatal' || performance.now() > until) {
+        throw Object.assign(new Error(this.triedHub ? 'could not connect to the room\'s host' : 'the peer-to-peer service is unreachable'), { code: this.triedHub ? 'p2p_host' : 'p2p_server' });
+      }
       await wait(300 + Math.random() * 700);
     }
   }
@@ -121,9 +132,10 @@ class P2PRoom {
       });
       if (!ok) return 'fatal';
     }
+    this.triedHub = true;
     return new Promise((resolve) => {
       const c = this.client.connect(this.hubId, { reliable: false, serialization: 'json' });
-      const t = setTimeout(() => { c.close(); resolve('retry'); }, 5000);
+      const t = setTimeout(() => { c.close(); resolve('retry'); }, 8000); // (a line through a relay takes a few seconds)
       c.on('open', () => {
         clearTimeout(t);
         this.conn = c; this.missing = null; this.hubSeen = Date.now(); this._setOk(true);

@@ -116,7 +116,7 @@ export class HUD {
     const T = game.tide;
     let tt, urgent = false, ico = 'bubble', tip = 'Soap Tide';
     if (game.online && game.net) this._scoreboard(game);
-    if (game.online && game.net && !game.net.connected) { ico = 'online'; tt = 'Reconnecting'; urgent = true; tip = `Room ${game.net.roomName}`; }
+    if (game.online && game.net && !game.net.connected) { ico = 'online'; tt = game.net.lost ? 'Offline' : 'Reconnecting'; urgent = true; tip = `Room ${game.net.roomName}`; }
     else if (game.state === 'lobby') { ico = 'online'; tt = 'Joining'; tip = `Room ${game.net?.roomName || ''}`; }
     else if (game.mode === 'pots' && game.pots.active && game.state !== 'over') { tt = game.pots.pill(); ico = 'titan'; tip = 'Cooking Pot Wars'; }
     else if (game.state === 'over') { tt = 'Next round'; tip = 'The next round starts in a few seconds'; }

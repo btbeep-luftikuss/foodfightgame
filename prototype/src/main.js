@@ -296,7 +296,7 @@ function boot() {
     for (const el of document.querySelectorAll('.screen')) el.hidden = el.dataset.screen !== name;
     if (name === 'locker') openStage(); else { closeStage(); if (tryId) { tryId = null; renderLocker(); } }
     if (name === 'play') placeSettings(false);
-    if (name === 'online') placeSettings(true);
+    if (name === 'online') { placeSettings(true); onlineHelp(); }
     panel.scrollTop = 0;
     const focus = name === 'online' ? $('nick') : document.querySelector(`.screen[data-screen="${name}"] .back`) || $('play');
     requestAnimationFrame(() => focus?.focus({ preventScroll: true }));
@@ -616,29 +616,47 @@ function boot() {
 
   // Online: join a room code; everyone with the same code plays together.
   const status = $('online-status');
+  // (0.33) Where this page runs decides who can join: on claude.ai, people signed in whom the game is
+  // shared with (the claude.ai room); on the public game page, anyone with the link.
+  const onClaude = () => !!(window.claude && typeof window.claude.use === 'function');
+  const say = (cls, text, link) => {
+    status.className = cls; status.textContent = text;
+    if (link) { const a = document.createElement('a'); a.href = link; a.target = '_blank'; a.rel = 'noopener'; a.textContent = link.replace(/^https:\/\//, '').replace(/\/$/, ''); status.append(' ', a); }
+  };
+  const onlineHelp = () => {
+    const how = 'Everyone who types the same room code plays together, in rounds. After joining you pick your team, 3 foods and a utensil, or spectate.';
+    if (onClaude()) say('', `${how} Here on claude.ai, online play is for people signed in to claude.ai whom you have shared the game with. To play with anyone else, everyone opens the public game page:`, PUBLIC_URL);
+    else say('', `${how} To invite friends, send them this page's link and your room code; nobody needs to sign in.`);
+  };
   try { $('nick').value = localStorage.getItem('tt-nick') || ''; } catch { /* storage blocked */ }
   $('online').addEventListener('submit', async (e) => {
     e.preventDefault();
     sfx.unlock();
     const btn = $('online-join');
     btn.disabled = true;
-    status.className = ''; status.textContent = 'Connecting…';
+    say('', 'Connecting…');
+    const slow = setTimeout(() => { if (btn.disabled) say('', 'Still connecting… (finding the room can take up to half a minute)'); }, 4000);
     const lobby = await roomAvailable();
+    const code = cleanRoom($('roomcode').value);
     try {
       const net = new Net(game);
       const nick = $('nick').value || 'Titan';
       // what I'd host with (if the room has no host yet); joiners take the room's settings
-      await net.connect(lobby, cleanRoom($('roomcode').value), nick, { map: mapId, mode: selMode, team: teamSize, bots: onlineBots, loadout: chefPick.length === 3 ? [...chefPick] : null, utensil: chefUtensil || null });
+      await net.connect(lobby, code, nick, { map: mapId, mode: selMode, team: teamSize, bots: onlineBots, loadout: chefPick.length === 3 ? [...chefPick] : null, utensil: chefUtensil || null });
       try { localStorage.setItem('tt-nick', nick); } catch { /* storage blocked */ }
       game.startOnline(net);
-      status.textContent = '';
+      onlineHelp();
+      game.hud.toast(`Joined room "${code}"`);
       enterPlay(false);
       openLoadout(); // pick 3 foods and a utensil (or spectate)
     } catch (err) {
-      status.className = 'err';
-      if (err && err.code === 'offline') status.textContent = `Couldn't reach the online service from here (this network may block it). Try again, or open the public game page: ${PUBLIC_URL}`;
-      else status.textContent = `Couldn't join that room (${(err && (err.code || err.message)) || 'unknown error'}). Check the room code and try again.`;
-    } finally { btn.disabled = false; }
+      const why = err && err.code;
+      console.warn('[online] could not join:', why, err && err.message);
+      if (why === 'claude_room') say('err', 'This claude.ai page lets only people who are signed in to claude.ai, and whom the game is shared with, play online. Anyone can play together on the public game page:', PUBLIC_URL);
+      else if (why === 'p2p_server') say('err', "Couldn't reach the free matchmaking server (it may be busy, or this network blocks it). Wait a minute and try again.");
+      else if (why === 'p2p_host') say('err', `Found room "${code}" but couldn't link up with the player hosting it (some networks block direct links between players). Try again, or pick a new room code.`);
+      else say('err', `Couldn't join that room (${why || (err && err.message) || 'unknown error'}). Wait a moment and try again.`);
+    } finally { clearTimeout(slow); btn.disabled = false; }
   });
   $('spectate').addEventListener('click', () => { end.hidden = true; });
   $('resume').addEventListener('click', () => { pause.hidden = true; game.paused = false; if (!input.isTouch && !game.spectator.active) input.requestLock(true); });
