@@ -63,6 +63,13 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.32: steadier online rooms, for Cooking Pot Wars above all** (`src/p2p.js`, `src/net.js`, `src/potwars.js`)
+
+- **A room no longer breaks when the host's line to the introduction server hiccups.** Before, any error on that line after the room was up shut the host down completely, so everyone lost the room (long Cooking Pot Wars matches were the most likely to hit it). Now the host keeps every player and quietly reconnects to the server every few seconds so newcomers can join again.
+- **3 or more players:** a newcomer used to get everyone's state in one message, and with three or more players that could pass PeerJS's limit (about 16 KB) for one message, which dropped the newcomer. Now it's one message per player. Messages that would be too big drop their oldest throw events first (never the pot moves), and a "message too big" or "not open yet" warning no longer counts as a lost connection.
+- **Cooking Pot Wars: a player who joins after the setup** on a team of bots now gets their own pick of the 5 foods the pot spits out (it used to stay random).
+- Tests: Cooking Pot Wars over the real peer-to-peer rooms (a local PeerJS server, separate browser profiles): pots placed, smashed, carried home, turret shots and menus agree; 5 players in one room, with the host losing the introduction server mid-game and a fifth player joining after.
+
 **Version 0.31: ultimate alts for every food, and a third map: the restaurant** (`src/abilities.js`, `src/foods.js`, `src/actors.js`, `src/items.js`, `src/bots.js`, `src/map-restaurant.js`, `src/hud.js`, `src/net.js`)
 
 - **Every food's alt (Q, F or right click) is now a big power move**, with a call-out under the crosshair, a coloured flash, a camera kick, hit-stop on big hits, shockwave rings, new sounds and particles. The HUD shows each alt's cooldown in seconds, and a chime says when it's back.

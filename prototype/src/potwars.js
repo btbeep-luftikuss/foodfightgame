@@ -126,15 +126,20 @@ export class PotWars {
   // The 5 foods a team's pot spits out: its players' picks, by vote (first picks count a little
   // more); a team of bots (or too few picks) gets the rest at random.
   _menuFor(team) {
-    const g = this.game, picks = [];
-    if (g.player?.team === team && (!g.online || g.net?.ready)) picks.push(g.potMenu);
-    if (g.online) for (const pr of g.net.proxies.values()) if (pr.ready && pr.actor.team === team) picks.push(pr.potMenu);
+    const picks = this._picks(team);
     const votes = new Map();
     for (const list of picks) (list || []).forEach((id, i) => { if (FOOD_IDS.includes(id)) votes.set(id, (votes.get(id) || 0) + 10 - i * 0.1); });
     const menu = [...votes.entries()].sort((x, y) => y[1] - x[1]).map((e) => e[0]).slice(0, 5);
     const rest = FOOD_IDS.filter((id) => !menu.includes(id)).sort(() => Math.random() - 0.5);
     while (menu.length < 5) menu.push(rest.pop());
     return menu;
+  }
+  // The pot-menu picks of a team's players.
+  _picks(team) {
+    const g = this.game, picks = [];
+    if (g.player?.team === team && (!g.online || g.net?.ready)) picks.push(g.potMenu);
+    if (g.online) for (const pr of g.net.proxies.values()) if (pr.ready && pr.actor.team === team && pr.potMenu?.length) picks.push(pr.potMenu);
+    return picks;
   }
   home(t) { return teamHome(this.game.world, this.pots.length, t); }
 
@@ -450,7 +455,13 @@ export class PotWars {
   update(dt) {
     if (!this.active) return;
     const g = this.game, now = g.time;
-    if (this.auth && this.setup && now >= this.menuAt) { this.menuAt = now + 0.5; for (const p of this.pots) p.menu = this._menuFor(p.team); } // the team can still change its mind
+    if (this.auth && now >= this.menuAt) {
+      this.menuAt = now + 0.5;
+      for (const p of this.pots) {
+        if (this.setup) { p.menu = this._menuFor(p.team); p.voted = this._picks(p.team).length > 0; } // the team can still change its mind
+        else if (!p.voted && this._picks(p.team).length) { p.menu = this._menuFor(p.team); p.voted = true; } // (0.32) a player who joins a team of bots later gets their pick
+      }
+    }
     if (this.auth && this.setup && now >= this.setupUntil) {
       this.setup = false;
       for (const p of this.pots) {

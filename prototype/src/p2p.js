@@ -20,7 +20,9 @@ const PREFIX = 'tinytitans-foodfight-v1-';
 const hubIdFor = (name) => PREFIX + String(name).toLowerCase().replace(/[^a-z0-9]/g, (c) => ({ '.': 'D', '_': 'U', '-': 'H' }[c] || ''));
 const STALE_MS = 5000;     // a player not heard from in this long has gone
 const HUB_LOST_MS = 3500;  // the hub (or a player's line to it) silent this long: it's gone (a closed tab doesn't always say so)
-const MAX_BYTES = 48000;   // one presence message
+const MAX_BYTES = 15500;   // one message (PeerJS refuses JSON messages over about 16 KB)
+// A connection error that isn't the connection going: a message too big, or sent a moment early.
+const harmless = (e) => e && (e.type === 'message-too-big' || e.type === 'not-open-yet');
 const rid = () => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -86,7 +88,10 @@ class P2PRoom {
       const done = (v) => { clearTimeout(t); resolve(v); };
       const t = setTimeout(() => { p.destroy(); done('fatal'); }, 6000);
       p.on('open', () => { this.hub = p; done('ok'); });
-      p.on('error', (e) => { p.destroy(); done(e.type === 'unavailable-id' ? 'taken' : 'fatal'); });
+      p.on('error', (e) => {
+        if (this.hub === p) return; // (0.32) once we're the hub, a hiccup with the introduction server must not end the room
+        p.destroy(); done(e.type === 'unavailable-id' ? 'taken' : 'fatal');
+      });
     });
     if (asHub === 'ok') { this._becomeHub(); return 'ok'; }
     if (asHub === 'fatal') return 'fatal';
@@ -95,8 +100,14 @@ class P2PRoom {
   _becomeHub() {
     this.isHub = true; this.client?.destroy(); this.client = null; this.conn = null;
     this.hub.on('connection', (c) => this._accept(c));
-    this.hub.on('disconnected', () => { if (!this.closed) this.hub.reconnect(); }); // lost the introduction server: keep the players, take new ones again when it's back
+    this.hub.on('disconnected', () => this._rejoinServer()); // lost the introduction server: keep the players, take new ones again when it's back
     this._setOk(true);
+  }
+  _rejoinServer() {
+    const h = this.hub;
+    if (this.closed || !h || h.destroyed || !h.disconnected || Date.now() < (this.rejoinAt || 0)) return;
+    this.rejoinAt = Date.now() + 4000;
+    try { h.reconnect(); } catch { /* try again on the next sweep */ }
   }
   async _joinHub() {
     if (!this.client || this.client.destroyed) {
@@ -121,7 +132,7 @@ class P2PRoom {
       });
       c.on('data', (m) => this._fromHub(m));
       c.on('close', () => this._hubGone(c));
-      c.on('error', () => this._hubGone(c));
+      c.on('error', (e) => { if (!harmless(e)) this._hubGone(c); });
       this.missing = () => { clearTimeout(t); this.missing = null; resolve('retry'); };
     });
   }
@@ -155,9 +166,10 @@ class P2PRoom {
   // (hub) a player connects: tell them about everyone, then pass on what they send.
   _accept(c) {
     c.on('open', () => {
-      const all = [{ t: 'p', id: this.me, p: this.mine }];
-      for (const [id, v] of this.others) all.push({ t: 'p', id, p: v.presence });
-      try { c.send(all); } catch { /* they'll hear the next round */ }
+      // everyone in the room so far, one message each (all in one could pass the size limit)
+      const send = (m) => { try { if (JSON.stringify(m).length <= MAX_BYTES) c.send(m); } catch { /* they'll hear the next round */ } };
+      send({ t: 'p', id: this.me, p: this.mine });
+      for (const [id, v] of this.others) send({ t: 'p', id, p: v.presence });
     });
     this.heard.set(c, Date.now());
     c.on('data', (m) => {
@@ -176,7 +188,7 @@ class P2PRoom {
       this.links.delete(c); this.heard.delete(c);
       if (id && this.others.delete(id)) { this._changed(); this._broadcast({ t: 'bye', id }, null); }
     };
-    c.on('close', c.gone); c.on('error', c.gone);
+    c.on('close', c.gone); c.on('error', (e) => { if (!harmless(e)) c.gone(); });
   }
   _broadcast(m, except) {
     for (const c of this.heard.keys()) if (c !== except && c.open) try { c.send(m); } catch { /* a slow line drops one */ }
@@ -184,6 +196,7 @@ class P2PRoom {
   _sweep() {
     const now = Date.now();
     if (this.isHub) {
+      this._rejoinServer();
       this._broadcast({ t: 'k' }, null);
       for (const [c, t] of this.heard) if (now - t > STALE_MS) { c.gone(); try { c.close(); } catch { /* already */ } }
     } else if (this.conn) {

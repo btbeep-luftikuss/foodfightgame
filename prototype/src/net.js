@@ -248,6 +248,14 @@ export class Net {
       msg.rd = [Math.max(0, R.id), STATES.includes(R.state) ? R.state : 'drop', r2(T.x), r2(T.z), r2(T.r), T.phase, T.mode, r2(Math.max(0, T.t)), R.winner || '', r2(R.t), r2(to.x), r2(to.z), r2(to.r), R.fresh ? 1 : 0];
       msg.b = this._localBots().map((a) => [a.id, a.name, a.color, a.skinId, ...this._stateOf(a, Math.asin(clamp(a.aimDir.y, -1, 1)))]);
     }
+    // (0.32) stay under the connection's message limit (about 16 KB): in a storm of throws, the oldest
+    // events go first (pot moves are kept: they must not be missed)
+    for (let k = 0; k < 6 && msg.e.length && JSON.stringify(msg).length > 14000; k++) {
+      const keep = msg.e.filter((e) => POT_EVENTS.has(e[1]));
+      const rest = msg.e.filter((e) => !POT_EVENTS.has(e[1]));
+      rest.splice(0, Math.ceil(rest.length / 3) || rest.length);
+      msg.e = [...keep, ...rest].sort((a, b) => a[0] - b[0]);
+    }
     this.room.presence(msg).catch(() => {});
   }
   _stateOf(p, pitch) {
