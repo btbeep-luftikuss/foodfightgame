@@ -78,7 +78,7 @@ export const UTENSILS = [
   { id: 'oven-mitt', tip: 'Power throw ready', peelTip: 'Hurls your peel far ahead', name: 'Oven Mitt', role: 'Power Throw', color: '#ff6f6f', works: WITH_PEEL,
     buff: 'Hurls your food 70% faster and further, straight through cheese shields. It can even throw a peel trap 18 m.', trade: 'Only every 3.5 s, and quick throws overheat it for 6 s.' },
   { id: 'pan', tip: 'Q: slam to fire the alt', name: 'Pan', role: 'Alt-Ability Activator', color: '#a49bc4', works: WITH_PEEL,
-    buff: "Your food's alt ability (Q) ignores its cooldown and slams a shockwave around you. Foods without an alt get one: smash a melon, plant pineapple spikes, fire a ring of berries.", trade: 'The Pan has its own 7 s cooldown, and the slam roots you for a moment.' },
+    buff: "Your food's alt ability (Q) ignores its cooldown and slams a shockwave around you.", trade: 'The Pan has its own 7 s cooldown, and the slam roots you for a moment.' },
 ];
 export const UTENSIL_BY_ID = Object.fromEntries(UTENSILS.map((u) => [u.id, u]));
 export const UTENSIL_IDS = UTENSILS.map((u) => u.id);
@@ -479,35 +479,6 @@ const RULES = {
     },
   },
   pan: {},
-};
-
-// The Pan gives foods without an alt ability one of their own.
-const PAN_SPECIAL = {
-  watermelon(a, g) { // smash it at your feet: chunks fly everywhere
-    const f = forwardOf(a.yaw, new THREE.Vector3());
-    FOODS.watermelon.split({ pos: a.pos.clone().addScaledVector(f, 2).setY(a.pos.y + 0.9), owner: a }, g);
-    a.consume(1);
-  },
-  pineapple(a, g) { // plant a spike field just ahead
-    const f = forwardOf(a.yaw, new THREE.Vector3());
-    const pt = a.pos.clone().addScaledVector(f, 6);
-    pt.y = groundHeight(pt.x, pt.z, a.pos.y + 1);
-    g.explode(pt, 3, 30, a, 'pineapple', 7);
-    g.addSpikeField(pt, 3.5, 4, 8, a);
-    g.fx.burst('pine', pt);
-    a.consume(1);
-  },
-  blueberry(a, g) { // a ring of berries in every direction
-    const slot = a.selected();
-    const n = slot.inf ? 16 : Math.min(16, slot.count);
-    const from = a.center(new THREE.Vector3());
-    for (let i = 0; i < n; i++) {
-      const ang = (i / n) * Math.PI * 2;
-      g.projectiles.launch({ food: 'berry', owner: a, pos: from.clone(), vel: new THREE.Vector3(Math.cos(ang) * 60, 1, Math.sin(ang) * 60), gravity: 0.25, radius: 0.13, life: 1.5, spin: 12 });
-    }
-    a.consume(n);
-    g.sfx.play('berry', a.pos, 1);
-  },
 };
 
 // ---------------------------------------------------------------------------- delivery boxes
@@ -1064,8 +1035,7 @@ export class Utensils {
       if (a.shieldUp) return false; // lowering the shield works as usual
       a.shieldUp = true; a.shieldBrokenUntil = 0; // up at once, tired or not
       g.sfx.play('shield', a.pos, 0.8);
-    } else if (PAN_SPECIAL[slot.id]) PAN_SPECIAL[slot.id](a, g, this);
-    else if (food.alt) {
+    } else if (food.alt) { // (0.31: every food has an alt now, so the Pan's specials went)
       if (food.alt(a, g) === false) return true;
     }
     s.cdUntil = t + 7;
@@ -1083,7 +1053,7 @@ export class Utensils {
     g.fx.spray('blobs', _v.copy(a.pos).setY(a.pos.y + 0.2), 14, { speed: 9, up: 1, colors: [col('#a49bc4'), col('#fff6a8')], size: 0.1, life: 0.4 });
     g.sfx.play('thud', a.pos, 1.4); g.sfx.play('boom', a.pos, 0.4);
     g.fx.shake(a === g.player ? 0.25 : 0);
-    if (a === g.player) g.hud.toast(`Pan slam! ${PAN_SPECIAL[slot.id] ? 'Special fired' : `${food.altName || 'Alt'} fired`}`);
+    if (a === g.player) g.hud.toast(`Pan slam! ${food.altName || 'Alt'} fired`);
     return true;
   }
 

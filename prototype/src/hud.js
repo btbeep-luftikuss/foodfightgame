@@ -10,8 +10,11 @@ const $ = (id) => document.getElementById(id);
 const _p = new THREE.Vector3(), _e = new THREE.Vector3();
 
 // Short names for the food alt actions: the hint line, and an even shorter one for the phone Alt button.
-const ALT_SHORT = { cheese: 'Shield', grapes: 'Eat', banana: 'Eat', jelly: 'Bounce pad' };
-const ALT_BUTTON = { tomato: 'Bounce', carrot: 'Vault', ice: 'Chill', soda: 'Fizz jump', chili: 'Hot feet', cookie: 'Rush', jelly: 'Pad' };
+const ALT_SHORT = { cheese: 'Shield', banana: 'Eat', jelly: 'Jump Pad' };
+const ALT_BUTTON = {
+  tomato: 'Dash', carrot: 'Teleport', ice: 'Storm', soda: 'Mega jump', chili: 'Flames', cookie: 'Rush', jelly: 'Pad',
+  grapes: 'Juice', watermelon: 'Smash', pineapple: 'Spikes', blueberry: 'Spiral',
+};
 const altShort = (id, food) => ALT_SHORT[id] || food.altName || (food.altLabel || '').split(':')[0];
 
 export class HUD {
@@ -153,10 +156,13 @@ export class HUD {
       const touch = this.input.isTouch;
       { // one short line over the plates: the food, its alt key, and the utensil only when it needs attention
         let hint = '';
+        const cd = food && food.alt && a.utensil !== 'pan' ? Math.ceil((a.altReadyAt[slot.id] || 0) - game.time) : 0;
         if (food) {
           const alt = a.utensil === 'pan' ? 'Slam' : food.alt ? altShort(slot.id, food) : '';
-          hint = `<b>${food.name}</b>` + (alt ? `<span class="alt"><kbd>Q</kbd>${alt}</span>` : '');
+          hint = `<b>${food.name}</b>` + (alt ? `<span class="alt${cd > 0 ? ' cd' : ''}"><kbd>Q</kbd>${alt}${cd > 0 ? `<i>${cd} s</i>` : ''}</span>` : '');
         } else hint = 'Walk over food to pick it up';
+        if (this.altCd > 0 && cd <= 0 && this.altCdId === slot?.id) this.sfx?.play('ready'); // the alt is back
+        this.altCd = cd; this.altCdId = slot?.id;
         if (ub) hint += `<span class="ub${ub.warn ? ' warn' : ''}" style="--uc:${UTENSIL_BY_ID[a.utensil].color}">${UTENSIL_BY_ID[a.utensil].name}: ${ub.text}</span>`;
         if (hint !== this.lastHint) { $('hint').innerHTML = hint; this.lastHint = hint; }
       }
@@ -169,9 +175,11 @@ export class HUD {
           if (hid && this.icons[hid]) fi.src = this.icons[hid]; else fi.removeAttribute('src');
           $('tFireLabel').textContent = !food ? 'Throw' : food.auto ? 'Hold: fire' : food.charge > 0 ? 'Hold: charge' : 'Tap: throw';
         }
-        const altTxt = a.utensil === 'pan' && food ? 'Slam' : food && food.alt ? ALT_BUTTON[slot.id] || altShort(slot.id, food) : 'Alt';
+        const altCd = food && food.alt && a.utensil !== 'pan' ? Math.ceil((a.altReadyAt[slot.id] || 0) - game.time) : 0;
+        const altTxt = (a.utensil === 'pan' && food ? 'Slam' : food && food.alt ? ALT_BUTTON[slot.id] || altShort(slot.id, food) : 'Alt') + (altCd > 0 ? ` ${altCd}` : '');
         const tAlt = $('tAlt');
         if (tAlt.textContent !== altTxt) tAlt.textContent = altTxt;
+        tAlt.classList.toggle('cd', altCd > 0);
         const br = $('ubrief');
         const bt = ub ? ub.text : '';
         if (br.textContent !== bt) br.textContent = bt;
@@ -191,9 +199,11 @@ export class HUD {
       // crosshair and charge ring
       const ch = $('crosshair');
       ch.dataset.profile = food ? food.profile : 'none';
-      const c = a.charging && food ? Math.min(1, a.chargeT / Math.max(0.01, a.chargeLen || food.charge)) : 0;
+      const chan = a.channel; // a teleport winding up fills the ring in purple
+      const c = chan ? Math.min(1, chan.t / chan.need) : a.charging && food ? Math.min(1, a.chargeT / Math.max(0.01, a.chargeLen || food.charge)) : 0;
       $('chargeRing').style.strokeDashoffset = String(176 * (1 - c));
-      ch.classList.toggle('charging', a.charging);
+      ch.classList.toggle('charging', a.charging || !!chan);
+      ch.classList.toggle('channel', !!chan);
       ch.classList.toggle('full', c >= 1);
       ch.classList.toggle('cooldown', game.time < a.recoverUntil || game.time < a.swapLockUntil);
 
@@ -333,6 +343,21 @@ export class HUD {
     f.el.textContent = text;
     f.pos.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * 0.6, 0, (Math.random() - 0.5) * 0.6));
     f.life = 0.9;
+  }
+
+  // Ultimate alts (0.31): a coloured flash round the screen edge and the move's name under the crosshair.
+  ultFlash(color) {
+    const el = $('ultflash');
+    if (!el) return;
+    el.style.setProperty('--uc', color || '#ffd447');
+    el.classList.remove('on'); void el.offsetWidth; el.classList.add('on'); // restart the animation
+  }
+  ultCall(text, color) {
+    const el = $('ultcall');
+    if (!el) return;
+    el.textContent = text;
+    el.style.setProperty('--uc', color || '#ffd447');
+    el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
   }
 
   hitmarker(head, kill) {

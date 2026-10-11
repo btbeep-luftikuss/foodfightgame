@@ -63,6 +63,27 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.31: ultimate alts for every food, and a third map: the restaurant** (`src/abilities.js`, `src/foods.js`, `src/actors.js`, `src/items.js`, `src/bots.js`, `src/map-restaurant.js`, `src/hud.js`, `src/net.js`)
+
+- **Every food's alt (Q, F or right click) is now a big power move**, with a call-out under the crosshair, a coloured flash, a camera kick, hit-stop on big hits, shockwave rings, new sounds and particles. The HUD shows each alt's cooldown in seconds, and a chime says when it's back.
+  - **Tomato: Dash.** A tackle for half a dash's stamina (15). Slam into a Titan or a wall and a second tomato bursts in a big splat (up to 48 damage, knockback, a slippery puddle). No second tomato: just a bump. 3 s.
+  - **Ice Cube: Ice Storm.** Throws a ball of 3 ice cubes; where it lands a whirlwind (10 m) pulls every enemy toward its eye, spins them, slows them 35% and nibbles at them for about 4 s. 8 s.
+  - **Watermelon: Smash.** In mid-air, slam down. The higher you fall from, the bigger the hit: 26 damage in 4 m from a short hop, up to 100 damage in 16 m from very high (Mega Jump first, then Smash). 3 s.
+  - **Soda Can: Mega Jump.** From the ground only: a geyser launches you about 23 m up and blasts everyone within 6.5 m (up to 34 damage, thrown upward), leaving a sticky soda puddle. 5 s.
+  - **Grapes: Juice Ball.** A giant ball of juice; it splats into a 6.5 m purple puddle that slows everyone in it by 45% for 8 s. (Grapes can't be eaten any more; bananas still heal.) 4 s.
+  - **Pineapple: Spike Line.** Up to 15 giant spikes burst up one after another along the ground ahead (about 23 m); a spike that comes up under a Titan deals 24 and throws them back; the spikes then hurt and slow whoever touches them for about 3 s. 6 s.
+  - **Jelly Cube: Jump Pad.** Bounces you about 22 m up (it was 12), keeps your run-up, and has a durability meter: 6 bounces, then it bursts. 45 s, 2 per player. 2 s.
+  - **Carrot: Teleport.** Uses 3 carrots. A 1.4 s wind-up (purple ring; you move at half speed); any hit cancels it and you keep the carrots. Then a slow, glowing carrot flies (42 m/s against a carrot's 210) and you warp to wherever it lands. 6 s (2 s after a cancelled one).
+  - **Blueberries: Berry Spiral.** Uses 30 berries: for 2 s, three arms of berries spiral out in every direction (120 berries). 7 s.
+  - **Chili Pepper: Flamethrower.** About 1.8 s of flames in a short cone (7.5 m): 45 damage a second and burning; flames stay on the ground for 5 s and burn whoever walks through them. 7 s.
+  - **Throwing a chili** now has a 3 in 10 chance to set you on fire too (water puts it out).
+  - Banana (eat), Cheese (shield) and Cookie (Sugar Rush) keep their alts. The Pan now fires any food's new alt without its cooldown (its old specials for melons, pineapples and berries are gone).
+- **Bots use the alts**: tackles at short range, storms and juice balls at mid range, smashes from a jump, mega jumps and flamethrowers up close, spirals when crowded, spike lines down a lane, jump pads to reach enemies up high, and teleports into the safe zone or away when nearly out.
+- **Online:** a Titan's ability moves it on its own game; the area part (a splat, a shockwave, a whirlwind, spikes, a spiral, flames) goes out as an `ab` event and every game applies it to its own Titans, like every other hit. The thrown ability foods are ordinary throws. Jump-pad bounces (`jb`) wear the pads down on every game.
+- **New map: Chez Titan, the Restaurant** (`src/map-restaurant.js`): a candle-lit dining room in the same frame as the kitchen. A long skirted buffet in the middle (the main high ground) with chafing dishes, a three-tier wedding cake to climb, a punch bowl that gets you Wet, a carving station with a hot warming plate and the Giant Tomato; the bar along the back wall with beer taps, an ice bucket (Wet on top), a mirror, shelves of bottles, a neon sign and tall stools; the open kitchen pass with a flat-top griddle that heats up like the stove, a deep fryer and plates under heat lamps; four round tables with chairs, three red leather booths, and a stage with a grand piano to stand on or hide under. On the floor: a meatball, a champagne bottle on its side, a croissant, a slippery spill of wine, a tipped-over mop bucket, a fork, a roll and a cork. 17 launch pads, 68 food spawns. Pick it under Map (vs bots or for an online room).
+- **Physics fixes (every map):** falling fast (at lower frame rates, or in a Melon Smash) could pass through a ledge's top and push you off its side instead of landing; now you land. Launch pads now carry you along their whole arc to where they aim (steering in mid-air used to bleed the speed off, so the long backyard pads fell short).
+- Tests: every alt offline (damage, costs, cooldowns, interruptions), the area alts hurting another player's Titan on their own game (mock room), jump-pad meters agreeing across games, all launch pads on all three maps (walking and sprinting), 100 s bot matches on the restaurant in Classic and Chef's Choice (bots used 10 different alts), an online room on the restaurant, and the earlier tests (coins, Cooking Pot Wars, Duos online).
+
 **Version 0.30: coins and the first skin pack** (`src/coins.js`, `src/skins.js`, `src/main.js`, `src/game.js`, `index.html`)
 
 - **Coins.** Every match vs bots, and every online round you play, pays coins: 10 for playing, 15 per splat, 4 for each Titan you outlast (up to 44) and 60 for a win. The end card shows the receipt; online, a banner shows it after the round. New players start with 500 (enough for a first skin). The wallet is kept on this device, like the chosen skin.
@@ -296,7 +317,8 @@ npm run dev          # http://localhost:5173
 |---|---|
 | `src/core.js` | Constants, collision (boxes and cylinders), ground queries, raycasts, lob solver |
 | `src/world.js` | The kitchen, countertop props, giant foods and fallen chairs, hazards, launch pads, landmark tomato, Soap Tide wall |
-| `src/foods.js` | All food data and behaviour: meshes, throw, impact, alt actions |
+| `src/foods.js` | All food data and behaviour: meshes, throw, impact, alt actions (and the ability foods: the storm ball, the juice ball, the teleport carrot) |
+| `src/abilities.js` | The ultimate alts: dashes, whirlwinds, smashes, mega jumps, juice puddles, spike lines, teleports, berry spirals, flamethrowers and ground fires; shockwave rings and call-outs; their online events |
 | `src/actors.js` | Titans: movement, statuses, diminishing returns, inventory; drives the rig each frame |
 | `src/human.js` | The human model: lofted, skinned body and face, hair and beards, palette shader, skeleton posing, first-person arm |
 | `src/skins.js` | Skins: rarity, clothing palettes, costume pieces on the head, chest and hip bones; skin packs |
@@ -305,6 +327,7 @@ npm run dev          # http://localhost:5173
 | `src/net.js`, `src/viewmodel.js` | Online rooms (hosting, shared rounds and bots); first-person arm and held food |
 | `src/p2p.js` | Public peer-to-peer rooms (PeerJS): a hub per room code, hand-over when the hub leaves |
 | `src/map-backyard.js` | The Backyard BBQ map |
+| `src/map-restaurant.js` | Chez Titan, the Restaurant map |
 | `src/projectiles.js` | Projectile flight, boomerang steering, rolling, hit detection (body capsule and head) |
 | `src/items.js` | Pickups and spawners, peel traps, stuck carrots |
 | `src/utensils.js`, `src/utensil-models.js`, `src/utensil-art.js` | The 20 support utensils: throw rewrites for every food, impact effects, zones, delivery boxes, loose utensils; their 3D models; the flat design-sheet art (generated by `docs/utensils/build.mjs`, used only if the 3D icons can't be rendered) |

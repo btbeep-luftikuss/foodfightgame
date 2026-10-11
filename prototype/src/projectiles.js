@@ -53,7 +53,7 @@ export class Projectiles {
     const food = FOODS[o.food];
     // Cooking Pot Wars: thrown from your team's pot, its turret fires it, harder and faster (online,
     // the shot goes out as fired, with its power)
-    const tur = !o.remote && this.game.pots?.turretFor(o.owner);
+    const tur = !o.remote && !o.local && this.game.pots?.turretFor(o.owner);
     if (tur) {
       const speed = o.vel.length() * tur.speed;
       const vel = food.profile === 'lob' || food.profile === 'roll' ? o.vel.clone().multiplyScalar(tur.speed)
@@ -116,6 +116,8 @@ export class Projectiles {
       if (this._collide(p, food)) return this._end(p);
       if (p.attached || p.stuck) break;
     }
+
+    if (food.fly) food.fly(p, game, dt); // trails (the ability foods)
 
     // visuals
     const m = p.mesh;

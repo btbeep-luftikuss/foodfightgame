@@ -25,6 +25,10 @@
 // Titan's state also carries what it carries (foods and utensils, as short codes), so someone
 // spectating can see a player's items.
 //
+// Ultimate alts (0.31): a Titan's ability moves it on its own game; its area effect (a splat, a
+// shockwave, spikes, a berry spiral, flames) goes out as an 'ab' event and every game applies it to its
+// own Titans. Jump-pad bounces ('jb') wear the pad down on every game.
+//
 // Teams and Cooking Pot Wars (0.26): the room settings carry the mode and the team size; every
 // Titan's state carries its team and the pot on its back. Players pick their team (state), the host
 // fills the rest with bots. In Cooking Pot Wars the host owns the pots and shares them (pw); players
@@ -44,7 +48,7 @@ const SEND_EVERY = 1 / 30;
 const LOG_KEEP = 0.7;   // seconds an event stays in the rolling log
 const LOG_MAX = 90;
 const POT_EVENTS = new Set(['pp', 'lh', 'pc', 'ps']);
-const MAPS_OK = ['kitchen', 'backyard'], BOTS_OK = ['off', 'easy', 'medium', 'hard'];
+const MAPS_OK = ['kitchen', 'backyard', 'restaurant'], BOTS_OK = ['off', 'easy', 'medium', 'hard'];
 const MODES_OK = ['classic', 'chef', 'pots'];
 const cleanRS = (rs) => { // eslint-disable-line arrow-body-style
   if (!rs || typeof rs !== 'object') return null;
@@ -516,6 +520,12 @@ export class Net {
       else game.pots.remoteCapture(a, num(d[0], 0, TEAMS.length - 1) | 0);
     } else if (type === 'ps') { // the host: who smashed a pot
       if (peer === this.hostPeer && game.pots.active) game.pots.remoteSmash(num(d[0], 0, TEAMS.length - 1) | 0, typeof d[1] === 'string' ? this._actorOf(d[1]) : null);
+    } else if (type === 'ab') { // an ultimate alt (0.31): its area effect runs here too, on my Titans
+      if (d[2] !== undefined) { a = botOf(d[2]); if (!a) return; }
+      if (typeof d[0] !== 'string' || d[0].length > 3) return;
+      game.abilities.remote(a, d[0], Array.isArray(d[1]) ? d[1].slice(0, 6) : []);
+    } else if (type === 'jb') { // someone bounced on a jelly jump pad (wears it down)
+      game.items.remoteBounce(new THREE.Vector3(num(d[0], -300, 300), num(d[1], -40, 120), num(d[2], -300, 300)));
     } else if (type === 'd') { // this player was knocked out
       const killer = typeof d[0] === 'string' ? this._actorOf(d[0]) : null;
       const food = typeof d[1] === 'string' ? d[1] : '';

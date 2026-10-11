@@ -2,7 +2,7 @@
 // GDD sections 4-5 (hard-CC diminishing returns, 50% slow cap, Wet cleansing, Glaze shield).
 import * as THREE from 'three';
 import {
-  G, FLOOR_Y, clamp, rand, damp, angleLerp, forwardOf, rightOf,
+  G, FLOOR_Y, STEP, clamp, rand, damp, angleLerp, forwardOf, rightOf,
   groundHeight, resolveHorizontal,
 } from './core.js';
 import { FOODS, makeFoodMesh } from './foods.js';
@@ -51,6 +51,7 @@ export class Actor {
     this.id = id; this.name = name; this.color = color; this.isBot = isBot;
     this.pos = new THREE.Vector3(); this.vel = new THREE.Vector3();
     this.aimDir = new THREE.Vector3(0, 0, -1); this.aimPoint = new THREE.Vector3();
+    this.extVel = new THREE.Vector3(); // pushed along by the world (an Ice Storm's pull), applied once per step
     this._buildMesh();
     this.reset();
   }
@@ -73,6 +74,8 @@ export class Actor {
     this.fallTop = 0; this.armT = 0; this.squash = 0; this.walkPhase = 0; this.hitFlash = 0;
     this.placement = 0; this.altReadyAt = {}; this.speedBoostUntil = 0; this.shieldBrokenUntil = 0;
     Utensils.emptyKit(this); this.uRel = null; this.chargeLen = 0; this.releaseQueued = false;
+    this.tdash = null; this.smash = null; this.channel = null; this.extVel.set(0, 0, 0); this.tpAim = null; // ultimate alts (abilities.js)
+    this.padUntil = 0; // flying a launch pad's arc
     this.root.visible = true;
     this._refreshHeld();
   }
@@ -394,13 +397,14 @@ export class Actor {
     if (now < this.speedBoostUntil) speed *= 1.35; // Hot Feet
     if (this.shieldUp) speed *= 0.75;
     else if (this.heavy()) speed *= 0.85; // lugging a watermelon
-    if (this.eat) speed *= 0.5;
+    if (this.eat || this.channel) speed *= 0.5; // eating, or winding up a teleport
     if (this.charging && this.selected()?.id === 'carrot') speed *= 0.6;
     if (this.charging && this.chargeRule?.slow && this.chargeT > 0.25) speed *= this.chargeRule.slow; // Blow Torch: exposed while it heats up
     let accel = this.onGround ? 55 : 10;
     if (this.onSlick) { accel = 5; speed *= 1.3; }
     if (this.gliding) accel = 14;
     if (now < this.knockUntil) accel = Math.min(accel, 3);
+    if (now < this.padUntil) accel = 0; // (0.31) riding a launch pad's arc all the way to where it aims
 
     const wx = control ? it.moveX * speed : 0, wz = control ? it.moveZ * speed : 0;
     let dx = wx - this.vel.x, dz = wz - this.vel.z;
@@ -448,13 +452,19 @@ export class Actor {
 
     const prevY = this.pos.y;
     this.pos.addScaledVector(this.vel, dt);
-    const n = resolveHorizontal(this.pos, RADIUS, HEIGHT);
-    if (n) { const d = this.vel.x * n.x + this.vel.z * n.z; if (d < 0) { this.vel.x -= n.x * d; this.vel.z -= n.z * d; } }
+    this.pos.addScaledVector(this.extVel, dt); this.extVel.set(0, 0, 0);
+    // (0.31) falling fast, a step can pass right through a ledge's top: land on it, don't get shoved off its side
+    const n = resolveHorizontal(this.pos, RADIUS, HEIGHT, STEP + Math.max(0, prevY - this.pos.y));
+    if (n) {
+      const d = this.vel.x * n.x + this.vel.z * n.z;
+      if (this.tdash && d < -14) g.abilities.tomatoImpact(this, null, n); // a Tomato Dash into a wall: splat
+      else if (d < 0) { this.vel.x -= n.x * d; this.vel.z -= n.z * d; }
+    }
 
     const gh = groundHeight(this.pos.x, this.pos.z, Math.max(prevY, this.pos.y));
     if (this.pos.y <= gh) {
-      if (!this.onGround) this._land(this.fallTop - gh);
-      this.pos.y = gh; this.vel.y = Math.max(0, this.vel.y); this.onGround = true;
+      if (!this.onGround) this._land(this.fallTop - gh, gh);
+      this.pos.y = gh; this.vel.y = Math.max(0, this.vel.y); this.onGround = true; this.padUntil = 0;
     } else if (this.onGround && this.pos.y - gh < 0.4 && this.vel.y <= 0) {
       this.pos.y = gh; this.vel.y = 0;
     } else {
@@ -466,6 +476,7 @@ export class Actor {
       for (const p of W.pads) {
         if (Math.hypot(this.pos.x - p.x, this.pos.z - p.z) < 3.4) {
           this.vel.copy(W.launchVelocity(p, this.pos));
+          this.padUntil = now + Math.hypot(p.target.x - this.pos.x, p.target.z - this.pos.z) / Math.max(0.5, Math.hypot(this.vel.x, this.vel.z));
           this.onGround = false; this.knockUntil = now + 2.5; p.pulse = 1;
           g.sfx.play('boing', this.pos, 1.2);
           g.fx.burst('dust', this.pos);
@@ -484,9 +495,10 @@ export class Actor {
     this._items(dt, it);
   }
 
-  _land(fall) {
+  _land(fall, gy) {
     const g = this.game;
     this.gliding = false;
+    if (this.smash) { g.abilities.smashLand(this, gy); return; } // Melon Smash: no stun, just the shockwave
     if (fall > 6) { this.squash = Math.min(1, fall / 25); g.fx.burst('dust', this.pos, Math.min(2, fall / 15)); }
     if (fall > 40) { this.stunUntil = g.time + 0.6; g.sfx.play('thud', this.pos); } // splat landing (no fall damage)
   }
@@ -515,6 +527,7 @@ export class Actor {
     }
     const ready = this.canControl() && now >= this.recoverUntil && now >= this.swapLockUntil;
     if (!food || !this.canControl()) { this.charging = false; this.primaryPrev = it.primary; return; }
+    if (this.channel) { this.charging = false; this.primaryPrev = it.primary; return; } // winding up a teleport: hands busy
     if (it.alt && ready && !g.utensils.panAlt(this, food, slot) && food.alt) { // the Pan fires the alt on its own cooldown
       const readyAt = food.altCd ? this.altReadyAt[slot.id] || 0 : 0;
       if (now < readyAt) { if (!this.isBot) g.hud.toast(`${food.altName || 'Alt'} ready in ${Math.ceil(readyAt - now)} s`); }

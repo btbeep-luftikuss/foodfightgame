@@ -20,7 +20,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const B = FLOOR_BOUNDS;
 const ASPECT = (B.maxZ - B.minZ) / (B.maxX - B.minX); // the minimap's height / width
 const SNAP_TOP = 21; // the map picture shows what's below this height: floor, counters, the table
-const FLOOR_TINT = { kitchen: '#cbb497', backyard: '#5c9a3c' }; // the floor on the map picture, as one flat colour
+const FLOOR_TINT = { kitchen: '#cbb497', backyard: '#5c9a3c', restaurant: '#8a5a36' }; // the floor on the map picture, as one flat colour
 const SHOT = { duel: [4.5, 11], chase: [3.5, 7], wide: [4, 8] }; // shortest and longest a shot runs (s)
 const DUEL_FOV = 50;
 const WIDE_EVERY = 30; // an overall view at least this often (s)

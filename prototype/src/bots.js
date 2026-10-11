@@ -2,7 +2,7 @@
 // same ballistic math the projectiles use, strafe, dodge, loot and heal.
 import * as THREE from 'three';
 import {
-  G, FLOOR_Y, clamp, rand, pick, yawOf, forwardOf, hasLineOfSight, solveLob, groundHeight, raycastWorld,
+  G, FLOOR_Y, FLOOR_BOUNDS, clamp, rand, pick, yawOf, forwardOf, hasLineOfSight, solveLob, groundHeight, raycastWorld,
 } from './core.js';
 import { FOODS } from './foods.js';
 import { MAX_HP } from './actors.js';
@@ -104,7 +104,7 @@ export class BotBrain {
     }
 
     // heal with a banana when hurt and not under pressure
-    const bananaSlot = a.inv.findIndex((s) => s && (s.id === 'banana' || s.id === 'grapes'));
+    const bananaSlot = a.inv.findIndex((s) => s && s.id === 'banana');
     if (a.hp < a.maxHp * 0.6 && bananaSlot >= 0 && (!this.target || bestD > 14) && !a.eat && g.mode !== 'chef') {
       a.select(bananaSlot);
       this.pendingAlt = true;
@@ -112,6 +112,7 @@ export class BotBrain {
     } else if (this.target && now > this.foodLockUntil && !a.charging) {
       this._chooseFood(bestD);
     }
+    this._ult(bestD); // the held food's big move, when it fits
 
     // dodge incoming food
     for (const p of g.projectiles.list) {
@@ -134,6 +135,44 @@ export class BotBrain {
     // fresh aim error per decision (worse at range, better with skill)
     const err = (1.25 - this.skill) * 2.8 + bestD * 0.03 * (1.1 - this.skill * 0.5);
     this.aimErr.set(rand(-1, 1), rand(-0.6, 0.6), rand(-1, 1)).multiplyScalar(err);
+  }
+
+  // Ultimate alts (0.31): when the moment is right for the food in hand, use its alt.
+  _ult(d) {
+    const a = this.a, g = this.game, now = g.time, t = this.target;
+    const s = a.selected();
+    if (!s || this.pendingAlt || a.channel || a.eat || a.inTurret || now < (a.altReadyAt[s.id] || 0)) return;
+    if (Math.random() > 0.2 + this.skill * 0.45) return; // not at every chance
+    const dy = t ? t.pos.y - a.pos.y : 0, n = (k) => s.inf || s.count >= k;
+    switch (s.id) {
+      case 'tomato': if (t && d > 3 && d < 11 && Math.abs(dy) < 2 && a.stamina > 30) this.pendingAlt = true; break; // tackle
+      case 'ice': if (t && d > 7 && d < 26 && n(3)) this.pendingAlt = true; break; // storm on them
+      case 'watermelon': // jump, then smash down on them
+        if (t && d < 10 && Math.abs(dy) < 3) { if (a.onGround) { this.pendingJump = true; this.smashAt = now + 0.45; } else this.pendingAlt = true; }
+        break;
+      case 'soda': if (t && d < 5 && a.onGround) this.pendingAlt = true; break; // blast off from right next to them
+      case 'grapes': if (t && d > 6 && d < 22) this.pendingAlt = true; break;
+      case 'pineapple': if (t && d > 3 && d < 18 && Math.abs(dy) < 2.5) this.pendingAlt = true; break;
+      case 'jelly': if (t && dy > 6 && d < 30) this.pendingAlt = true; break; // a pad up to them
+      case 'carrot': { // warp into the safe zone, or away when nearly out
+        if (!n(3)) break;
+        const T = g.tide, B = FLOOR_BOUNDS;
+        if (T && T.r < 300 && Math.hypot(a.pos.x - T.x, a.pos.z - T.z) > T.r + 15) {
+          a.tpAim = new THREE.Vector3(T.x, groundHeight(T.x, T.z, 60), T.z); this.pendingAlt = true;
+        } else if (t && a.hp < a.maxHp * 0.3 && d < 14) {
+          const x = clamp(a.pos.x - ((t.pos.x - a.pos.x) / (d || 1)) * 35, B.minX + 5, B.maxX - 5), z = clamp(a.pos.z - ((t.pos.z - a.pos.z) / (d || 1)) * 35, B.minZ + 5, B.maxZ - 5);
+          a.tpAim = new THREE.Vector3(x, groundHeight(x, z, a.pos.y + 2), z); this.pendingAlt = true;
+        }
+        break;
+      }
+      case 'blueberry': {
+        const near = g.actors.filter((o) => o !== a && o.alive && !g.teammates(a, o) && o.pos.distanceTo(a.pos) < 12).length;
+        if (n(30) && (near >= 2 || (t && d < 8))) this.pendingAlt = true;
+        break;
+      }
+      case 'chili': if (t && d < 6.5) this.pendingAlt = true; break; // flamethrower range
+      default: break;
+    }
   }
 
   _goPad(toward = null) {
@@ -309,6 +348,10 @@ export class BotBrain {
       this.pendingDodge = false;
     }
     if (this.pendingAlt) { it.alt = true; this.pendingAlt = false; }
+    if (this.smashAt && now >= this.smashAt) { // Melon Smash: at the top of the jump
+      this.smashAt = 0;
+      if (!a.onGround && a.selected()?.id === 'watermelon') it.alt = true;
+    }
     if (this.pendingJump) { it.jump = true; this.pendingJump = false; this.doubleJumpAt = now + 0.35; } // hop over whatever is in the way
     if (this.doubleJumpAt && now >= this.doubleJumpAt) { it.jump = true; this.doubleJumpAt = 0; }
     // dash to cover long distances quickly

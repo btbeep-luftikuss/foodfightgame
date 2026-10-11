@@ -11,6 +11,7 @@ const ZONE_LOOKS = {
   soda: { color: '#5b2810', opacity: 0.78, roughness: 0.08, clearcoat: 1, emissive: '#000000' },
   melt: { color: '#ffc632', opacity: 0.9, roughness: 0.25, clearcoat: 0.6, emissive: '#3a2400' },
   crumbs: { color: '#c98b45', opacity: 0.85, roughness: 0.9, clearcoat: 0, emissive: '#000000' },
+  juice: { color: '#6b2386', opacity: 0.84, roughness: 0.05, clearcoat: 1, emissive: '#1e0629' }, // the Juice Ball's puddle
 };
 
 export class Surface {

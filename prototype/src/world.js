@@ -6,6 +6,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G, COUNTER, FLOOR_Y, addBox, addCyl, clearColliders, groundHeight, rand, clamp } from './core.js';
 import { Stains } from './stains.js';
 import { buildBackyard, BACKYARD_REGIONS } from './map-backyard.js';
+import { buildRestaurant, RESTAURANT_REGIONS } from './map-restaurant.js';
 
 // ---------------------------------------------------------------------------
 // Procedural textures (no image files).
@@ -201,11 +202,12 @@ export const REGIONS = {
   table: { minX: -56, maxX: 56, minZ: 85, maxZ: 125, top: -6, weight: 0.12 },
 };
 
-// The maps you can pick. Both share the same frame (floor at FLOOR_Y, the same footprint), so the
+// The maps you can pick. All three share the same frame (floor at FLOOR_Y, the same footprint), so the
 // physics, bots, Soap Tide and online clamps work the same on either.
 export const MAPS = {
   kitchen: { name: 'The Grand Kitchen', blurb: 'Counters, a sink and stove, a dining table to hide under and a floor the size of a town.' },
   backyard: { name: 'The Backyard BBQ', blurb: 'A picnic table on the lawn, a smoking grill, a cooler, a kiddie pool and a picnic spread under the open sky.' },
+  restaurant: { name: 'Chez Titan, the Restaurant', blurb: 'A candle-lit restaurant: a long buffet with a cake to climb, the bar and its stools, a sizzling kitchen pass, booths, round tables and a grand piano on the stage.' },
 };
 
 export class World {
@@ -226,6 +228,9 @@ export class World {
     if (this.mapId === 'backyard') {
       this.regions = BACKYARD_REGIONS; this.playerRegion = 'table';
       buildBackyard(this);
+    } else if (this.mapId === 'restaurant') {
+      this.regions = RESTAURANT_REGIONS; this.playerRegion = 'buffet';
+      buildRestaurant(this);
     } else {
       this.regions = REGIONS; this.playerRegion = 'island';
       this._lights(renderer);

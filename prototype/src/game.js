@@ -11,6 +11,7 @@ import { Actor } from './actors.js';
 import { Projectiles } from './projectiles.js';
 import { Items } from './items.js';
 import { Utensils, randomUtensilId } from './utensils.js';
+import { Abilities } from './abilities.js';
 import { BotBrain, BOT_NAMES } from './bots.js';
 import { ViewModel } from './viewmodel.js';
 import { Spectator } from './spectator.js';
@@ -53,6 +54,8 @@ export class Game {
     this.projectiles = new Projectiles(this);
     this.items = new Items(this);
     this.utensils = new Utensils(this);
+    this.abilities = new Abilities(this); // the ultimate alts' storms, flames, spikes and shockwaves
+    this.fovKick = 0; // the camera punches out (or in) on big moves
     this.botLevel = 'medium'; // easy | medium | hard (set from the menu)
     this.dmgScale = 1; // set while a utensil-boosted projectile's impact runs
     this.actors = [];
@@ -111,7 +114,7 @@ export class Game {
   startOnline(net) {
     this.net = net; this.online = true;
     this.pots.clear(); this.teamSize = 1; this.autoTeam = null;
-    this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
+    this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear(); this.abilities.reset();
     this.world.resetRound(); this.hud.clearFeed(); this.brains.clear(); this.utensils.reset(); this.slickAt = 0;
     for (const a of this.botActors.slice(1)) { a.alive = false; a.hide(); }
     this.actors = [this.botActors[0]];
@@ -151,7 +154,7 @@ export class Game {
     this.mode = rs.mode === 'chef' || rs.mode === 'pots' ? rs.mode : 'classic';
     this.teamSize = cleanSize(rs.team, this.mode);
     const nT = teamCount(this.teamSize);
-    this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
+    this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear(); this.abilities.reset();
     this.world.resetRound(); this.utensils.reset(); this.slickAt = 0;
     for (const z of this.spikes) this.scene.remove(z.group);
     this.spikes.length = 0;
@@ -354,7 +357,7 @@ export class Game {
   // Swap the arena (between matches, or when an online room plays another map). Returns true if it changed.
   setMap(id) {
     if (!MAPS[id] || this.world.mapId === id) return false;
-    this.projectiles.reset(); this.items.reset(); this.surface.reset();
+    this.projectiles.reset(); this.items.reset(); this.surface.reset(); this.abilities.reset();
     for (const z of this.spikes) this.scene.remove(z.group);
     this.spikes.length = 0;
     this.world.dispose();
@@ -488,7 +491,7 @@ export class Game {
     const nT = teamCount(this.teamSize);
     const chef = this.mode === 'chef';
     this.actors = this.botActors;
-    this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear();
+    this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear(); this.abilities.reset();
     this.world.resetRound();
     this.hud.clearFeed();
     this.utensils.reset();
@@ -555,6 +558,7 @@ export class Game {
       return amount;
     }
     let amt = amount;
+    if (target.channel && !ENV.has(foodId)) this.abilities.cancelChannel(target, true); // a hit stops a teleport wind-up
     if (target.isFrozen() && !ENV.has(foodId)) { // any hit shatters the ice for bonus damage
       target.frozenUntil = 0;
       amt += 15;
@@ -839,6 +843,7 @@ export class Game {
       this._tideUpdate(dt);
     }
     this.projectiles.update(dt);
+    this.abilities.update(dt);
     this.items.update(dt);
     this.pots.update(dt);
     this.utensils.update(dt);
@@ -973,6 +978,7 @@ export class Game {
     const fp = !!(p && p.alive && this.firstPerson && this.state !== 'menu');
     if (p) { if (p.alive) p.root.visible = !fp; p.fpCam = fp ? cam : null; if (fp) p.glint.visible = false; }
     this.viewModel.update(dt, p || this.actors[0], fp);
+    fov += this.fovKick; this.fovKick = damp(this.fovKick, 0, 5, dt); // big moves punch the view
     if (Math.abs(cam.fov - fov) > 0.05) { cam.fov = damp(cam.fov, fov, 12, dt); cam.updateProjectionMatrix(); }
     rightOf(this.input.yaw, _r);
     this.sfx.setListener(cam.position, p ? _r : _r.set(1, 0, 0));

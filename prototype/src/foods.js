@@ -264,6 +264,45 @@ const MAKERS = {
     g.add(crown);
     return g;
   },
+  // ---- ability foods (0.31), never pickups
+  icestorm() { // a snowball of ice cubes
+    const g = new THREE.Group();
+    const cube = MAKERS.ice;
+    const pts = [[0, 0, 0], [0.42, 0.1, 0.05], [-0.4, 0.05, 0.12], [0.05, 0.42, -0.1], [0.08, -0.38, 0.1], [0.1, 0.05, 0.42], [-0.05, 0.1, -0.42], [0.3, 0.3, 0.3], [-0.3, -0.25, -0.28]];
+    pts.forEach(([x, y, z], i) => {
+      const c = cube();
+      c.position.set(x, y, z); c.rotation.set(i * 1.3, i * 0.7, i * 2.1); c.scale.setScalar(i ? 0.72 : 0.9);
+      g.add(c);
+    });
+    const core = new THREE.Mesh(once(geo, 'stormCore', () => new THREE.SphereGeometry(0.42, 16, 12)), once(mat, 'stormCore', () => new THREE.MeshBasicMaterial({ color: '#c9f0ff' })));
+    g.add(core);
+    return g;
+  },
+  juiceball() { // a wobbling ball of grape juice with a few grapes caught in it
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(once(geo, 'juiceball', () => new THREE.SphereGeometry(0.8, 28, 20)),
+      once(mat, 'juice', () => new THREE.MeshPhysicalMaterial({ color: '#7a2a9a', roughness: 0.06, clearcoat: 1, clearcoatRoughness: 0.05, emissive: '#2a0838', emissiveIntensity: 0.6, sheen: 0.5, sheenColor: new THREE.Color('#e6b8ff') }))));
+    const gm = once(mat, 'grape', () => new THREE.MeshPhysicalMaterial({ color: '#6b2a86', roughness: 0.3, clearcoat: 0.8, sheen: 0.6, sheenColor: new THREE.Color('#c9a4e0') }));
+    for (const [x, y, z] of [[0.55, 0.45, 0.2], [-0.5, 0.35, 0.4], [0.1, -0.6, 0.5], [-0.3, -0.4, -0.6], [0.45, 0.1, -0.6]]) {
+      const b = new THREE.Mesh(once(geo, 'grape', () => new THREE.SphereGeometry(0.16, 12, 10)), gm);
+      b.position.set(x, y, z);
+      g.add(b);
+    }
+    return g;
+  },
+  tpcarrot() { // a glowing purple carrot
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(once(geo, 'carrot', () => new THREE.ConeGeometry(0.17, 1.3, 14).rotateX(-Math.PI / 2)),
+      once(mat, 'tpcarrot', () => new THREE.MeshStandardMaterial({ color: '#b26bff', roughness: 0.35, emissive: '#7a2ad6', emissiveIntensity: 1.1 }))));
+    const leafMat = once(mat, 'tpleaf', () => new THREE.MeshStandardMaterial({ color: '#f3c4ff', roughness: 0.5, emissive: '#c77dff', emissiveIntensity: 0.8 }));
+    for (let i = 0; i < 3; i++) {
+      const leaf = new THREE.Mesh(once(geo, 'cleaf', () => new THREE.ConeGeometry(0.05, 0.45, 4)), leafMat);
+      leaf.position.set((i - 1) * 0.06, 0, 0.75);
+      leaf.rotation.set(Math.PI / 2 - 0.3 + i * 0.2, 0, (i - 1) * 0.4);
+      g.add(leaf);
+    }
+    return g;
+  },
   jelly() {
     return new THREE.Mesh(once(geo, 'jelly', () => {
       const b = new THREE.BoxGeometry(0.62, 0.62, 0.62, 3, 3, 3);
@@ -307,13 +346,8 @@ export const FOODS = {
     name: 'Tomato', role: 'Splash · slows', maxStack: 4, give: 2, weight: 42,
     profile: 'lob', charge: 0.25, speed: 30, recovery: 0.22, radius: 0.4, dmg: 25, verb: "tomato'd",
     hint: 'Hold to power up, release to lob. Victims drip a slick trail.',
-    altName: 'Tomato Bounce', altLabel: 'Tomato Bounce: squish it underfoot for a super jump (uses 1, 5 s)', altCd: 5,
-    alt(a, game) {
-      a.vel.y = 20; a.onGround = false; a.gliding = false;
-      a.consume(1);
-      game.fx.burst('tomato', a.pos, 0.6);
-      game.sfx.play('splat', a.pos, 0.8);
-    },
+    altName: 'Tomato Dash', altLabel: 'Tomato Dash: tackle forward for half a dash\'s stamina; hit a Titan or a wall and a second tomato bursts in a big splat (3 s)', altCd: 3,
+    alt(a, game) { return game.abilities.tomatoDash(a); },
     release(a, c, game) {
       game.projectiles.launch({ food: 'tomato', owner: a, pos: a.handPos(), vel: lobVel(a, lobSpeed('tomato', c)), spin: 8 });
       a.consume(1);
@@ -402,15 +436,8 @@ export const FOODS = {
     name: 'Carrot', role: 'Sniper', maxStack: 4, give: 2, weight: 28,
     profile: 'line', charge: 1.6, speed: 210, recovery: 0.9, radius: 0.18, verb: 'sniped',
     hint: 'Hold to zoom and charge. Face hits deal x1.75. Your glint gives you away.',
-    altName: 'Pole Vault', altLabel: 'Pole Vault: leap forward (uses 1, 4 s)', altCd: 4,
-    alt(a, game) {
-      const f = forwardOf(a.yaw, _v);
-      a.vel.x = f.x * 17; a.vel.z = f.z * 17; a.vel.y = 15;
-      a.onGround = false;
-      a.consume(1);
-      game.fx.burst('dust', a.pos);
-      game.sfx.play('boing', a.pos, 0.7);
-    },
+    altName: 'Teleport', altLabel: 'Teleport: wind up (a hit cancels it), then throw a slow carrot and warp to where it lands (uses 3, 6 s)', altCd: 6,
+    alt(a, game) { return game.abilities.teleportStart(a); },
     release(a, c, game) {
       const from = a.handPos();
       const dir = a.isBot ? a.aimDir.clone() : _v.subVectors(a.aimPoint, from).normalize().clone();
@@ -441,14 +468,8 @@ export const FOODS = {
     name: 'Ice Cube', role: 'Freeze · rink', maxStack: 3, give: 2, weight: 15,
     profile: 'lob', charge: 0.2, speed: 26, recovery: 0.3, radius: 0.35, verb: 'iced',
     hint: 'Direct hit freezes (longer if Wet). Ground hit makes an ice rink.',
-    altName: 'Chill Out', altLabel: 'Chill Out: shake off burning, sticky and slows (uses 1, 6 s)', altCd: 6,
-    alt(a, game) {
-      a.sticky.length = 0; a.burnUntil = 0; a.surfaceSlowUntil = 0; a.juicedUntil = 0;
-      a.consume(1);
-      game.fx.burst('ice', a.center(_v));
-      game.sfx.play('freeze', a.pos, 0.5);
-      if (!a.isBot) game.hud.toast('Chilled out');
-    },
+    altName: 'Ice Storm', altLabel: 'Ice Storm: throw a ball of 3 ice cubes; a whirlwind pulls enemies in and slows them (uses 3, 8 s)', altCd: 8,
+    alt(a, game) { return game.abilities.iceStorm(a); },
     release(a, c, game) {
       game.projectiles.launch({ food: 'ice', owner: a, pos: a.handPos(), vel: lobVel(a, lobSpeed('ice', c)), spin: 6 });
       a.consume(1);
@@ -481,7 +502,7 @@ export const FOODS = {
   soda: {
     name: 'Soda Can', role: 'Blast · rocket jump', maxStack: 2, give: 1, weight: 14,
     profile: 'lob', charge: 1.2, speed: 24, recovery: 0.35, radius: 0.3, verb: 'fizzed',
-    altLabel: 'Fizz Jump: pop it underfoot',
+    altName: 'Mega Jump', altLabel: 'Mega Jump: from the ground, rocket sky-high and blast everyone close by (uses 1, 5 s)', altCd: 5,
     hint: 'Hold to shake: a longer shake means a bigger blast. Blasts knock you back too.',
     release(a, c, game) {
       game.projectiles.launch({ food: 'soda', owner: a, pos: a.handPos(), vel: lobVel(a, lobSpeed('soda', c)), spin: 10, charge: c });
@@ -499,17 +520,7 @@ export const FOODS = {
       game.sfx.play('fizz', pt);
       return true;
     },
-    alt(a, game) {
-      const f = forwardOf(a.yaw, _v);
-      a.vel.x = f.x * 11; a.vel.z = f.z * 11; a.vel.y = 21;
-      a.onGround = false;
-      a.knockUntil = game.time + 0.6;
-      a.consume(1);
-      game.fx.burst('geyser', a.pos);
-      game.sfx.play('fizz', a.pos, 1.4);
-      game.sfx.play('boom', a.pos, 0.5);
-      stampAtGround(game, a.pos, 3, 'sticky', 5, { slow: 0.3, visual: 'soda' });
-    },
+    alt(a, game) { return game.abilities.megaJump(a); },
   },
 
   cheese: {
@@ -564,6 +575,8 @@ export const FOODS = {
     name: 'Blueberries', role: 'Rapid fire', maxStack: 240, give: 40, weight: 26,
     profile: 'auto', auto: true, charge: 0, speed: 75, gravity: 0.25, recovery: 1 / 12, radius: 0.13, dmg: 5, verb: 'berry-blasted',
     hint: 'Hold to fire about 12 berries a second. Aim drifts the longer you hold, so fire in bursts.',
+    altName: 'Berry Spiral', altLabel: 'Berry Spiral: 2 s of berries spiralling out in every direction (uses 30, 7 s)', altCd: 7,
+    alt(a, game) { return game.abilities.berrySpiral(a); },
     ammo: () => rollAmmo() * 6, // they come by the handful: 24-90 berries per pickup
     release(a, c, game) {
       const from = a.handPos();
@@ -596,9 +609,9 @@ export const FOODS = {
 
   // ---------------------------------------------------------------- added in prototype 0.2
   grapes: {
-    name: 'Grapes', role: 'Scatter shot · snack', maxStack: 2, give: 1, weight: 10,
+    name: 'Grapes', role: 'Scatter shot · juice', maxStack: 2, give: 1, weight: 10,
     profile: 'spray', charge: 0, speed: 45, gravity: 0.6, recovery: 0.4, radius: 0.16, dmg: 7, verb: 'grape-shot',
-    altLabel: 'Eat the bunch: +40 HP',
+    altName: 'Juice Ball', altLabel: 'Juice Ball: throw a giant ball of juice; its puddle slows everyone in it (uses 1, 4 s)', altCd: 4,
     hint: 'Fires 8 bouncing grapes in a cone. Deadly up close.',
     release(a, c, game) {
       const from = a.handPos();
@@ -612,9 +625,7 @@ export const FOODS = {
       a.consume(1);
       game.sfx.play('throw', a.pos, 1.1);
     },
-    alt(a, game) {
-      a.startEat(1.0, () => { a.heal(40); a.consume(1); game.sfx.play('eat', a.pos); });
-    },
+    alt(a, game) { return game.abilities.juiceBall(a); },
   },
   grape: { // a single grape pellet (not a pickup)
     name: 'Grape', hidden: true, profile: 'spray', radius: 0.16, dmg: 7, verb: 'grape-shot',
@@ -641,20 +652,16 @@ export const FOODS = {
   chili: {
     name: 'Chili Pepper', role: 'Homing · burn', maxStack: 3, give: 2, weight: 9,
     profile: 'seek', charge: 0, speed: 32, recovery: 1.8, radius: 0.25, dmg: 15, verb: 'torched',
-    hint: 'Locks onto the Titan nearest your crosshair and sets them on fire. Water puts it out.',
-    altName: 'Hot Feet', altLabel: 'Hot Feet: run 35% faster for 4 s (uses 1, 12 s)', altCd: 12,
-    alt(a, game) {
-      a.speedBoost(4);
-      a.consume(1);
-      game.fx.burst('fire', a.pos, 0.5);
-      game.sfx.play('sizzle', a.pos, 0.7);
-    },
+    hint: 'Locks onto the Titan nearest your crosshair and sets them on fire. Water puts it out. Careful: 3 in 10 are so hot you catch fire too.',
+    altName: 'Flamethrower', altLabel: 'Flamethrower: very close range; the flames stay burning on the ground (uses 1, 7 s)', altCd: 7,
+    alt(a, game) { return game.abilities.flamethrower(a); },
     release(a, c, game) {
       const target = a.isBot ? a.botTarget : game.lockTarget(a);
       const dir = a.isBot ? a.aimDir.clone() : _v.subVectors(a.aimPoint, a.handPos()).normalize().clone();
       game.projectiles.launch({ food: 'chili', owner: a, pos: a.handPos(), vel: dir.multiplyScalar(this.speed), gravity: 0, life: 3, orient: true, seek: target || null, turn: 1.5 });
       a.consume(1);
       game.sfx.play('whirr', a.pos);
+      game.abilities.spicy(a); // 30%: too hot to handle
     },
     impact(p, hit, game) {
       if (hit.actor) {
@@ -701,6 +708,8 @@ export const FOODS = {
     name: 'Watermelon', role: 'Heavy rolling bomb', maxStack: 1, give: 1, weight: 6, heavy: true,
     profile: 'roll', charge: 0, speed: 19, recovery: 1.0, radius: 0.8, pierce: true, dmg: 50, verb: 'flattened',
     hint: 'Heavy to carry. Roll it at Titans: it crushes them and bursts into bouncing chunks.',
+    altName: 'Melon Smash', altLabel: 'Melon Smash: in mid-air, slam down; the higher you fall from, the bigger the hit (uses 1, 3 s)', altCd: 3,
+    alt(a, game) { return game.abilities.melonSmash(a); },
     release(a, c, game) {
       const d = a.aimDir.clone().setY(0);
       if (d.lengthSq() < 1e-4) forwardOf(a.yaw, d);
@@ -796,10 +805,50 @@ export const FOODS = {
     },
   },
 
+  // ---------------------------------------------------------------- ability foods (0.31), never pickups
+  icestorm: { // the Ice Storm ball: a whirlwind where it lands
+    name: 'Ice Storm', hidden: true, profile: 'lob', radius: 0.75, dmg: 18, verb: 'iced',
+    fly(p, game, dt) {
+      if (Math.random() < dt * 40) game.fx.spray('chunks', p.pos, 1, { speed: 2, up: 1, colors: [new THREE.Color('#e8f8ff'), new THREE.Color('#aee4ff')], size: 0.12, life: 0.5 });
+    },
+    impact(p, hit, game) {
+      if (hit.actor) game.damage(hit.actor, 18, p.owner, 'storm');
+      const pt = hit.point, gy = groundHeight(pt.x, pt.z, pt.y + 1);
+      game.abilities.addVortex(new THREE.Vector3(pt.x, gy, pt.z), p.owner);
+      game.sfx.play('shatter', pt, 1.4);
+      return true;
+    },
+  },
+  juiceball: { // the Juice Ball: a big slowing puddle
+    name: 'Juice Ball', hidden: true, profile: 'lob', radius: 0.8, dmg: 20, verb: 'juiced',
+    fly(p, game, dt) {
+      if (Math.random() < dt * 30) game.fx.spray('blobs', p.pos, 1, { speed: 1, up: 0.5, colors: [new THREE.Color('#7a2a9a'), new THREE.Color('#b05be0')], size: 0.14, life: 0.6 });
+    },
+    impact(p, hit, game) {
+      if (hit.actor) { game.damage(hit.actor, 20, p.owner, 'juice'); hit.actor.addSticky(0.3, 3); }
+      game.abilities.juicePuddle(hit, p.owner);
+      return true;
+    },
+  },
+  tpcarrot: { // the Teleport carrot: its thrower warps to where it lands
+    name: 'Teleport Carrot', hidden: true, profile: 'line', radius: 0.24, dmg: 18, verb: 'carrot-warped',
+    fly(p, game, dt) {
+      if (Math.random() < dt * 50) game.fx.spray('blobs', p.pos, 1, { speed: 1.5, up: 0.5, colors: [new THREE.Color('#c77dff'), new THREE.Color('#f3c4ff')], size: 0.1, life: 0.5, grav: -0.2 });
+    },
+    impact(p, hit, game) {
+      if (hit.actor) game.damage(hit.actor, 18, p.owner, 'warp');
+      game.abilities.teleportTo(p, hit);
+      return true;
+    },
+    expire(p, game) { game.abilities.teleportTo(p, null); },
+  },
+
   pineapple: {
     name: 'Pineapple', role: 'Sticky spike grenade', maxStack: 1, give: 1, weight: 6,
     profile: 'lob', charge: 0.25, speed: 26, recovery: 0.45, radius: 0.45, dmg: 35, verb: 'spiked',
     hint: 'Sticks to whatever it hits, then bursts into a spike field. Dash or get wet to shake it off.',
+    altName: 'Spike Line', altLabel: 'Spike Line: giant spikes burst up one by one ahead of you; one coming up under a Titan throws them (uses 1, 6 s)', altCd: 6,
+    alt(a, game) { return game.abilities.spikeLine(a); },
     release(a, c, game) {
       game.projectiles.launch({ food: 'pineapple', owner: a, pos: a.handPos(), vel: lobVel(a, lobSpeed('pineapple', c)), spin: 7, fuse: 2 });
       a.consume(1);
@@ -826,7 +875,7 @@ export const FOODS = {
   jelly: {
     name: 'Jelly Cube', role: 'Root · trampoline', maxStack: 2, give: 1, weight: 8,
     profile: 'lob', charge: 0.2, speed: 24, recovery: 0.3, radius: 0.35, dmg: 12, verb: 'jellied',
-    altLabel: 'Place a trampoline',
+    altName: 'Jump Pad', altLabel: 'Jump Pad: place a pad that bounces anyone sky-high, good for 6 bounces (uses 1, 2 s)', altCd: 2,
     hint: 'Bounces off walls and roots whoever it hits. Place it as a trampoline to reach high places.',
     release(a, c, game) {
       game.projectiles.launch({ food: 'jelly', owner: a, pos: a.handPos(), vel: lobVel(a, lobSpeed('jelly', c)), spin: 5, bounces: 4, life: 5 });
@@ -852,14 +901,7 @@ export const FOODS = {
       game.world.paintSplat(hit.point.x, hit.point.y, hit.point.z, 2.4, 'jelly');
       return true;
     },
-    alt(a, game) {
-      const f = forwardOf(a.yaw, _v);
-      const pos = a.pos.clone().addScaledVector(f, 2.4);
-      pos.y = groundHeight(pos.x, pos.z, a.pos.y + 0.6);
-      game.items.addTrampoline(a, pos);
-      a.consume(1);
-      game.sfx.play('boing', pos, 0.8);
-    },
+    alt(a, game) { return game.abilities.jumpPad(a); },
   },
 };
 
@@ -919,4 +961,7 @@ export const FEED_VERB = {
   tomato: "tomato'd", banana: 'boomeranged', peel: 'slipped up', carrot: 'sniped', ice: 'iced',
   soda: 'fizzed', cheese: 'rolled over', landmark: 'buried', grapes: 'grape-shot', chili: 'torched',
   cookie: 'cookied', watermelon: 'flattened', pineapple: 'spiked', jelly: 'jellied', blueberry: 'berry-blasted',
+  // the ultimate alts (0.31)
+  tslam: 'tomato-slammed', storm: 'blizzarded', smash: 'melon-smashed', megajump: 'fizz-launched', juice: 'juiced',
+  spikes: 'skewered', flames: 'flame-grilled', warp: 'carrot-warped',
 };

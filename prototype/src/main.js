@@ -164,7 +164,8 @@ function boot() {
   // Menu food legend, using the same rendered icons.
   $('legend').innerHTML = FOOD_IDS.map((id) => {
     const f = FOODS[id];
-    return `<li><img src="${icons[id] || ''}" alt=""><div><b>${f.name}</b><span>${f.hint}</span></div></li>`;
+    const alt = f.altLabel ? `<em class="ult"><kbd>Q</kbd> ${f.altLabel.replace(/^([^:]+):/, '<b>$1</b>:')}</em>` : ''; // (0.31) the ultimate alt
+    return `<li><img src="${icons[id] || ''}" alt=""><div><b>${f.name}</b><span>${f.hint}</span>${alt}</div></li>`;
   }).join('');
 
   // ... and the support utensils, with the same art as the design sheet

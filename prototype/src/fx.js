@@ -95,6 +95,8 @@ const PALETTE = {
   pine: [C('#f2c230'), C('#d99a1e'), C('#4f9a3a')],
   jelly: [C('#5fd35a'), C('#9cf09a'), C('#3fae3a')],
   fire: [C('#ff3d00'), C('#ff8a00'), C('#ffd000')],
+  juice: [C('#6b2a86'), C('#9b3fc0'), C('#d9a8f0')],
+  tele: [C('#c77dff'), C('#9d4edd'), C('#f3c4ff'), C('#ffffff')],
 };
 
 export class FX {
@@ -127,6 +129,17 @@ export class FX {
       const col = colors[(Math.random() * colors.length) | 0];
       P.spawn(pos.x, pos.y, pos.z, vx * sp, vy * up + rand(0, up * 0.5), vz * sp, life * rand(0.6, 1.2),
         size * rand(0.6, 1.3), col, grav, drag, grow);
+    }
+  }
+
+  // A jet of particles along `dir` (the flamethrower).
+  stream(pool, pos, dir, count, { speed = 12, spread = 0.2, life = 0.5, size = 0.15, colors, grav = 0, drag = 0.5, grow = 0, jitter = 0.15 }) {
+    const P = this[pool];
+    for (let i = 0; i < this.n(count); i++) {
+      const sp = speed * rand(0.7, 1.15);
+      P.spawn(pos.x + rand(-jitter, jitter), pos.y + rand(-jitter, jitter), pos.z + rand(-jitter, jitter),
+        (dir.x + rand(-spread, spread)) * sp, (dir.y + rand(-spread, spread)) * sp, (dir.z + rand(-spread, spread)) * sp,
+        life * rand(0.7, 1.2), size * rand(0.7, 1.3), colors[(Math.random() * colors.length) | 0], grav, drag, grow);
     }
   }
 
@@ -215,6 +228,14 @@ export class FX {
         break;
       case 'bubbles':
         this.spray('puffs', pos, 2, { speed: 0.8, up: 2, colors: P.foam, size: 0.5, life: 1.4, grav: -0.1, drag: 0.8 });
+        break;
+      case 'juice': // the Juice Ball bursting
+        this.spray('blobs', pos, 40 * power, { speed: 9 * power, up: 7, colors: P.juice, size: 0.22, life: 0.9 });
+        this.spray('puffs', pos, 8, { speed: 3, up: 1.5, colors: [P.juice[1]], size: 0.8, life: 0.5, grav: 0, grow: 1.6 });
+        break;
+      case 'tele': // a teleport: sparks and a soft flash
+        this.spray('blobs', pos, 30 * power, { speed: 7, up: 4, colors: P.tele, size: 0.12, life: 0.7, grav: -0.25 });
+        this.spray('puffs', pos, 8, { speed: 2, up: 2, colors: [P.tele[0], P.tele[2]], size: 0.7, life: 0.5, grav: -0.1, grow: 1.8 });
         break;
     }
   }
@@ -390,6 +411,41 @@ export class Sfx {
       case 'shield':
         this._tone(o, t, 0.12, { f0: 240, f1: 180, vol: 0.4 });
         this._noise(o, t, 0.1, { f0: 1500, f1: 400, vol: 0.5 });
+        break;
+      // ---- the ultimate alts (0.31)
+      case 'whoosh':
+        this._noise(o, t, 0.35, { type: 'bandpass', f0: 400, f1: 2600, q: 1.2, vol: 0.75 });
+        this._noise(o, t + 0.06, 0.3, { type: 'bandpass', f0: 2400, f1: 500, q: 1, vol: 0.4 });
+        break;
+      case 'storm':
+        this._noise(o, t, 0.95, { type: 'bandpass', f0: 280, f1: 720, q: 2, vol: 0.65 });
+        this._noise(o, t + 0.2, 0.7, { type: 'bandpass', f0: 1100, f1: 420, q: 3, vol: 0.35 });
+        this._tone(o, t, 0.8, { type: 'sine', f0: 140, f1: 190, vol: 0.15, attack: 0.2 });
+        break;
+      case 'spike':
+        this._noise(o, t, 0.12, { type: 'highpass', f0: 3200, f1: 1200, vol: 0.6 });
+        this._tone(o, t, 0.2, { type: 'triangle', f0: 280, f1: 85, vol: 0.55 });
+        break;
+      case 'slosh':
+        this._noise(o, t, 0.4, { type: 'lowpass', f0: 900, f1: 180, q: 4, vol: 0.75 });
+        this._tone(o, t, 0.3, { type: 'sine', f0: 230, f1: 110, vol: 0.3 });
+        break;
+      case 'tpcharge':
+        this._tone(o, t, 1.35, { type: 'sine', f0: 220, f1: 1400, vol: 0.22, attack: 0.3 });
+        this._tone(o, t, 1.35, { type: 'triangle', f0: 330, f1: 2100, vol: 0.1, attack: 0.3 });
+        break;
+      case 'teleport':
+        this._tone(o, t, 0.45, { type: 'sine', f0: 1900, f1: 190, vol: 0.35 });
+        this._noise(o, t, 0.3, { type: 'bandpass', f0: 4200, f1: 700, q: 2, vol: 0.5 });
+        [1568, 2093, 2637].forEach((f, i) => this._tone(o, t + 0.05 + i * 0.05, 0.25, { type: 'triangle', f0: f, f1: f, vol: 0.1 }));
+        break;
+      case 'flame':
+        this._noise(o, t, 0.42, { type: 'bandpass', f0: 650, f1: 330, q: 0.7, vol: 0.85 });
+        this._noise(o, t, 0.42, { type: 'lowpass', f0: 320, f1: 110, vol: 0.6 });
+        break;
+      case 'ready': // an alt is ready again
+        this._tone(o, t, 0.14, { type: 'triangle', f0: 1320, f1: 1320, vol: 0.1 });
+        this._tone(o, t + 0.08, 0.2, { type: 'triangle', f0: 1760, f1: 1760, vol: 0.09 });
         break;
     }
   }
