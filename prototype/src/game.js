@@ -136,11 +136,18 @@ export class Game {
   }
 
   // Players who want to play, in the round and waiting for one (the host's view of the room).
+  // (0.34) In Cooking Pot Wars a splatted player whose pot still stands (or is being carried off) is
+  // still in the round: they respawn at it.
   _humans() {
     const net = this.net, me = this.player;
-    let inRound = me.alive ? 1 : 0, waiting = net.ready && !me.alive ? 1 : 0, ready = net.ready ? 1 : 0;
+    const R = this.round;
+    const inIt = (a) => {
+      if (a.alive) { a.playedRound = R.id; return true; }
+      return this.pots.active && this.state !== 'over' && a.playedRound === R.id && this.pots.willReturn(a.team); // (played this round, waiting at their pot)
+    };
+    let inRound = inIt(me) ? 1 : 0, waiting = net.ready && !inIt(me) ? 1 : 0, ready = net.ready ? 1 : 0;
     for (const pr of net.proxies.values()) {
-      if (pr.actor.alive) inRound++;
+      if (inIt(pr.actor)) inRound++;
       else if (pr.ready) waiting++;
       if (pr.ready) ready++;
     }

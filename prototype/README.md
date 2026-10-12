@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.34: online Cooking Pot Wars: splatted players respawn instead of the round restarting** (`src/game.js`, `src/potwars.js`)
+
+- **The bug:** the host starts a fresh round when nobody who wants to play is still in the round. It counted only Titans standing up, so in Cooking Pot Wars, when every player was splatted at once (always the case when you play alone with bots), the host restarted the round after 5 s, the same moment the pot would have respawned you.
+- **The fix:** a splatted player who played this round and whose pot still stands (or is being carried off) counts as in the round: they respawn at their pot as they should. Once the pots are gone, a fresh round still comes as before.
+- Tests (online, two players): both splatted at once respawn in the same round; the host alone splatted respawns; with both pots smashed, a new round starts; and the earlier Cooking Pot Wars online test.
+
 **Version 0.33: online play that works, in every mode** (`src/net.js`, `src/p2p.js`, `src/main.js`, `src/hud.js`, `index.html`)
 
 Why online play failed, found by measuring and by the platforms' own rules:

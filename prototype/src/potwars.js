@@ -376,6 +376,8 @@ export class PotWars {
     if (a === g.player) { g.input.yaw = a.yaw; g.camPivotY = a.pos.y; g.hud.banner('Back in!', 'Respawned at your pot', 1.6); }
   }
 
+  // Whether a splatted Titan of team t comes back (its pot stands, is being carried off, or it's the setup).
+  willReturn(t) { const p = t == null ? null : this.pots[t]; return !!p && (p.alive || p.carried || this.setup); }
   teamAlive(t) { const p = this.pots[t]; return !!p && (p.alive || p.carried || this.game.actors.some((a) => a.team === t && a.alive)); }
 
   _checkWin() {
