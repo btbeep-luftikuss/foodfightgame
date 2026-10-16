@@ -63,6 +63,21 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.35: no more invisible walls, glasses you can see, bowls with insides, and no meat** (`src/world.js`, `src/map-backyard.js`, `src/map-restaurant.js`, `src/main.js`)
+
+- **Invisible objects, found by a scan.** A new test looks at every solid shape on all three maps from outside and checks that something is drawn where you would bump into it (a Titan is under a metre wide, so a shape a metre or two bigger than its drawing is an invisible wall). It found about 140 of them. The worst:
+  - the backyard benches' end posts were solid but not drawn at all (now drawn);
+  - the picnic table's slanted legs and the grill's legs were solid as wide upright blocks (now solid along the leg);
+  - the restaurant's back bar was a solid block 7 m deep in front of the bottles (now: the back panel, the shelves and each bottle), and the bar, the buffet, the kitchen pass and both kitchen counters were solid under their overhanging tops (now: the cupboards, then the top);
+  - the martini glasses, wine glasses and the jam jar were solid cylinders around nearly invisible glass; the coffee maker had a solid block above its pot; the sink tap was a bar under its arch; the mug's handle faced sideways inside a solid box; a fruit bowl, a bread basket, a fruit platter and food on plates were solid well beyond the food;
+  - round things (domes, bowls, tree trunks, cans and bottles on their side, the rolling pin, the watermelon, the bananas, the carrot, the croissant, the olive, the cupcake) now have solid shapes that follow their outline: stacked rings for upright ones, round slices for lying ones, short pieces along curves and slanted legs (new helpers in `src/world.js`: `_rod`, `_rodOf`, `_roundCols`, `_lyingCyl`, `_ring`, `_bananaCols`).
+  - Glasses and cups are solid up to their drink, then a thin wall up to the rim, so you can stand in them on the drink instead of on an invisible lid.
+  - Some things were drawn see-through from one side: the pots on the rack had no bottoms, the mop bucket was the wrong way round (open at its bottom), the knocked-over wine glass had its stem sticking out of its mouth, the croissant's ends were open, half of the backyard's watermelon slice was under the lawn (its solid half stood there invisible). All fixed.
+- **Glasses and cups are easier to see:** a little more solid glass, and an opaque rim on every glass, jar and cup (the coffee pot, the jam jar, the spice jars, the dining glasses, the martini and wine glasses); paper cups show their inside and lemonade; the martinis have a drink in them; the mug has coffee in it.
+- **Bowls have insides:** a bowl used to be drawn as an outside only, so from above you saw straight through it to the table. Now each has an inside of its own colour and a rim: the dining table's fruit bowl is blue with a cream inside, the bar's bowl of limes red with a cream inside, the stack of bowls on the back counter teal with a cream top (it was orange, like the counter).
+- **No meat on any map:** the backyard grill has a zucchini and a ring of pineapple (sausages and a burger patty before), the picnic sandwich has tomato (ham), and the giant burger on the blanket is now a giant cupcake (paper case, three swirls of frosting, a cherry). In the restaurant the carving station's roast is a big wheel of cheese, the spaghetti has cherry tomatoes and basil (meatballs), the steak is a stack of pancakes with butter and syrup, and the meatball on the floor is a giant green olive with its pimento. (Skins are unchanged.)
+- Tests: the invisible-object scan on all three maps (about 140 suspect shapes before; after, a few small edges of curved things, 1 to 2 m at most: the carrot's thin tip, a piece of the watering can's spout, the edge of the fruit pile; plus the mop bucket's mouth and the walk-in pickle jar, which are open on purpose); screenshots of every changed spot; launch pads on all three maps (all land where they did before); 90 s bot matches on each map (bots get stuck no more often than before).
+
 **Version 0.34: online Cooking Pot Wars: splatted players respawn instead of the round restarting** (`src/game.js`, `src/potwars.js`)
 
 - **The bug:** the host starts a fresh round when nobody who wants to play is still in the round. It counted only Titans standing up, so in Cooking Pot Wars, when every player was splatted at once (always the case when you play alone with bots), the host restarted the round after 5 s, the same moment the pot would have respawned you.
@@ -347,7 +362,7 @@ npm run dev          # http://localhost:5173
 | File | What it does |
 |---|---|
 | `src/core.js` | Constants, collision (boxes and cylinders), ground queries, raycasts, lob solver |
-| `src/world.js` | The kitchen, countertop props, giant foods and fallen chairs, hazards, launch pads, landmark tomato, Soap Tide wall |
+| `src/world.js` | The kitchen, countertop props, giant foods and fallen chairs, hazards, launch pads, landmark tomato, Soap Tide wall; helpers that fit solid shapes to round and slanted things, bowls with insides, glass rims |
 | `src/foods.js` | All food data and behaviour: meshes, throw, impact, alt actions (and the ability foods: the storm ball, the juice ball, the teleport carrot) |
 | `src/abilities.js` | The ultimate alts: dashes, whirlwinds, smashes, mega jumps, juice puddles, spike lines, teleports, berry spirals, flamethrowers and ground fires; shockwave rings and call-outs; their online events |
 | `src/actors.js` | Titans: movement, statuses, diminishing returns, inventory; drives the rig each frame |

@@ -14,6 +14,7 @@ import { BOT_LEVELS } from './bots.js';
 import { MAPS } from './world.js';
 import { TEAMS, TEAM_LABEL, teamCount, cleanSize } from './teams.js';
 import { Net, roomAvailable, cleanRoom } from './net.js';
+import { colliders } from './core.js';
 
 const PUBLIC_URL = 'https://btbeep-luftikuss.github.io/foodfightgame/play/';
 import { UTENSILS, UTENSIL_BY_ID, UTENSIL_IDS, utensilIcon, setUtensilIcons } from './utensils.js';
@@ -160,6 +161,7 @@ function boot() {
   try { const v = localStorage.getItem('tt-map'); if (MAPS[v]) mapId = v; } catch { /* storage blocked */ }
   const game = new Game({ renderer, scene, camera, quality, hud, input, sfx, map: mapId });
   window.__game = game; // handy for debugging in the console
+  window.__colliders = colliders; window.__THREE = THREE; // (and the solid shapes and three.js, for map checks)
 
   // Menu food legend, using the same rendered icons.
   $('legend').innerHTML = FOOD_IDS.map((id) => {

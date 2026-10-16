@@ -107,6 +107,8 @@ export function buildBackyard(W) {
   m.grill = new THREE.MeshPhysicalMaterial({ color: '#c62f2a', roughness: 0.35, clearcoat: 0.8 });
   m.cooler = new THREE.MeshPhysicalMaterial({ color: '#2f86d6', roughness: 0.35, clearcoat: 0.6 });
   m.white = new THREE.MeshStandardMaterial({ color: '#f6f3ee', roughness: 0.5 });
+  m.cupRim = new THREE.MeshStandardMaterial({ color: '#e0405a', roughness: 0.5 });
+  m.lemonade = new THREE.MeshPhysicalMaterial({ color: '#f7e36a', roughness: 0.1, clearcoat: 1 });
   m.pool = new THREE.MeshPhysicalMaterial({ color: '#4fb8e8', roughness: 0.25, clearcoat: 1 });
   m.water = new THREE.MeshPhysicalMaterial({ color: '#9fdcff', roughness: 0.03, transparent: true, opacity: 0.6, clearcoat: 1, depthWrite: false });
   m.leaves = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
@@ -148,11 +150,15 @@ export function buildBackyard(W) {
     for (const sz of [-1, 1]) { // A-frame legs
       const leg = W._mesh(new THREE.BoxGeometry(4, 40, 4), m.wood, sx * 56, F + 17, sz * 22);
       leg.rotation.x = sz * 0.28; leg.updateMatrix();
-      addBox(sx * 56 - 2, sx * 56 + 2, sz * 22 - 7, sz * 22 + 7, F, -3, { surface: 'wood' });
+      W._rodOf(leg, 40, 2, 12, { surface: 'wood' }); // (0.35) solid along the slanted leg (it was a wide block)
     }
     W._box(sx * 56 - 2, sx * 56 + 2, -62, 62, -22, -19, m.wood); // the beam that carries the benches
     addBox(sx * 56 - 2, sx * 56 + 2, -62, 62, -22, -19, { surface: 'wood' });
-    for (const sz of [-1, 1]) addBox(sx * 56 - 2, sx * 56 + 2, sz * 62 - (sz > 0 ? 4 : 0), sz * 62 + (sz > 0 ? 0 : 4), F, -19, { surface: 'wood' }); // (the posts under the ends of the beam)
+    for (const sz of [-1, 1]) { // the posts under the ends of the beam (0.35: drawn now; they were invisible)
+      const z0 = sz * 62 - (sz > 0 ? 4 : 0), z1 = sz * 62 + (sz > 0 ? 0 : 4);
+      W._box(sx * 56 - 2, sx * 56 + 2, z0, z1, F, -22, m.wood);
+      addBox(sx * 56 - 2, sx * 56 + 2, z0, z1, F, -19, { surface: 'wood' });
+    }
   }
   for (const sz of [-1, 1]) {
     const z0 = sz > 0 ? 46 : -58, z1 = sz > 0 ? 58 : -46;
@@ -167,27 +173,29 @@ export function buildBackyard(W) {
       const a = (i / 3) * Math.PI * 2 + 0.4;
       const leg = W._mesh(new THREE.CylinderGeometry(1.1, 1.1, 30, 8), m.dark, gx + Math.cos(a) * 12, F + 13, gz + Math.sin(a) * 12);
       leg.rotation.set(Math.sin(a) * 0.25, 0, -Math.cos(a) * 0.25); leg.updateMatrix();
-      addCyl(gx + Math.cos(a) * 12, gz + Math.sin(a) * 12, 1.6, F, F + 12, { surface: 'steel' });
+      W._rodOf(leg, 30, 1.2, 8, { surface: 'steel' }); // (0.35) solid along the slanted leg
     }
     W._mesh(new THREE.SphereGeometry(22, 40, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), m.grill, gx, top, gz);
     W._mesh(new THREE.TorusGeometry(22, 0.7, 8, 48).rotateX(Math.PI / 2), m.steel, gx, top, gz, { cast: false });
     W._mesh(new THREE.CylinderGeometry(21, 21, 0.4, 48), m.dark, gx, top - 0.3, gz, { cast: false });
-    addCyl(gx, gz, 21.5, F + 12, top, { surface: 'steel' });
+    W._roundCols(gx, gz, top - 22, top, 8, (y) => Math.sqrt(Math.max(0, 484 - (top - y) ** 2)), { surface: 'steel' }); // (0.35) a round bowl, not a drum
     for (const [x, z] of [[gx - 7, gz - 4], [gx + 7, gz - 4], [gx, gz + 8]]) W._burner(x, top, z, 4.2, x === gx);
     // a bag of charcoal propped against it: cover from one side
     W._box(gx + 26, gx + 38, gz - 14, gz + 10, F, F + 22, new THREE.MeshStandardMaterial({ color: '#3b3b44', roughness: 0.9 }));
     W._box(gx + 25.8, gx + 38.2, gz - 6, gz + 2, F + 6, F + 16, new THREE.MeshStandardMaterial({ color: '#f2b51c', roughness: 0.7 }), { cast: false });
     addBox(gx + 26, gx + 38, gz - 14, gz + 10, F, F + 22, { surface: 'plastic' });
-    // sausages and a burger sizzling on the grate
-    food(new THREE.CapsuleGeometry(1.6, 8, 6, 12).rotateZ(Math.PI / 2), (px, py, pz, c) => mixHex('#c2552e', '#6e2c14', 0.5 + 0.5 * Math.sin(px * 1.5), c), gx - 2, top + 1.6, gz + 14);
-    food(new THREE.CylinderGeometry(5, 5, 1.8, 24), '#5a3420', gx + 12, top + 0.9, gz + 9, true);
-    addCyl(gx + 12, gz + 9, 5, top, top + 1.8, { surface: 'fruit' });
+    // (0.35) vegetables on the grate: a zucchini and a ring of pineapple, with grill marks
+    food(new THREE.CapsuleGeometry(1.6, 8, 6, 12).rotateZ(Math.PI / 2), (px, py, pz, c) => mixHex('#3f8a2a', '#245a1a', 0.5 + 0.5 * Math.sin(Math.atan2(pz, py) * 6), c), gx - 2, top + 1.6, gz + 14);
+    food(new THREE.TorusGeometry(3.6, 1.4, 10, 24).rotateX(Math.PI / 2).scale(1, 0.7, 1), (px, py, pz, c) => (Math.abs(Math.sin(px * 1.2 + pz * 0.4)) > 0.9 && py > 0 ? c.set('#6a3a14') : mixHex('#ffd84a', '#f2b81c', 0.5 + py, c)), gx + 12, top + 1, gz + 9, true);
+    W._lyingCyl('x', gx - 7.6, gx + 3.6, top + 1.6, gz + 14, 1.6, { surface: 'fruit' });
+    addCyl(gx + 12, gz + 9, 5, top, top + 2, { surface: 'fruit' });
   }
 
   // ---------------------------------------------------------------- the cooler (y -10) and a melt puddle
   W._box(-168, -132, -112, -88, F, -12, m.cooler);
   W._box(-169, -131, -113, -87, -12, -10, m.white);
-  addBox(-169, -131, -113, -87, F, -10, { surface: 'plastic' });
+  addBox(-168, -132, -112, -88, F, -12, { surface: 'plastic' }); // (0.35) the box, then its wider lid
+  addBox(-169, -131, -113, -87, -12, -10, { surface: 'plastic' });
   addBox(-156, -144, -88, -86, -18, -14, { surface: 'plastic' }); // its handle
   W._box(-156, -144, -88, -86, -18, -14, m.white, { cast: false }); // handle
   W._water(-128, F, -80, 14, 9);
@@ -208,44 +216,61 @@ export function buildBackyard(W) {
     food(lumpy(new THREE.SphereGeometry(5, 20, 14), 0.02).scale(1.3, 0.9, 1), '#ffd23f', px + 8, F + 7.5, pz - 6);
     food(new THREE.SphereGeometry(3.4, 18, 12), '#ffd23f', px + 12, F + 12, pz - 6);
     food(new THREE.ConeGeometry(1.4, 3, 12).rotateZ(-Math.PI / 2), '#ff8a1f', px + 16.5, F + 11.5, pz - 6);
-    addCyl(px + 9, pz - 6, 6, F + 3.5, F + 15, { surface: 'plastic' });
+    addCyl(px + 8, pz - 6, 5.6, F + 3.4, F + 11.6, { surface: 'plastic' }); // (0.35) the duck's body, then its head
+    addCyl(px + 12, pz - 6, 3, F + 9, F + 15.2, { surface: 'plastic' });
   }
 
   // ---------------------------------------------------------------- the picnic blanket and its giant food
   {
     const bx = 60, bz = 110;
     W._mesh(new THREE.PlaneGeometry(120, 70).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: canvasTex(256, 256, plaid, { repeat: [3, 2] }), roughness: 0.95 }), bx, F + 0.05, bz, { cast: false });
-    // a sandwich: bread, lettuce, cheese, ham, bread
-    const sx = bx - 30, sz = bz - 8, layers = [['#e9c27a', 3.2], ['#6cc04a', 1.2], ['#ffd23f', 1], ['#f29a9a', 1.6], ['#e9c27a', 3.2]];
+    // a sandwich: bread, lettuce, cheese, tomato, bread (0.35: no meat)
+    const sx = bx - 30, sz = bz - 8, layers = [['#e9c27a', 3.2], ['#6cc04a', 1.2], ['#ffd23f', 1], ['#e0402c', 1.6], ['#e9c27a', 3.2]];
     let y = F;
     for (const [c, h] of layers) { food(new THREE.BoxGeometry(c === '#6cc04a' ? 24 : 22, h, c === '#6cc04a' ? 24 : 22, 4, 1, 4), c, sx, y + h / 2, sz, true); y += h; }
     addBox(sx - 11, sx + 11, sz - 11, sz + 11, F, y, { surface: 'fruit' });
-    // a burger
+    // (0.35) a giant cupcake (it was a burger): a striped paper case, three swirls of frosting, a cherry
     const ux = bx + 2, uz = bz + 18;
-    let uy = F;
-    for (const [c, r, h] of [['#d99a4a', 11, 3.5], ['#5a3420', 11.5, 3], ['#ffd23f', 12, 0.8], ['#6cc04a', 12.5, 0.8], ['#e0271c', 11, 1.2]]) {
-      food(new THREE.CylinderGeometry(r, r, h, 32), c, ux, uy + h / 2, uz, c !== '#e0271c'); uy += h;
+    food(new THREE.CylinderGeometry(12, 10, 9, 36), (px, py, pz, c) => c.set(Math.sin(Math.atan2(pz, px) * 9) > 0 ? '#ff8fb8' : '#fff1f6'), ux, F + 4.5, uz, true);
+    for (const [r, sy, y] of [[11.5, 0.45, 11], [8.5, 0.55, 15], [5, 0.8, 19]]) {
+      food(lumpy(new THREE.SphereGeometry(r, 32, 16).scale(1, sy, 1), 0.03), (px, py, pz, c) => mixHex('#fff4ea', '#ffd6e6', 0.5 + 0.5 * Math.sin(Math.atan2(pz, px) * 5 + py), c), ux, F + y, uz, true);
     }
-    food(new THREE.SphereGeometry(11, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.65, 1), (px, py, pz, c) => mixHex('#e2a052', '#c8782e', py / 8, c), ux, uy, uz);
-    addCyl(ux, uz, 12, F, uy + 6, { surface: 'fruit' });
+    food(new THREE.SphereGeometry(2.4, 18, 12), '#d01c2a', ux, F + 24.4, uz);
+    food(new THREE.CylinderGeometry(0.2, 0.25, 3, 6).rotateZ(0.4), '#3f6a2a', ux + 0.6, F + 27.3, uz, true);
+    W._roundCols(ux, uz, F, F + 9, 2, (y) => 10 + 2 * (y - F) / 9, { surface: 'bread' });
+    addCyl(ux, uz, 11, F + 9, F + 13, { surface: 'bread' });
+    addCyl(ux, uz, 8.5, F + 13, F + 16, { surface: 'bread' });
+    addCyl(ux, uz, 6.5, F + 16, F + 19, { surface: 'bread' });
+    addCyl(ux, uz, 4.2, F + 19, F + 22, { surface: 'bread' });
+    addCyl(ux, uz, 2.2, F + 22, F + 26.6, { surface: 'fruit' });
     // a corn cob
     const corn = lumpy(new THREE.CapsuleGeometry(4, 22, 8, 16).rotateZ(Math.PI / 2), 0.04);
     food(corn, (px, py, pz, c) => mixHex('#ffd84a', '#f2b81c', 0.5 + 0.5 * Math.sin(px * 4) * Math.sin(Math.atan2(pz, py) * 10), c), bx + 34, F + 4, bz - 14);
-    addBox(bx + 19, bx + 49, bz - 18, bz - 10, F, F + 8, { surface: 'fruit' });
+    W._lyingCyl('x', bx + 23, bx + 45, F + 4, bz - 14, 4, { surface: 'fruit' }); // (0.35) round, with rounded ends
+    W._lyingCyl('x', bx + 20, bx + 48, F + 4, bz - 14, 2.6, { surface: 'fruit' });
     // ketchup and mustard
     for (const [x, z, c] of [[bx - 4, bz - 20, '#d62a1e'], [bx + 6, bz - 24, '#f2c21c']]) {
       food(new THREE.CylinderGeometry(4, 4.4, 18, 24), c, x, F + 9, z);
       food(new THREE.ConeGeometry(4, 6, 24), c, x, F + 21, z);
       food(new THREE.CylinderGeometry(0.6, 0.9, 3, 10), '#f6f3ee', x, F + 25, z);
-      addCyl(x, z, 4.4, F, F + 24, { surface: 'plastic' });
+      addCyl(x, z, 4.2, F, F + 18, { surface: 'plastic' }); // (0.35) the bottle, its cone, its nozzle
+      W._roundCols(x, z, F + 18, F + 24, 2, (y) => 4 * (1 - (y - F - 18) / 6), { surface: 'plastic' });
+      addCyl(x, z, 0.8, F + 23, F + 26.5, { surface: 'plastic' });
     }
     // a slice of watermelon lying on its side, and paper cups
-    const wedge = new THREE.CylinderGeometry(14, 14, 4, 24, 1, false, 0, Math.PI).rotateX(Math.PI / 2);
+    const wedge = new THREE.CylinderGeometry(14, 14, 4, 24, 1, false, -Math.PI / 2, Math.PI).rotateX(-Math.PI / 2); // (0.35) a half slice standing on its cut edge (half of it was under the lawn)
     food(wedge, (px, py, pz, c) => { const d = Math.hypot(px, py); if (d > 12.8) c.set('#2f8a3a'); else if (d > 11.6) c.set('#d6f2b0'); else mixHex('#ff4f64', '#e8344c', 0.5 + 0.5 * Math.sin(px * 3 + py * 2), c); }, bx + 40, F + 0.1, bz + 22);
-    addBox(bx + 26, bx + 54, bz + 20, bz + 24, F, F + 14, { surface: 'fruit' });
+    for (const [y0, y1] of [[0, 4], [4, 7.5], [7.5, 10.5], [10.5, 12.6], [12.6, 13.8]]) { // (0.35) stepped to its round top
+      const hw = Math.sqrt(196 - ((y0 + y1) / 2) ** 2);
+      addBox(bx + 40 - hw, bx + 40 + hw, bz + 20, bz + 24, F + y0, F + y1, { surface: 'fruit' });
+    }
+    const cupMat = new THREE.MeshStandardMaterial({ color: '#f6f3ee', roughness: 0.5, side: THREE.DoubleSide }); // (0.35) its inside shows
     for (const [x, z] of [[bx - 40, bz + 22], [bx - 30, bz + 28]]) {
-      W._mesh(new THREE.CylinderGeometry(4, 3, 11, 24, 1, true), m.white, x, F + 5.5, z);
-      addCyl(x, z, 4, F, F + 11, { surface: 'plastic' });
+      W._mesh(new THREE.CylinderGeometry(4, 3, 11, 24, 1, true), cupMat, x, F + 5.5, z);
+      W._mesh(new THREE.TorusGeometry(4, 0.25, 8, 28).rotateX(Math.PI / 2), m.cupRim, x, F + 11, z, { cast: false });
+      W._mesh(new THREE.CircleGeometry(3.75, 28).rotateX(-Math.PI / 2), m.lemonade, x, F + 9, z, { cast: false }); // lemonade
+      addCyl(x, z, 3.6, F, F + 9, { surface: 'plastic' });
+      W._ring(x, z, 4, 0.5, F + 9, F + 11, 8, { surface: 'plastic' });
     }
     W._honey(bx + 22, F, bz - 30, 5);
   }
@@ -253,7 +278,7 @@ export function buildBackyard(W) {
   // ---------------------------------------------------------------- trees and a hedge for cover
   for (const [x, z, r] of [[-200, -30, 7], [205, 70, 8]]) {
     W._mesh(new THREE.CylinderGeometry(r * 0.8, r * 1.2, 110, 14), m.bark, x, F + 55, z);
-    addCyl(x, z, r * 1.1, F, F + 110, { surface: 'wood' });
+    W._roundCols(x, z, F, F + 110, 5, (y) => r * (1.2 - (0.4 * (y - F)) / 110), { surface: 'wood' }); // (0.35) it narrows going up
     W._mesh(lumpy(paint(new THREE.IcosahedronGeometry(40, 3), (px, py, pz, c) => mixHex('#3c7a28', '#7cbb4c', 0.5 + py / 80, c)), 0.15), m.leaves, x, F + 120, z);
   }
   for (const [x0, x1, z0, z1] of [[-238, -222, -150, -70], [222, 238, -40, 30], [-120, -40, 150, 162]]) {
@@ -265,10 +290,12 @@ export function buildBackyard(W) {
   food(new THREE.SphereGeometry(3, 16, 12), '#f2c9a0', 120, F + 12, 60, true);
   food(new THREE.ConeGeometry(3.3, 8, 16), '#d62a1e', 120, F + 17.5, 60);
   food(new THREE.SphereGeometry(2.6, 12, 8).scale(1, 1.2, 0.8), '#f6f3ee', 120, F + 9.5, 62.5, true);
-  addCyl(120, 60, 4, F, F + 21, { surface: 'plastic' });
+  addCyl(120, 60, 3.6, F, F + 10, { surface: 'plastic' }); // (0.35) body, head, hat
+  addCyl(120, 60, 2.8, F + 10, F + 14.6, { surface: 'plastic' });
+  W._roundCols(120, 60, F + 14.6, F + 21.5, 3, (y) => 3.3 * (1 - (y - F - 13.5) / 8), { surface: 'plastic' });
   W._mesh(new THREE.CylinderGeometry(7, 7, 12, 24), m.steel, -60, F + 6, -130);
   W._mesh(new THREE.CylinderGeometry(1, 1.4, 16, 10).rotateZ(-0.9), m.steel, -50, F + 10, -130);
-  addBox(-53, -45, -131.4, -128.6, F + 6, F + 15, { surface: 'steel' }); // the spout
+  W._rod(new THREE.Vector3(-53.5, F + 7.2, -130), new THREE.Vector3(-43.7, F + 15, -130), 1.2, 7, { surface: 'steel' }); // the spout (0.35: along it)
   addCyl(-60, -130, 7, F, F + 12, { surface: 'steel' });
 
   // ---------------------------------------------------------------- pads, the giant tomato, the tide, spawns

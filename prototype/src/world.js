@@ -221,7 +221,7 @@ export class World {
     this.renderer = renderer;
     this.quality = quality;
     clearColliders();
-    this.mats = {};
+    this.mats = { rim: new THREE.MeshStandardMaterial({ color: '#eef7ff', roughness: 0.15, metalness: 0.1 }) }; // (0.35) glass rims, every map
     this.burners = []; this.waters = []; this.honeys = []; this.pads = [];
     this.slickSpots = []; // permanent slippery patches (the egg white), re-stamped by the game
     this.shadowDirty = true;
@@ -298,7 +298,7 @@ export class World {
     m.chrome = new THREE.MeshStandardMaterial({ color: '#f2f4f6', metalness: 1, roughness: 0.08 });
     m.ceramic = new THREE.MeshPhysicalMaterial({ color: '#f7f5f0', roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.08 });
     m.mug = new THREE.MeshPhysicalMaterial({ color: '#2f6fb0', roughness: 0.2, clearcoat: 1 });
-    m.glass = new THREE.MeshPhysicalMaterial({ color: '#e6f6ff', roughness: 0.05, transparent: true, opacity: 0.3, clearcoat: 1, depthWrite: false });
+    m.glass = new THREE.MeshPhysicalMaterial({ color: '#d8ecff', roughness: 0.05, transparent: true, opacity: 0.36, clearcoat: 1, depthWrite: false }); // (0.35) a touch more visible, and every glass has a rim
     m.jam = new THREE.MeshPhysicalMaterial({ color: '#8e0f2c', roughness: 0.2, clearcoat: 1, sheen: 0.4 });
     m.dark = new THREE.MeshStandardMaterial({ color: '#2b2a2e', roughness: 0.6 });
     m.ceiling = new THREE.MeshStandardMaterial({ color: '#f4ede2', roughness: 0.9 });
@@ -346,11 +346,14 @@ export class World {
       this._mesh(new THREE.CylinderGeometry(8, 8, 1, 24), m.lamp, x, F + 109, z, { cast: false, receive: false });
     }
     // pot rack hanging over the island (GDD "Skyhooks")
+    const potSide = new THREE.MeshStandardMaterial({ color: '#f2f4f6', metalness: 1, roughness: 0.08, side: THREE.DoubleSide });
+    const copper = new THREE.MeshStandardMaterial({ color: '#b8683a', metalness: 0.9, roughness: 0.3 });
     this._box(-65, 65, -0.75, 0.75, 67.25, 68.75, m.steel, { cast: false });
     for (const x of [-55, 55]) this._mesh(new THREE.CylinderGeometry(0.3, 0.3, 6, 6), m.steel, x, 71, 0, { cast: false });
     for (const [x, r, drop] of [[-40, 10, 6], [-12, 8, 4], [16, 12, 7], [44, 7, 3]]) {
       this._mesh(new THREE.CylinderGeometry(0.2, 0.2, drop, 6), m.steel, x, 68 - drop / 2, 0, { cast: false });
-      this._mesh(new THREE.CylinderGeometry(r, r * 0.9, r * 0.9, 32, 1, true), m.chrome, x, 68 - drop - r * 0.45, 0);
+      this._mesh(new THREE.CylinderGeometry(r, r * 0.9, r * 0.9, 32, 1, true), potSide, x, 68 - drop - r * 0.45, 0);
+      this._mesh(new THREE.CircleGeometry(r * 0.9, 32).rotateX(Math.PI / 2), copper, x, 68 - drop - r * 0.9, 0, { cast: false }); // (0.35) a bottom (it was see-through)
     }
   }
 
@@ -371,7 +374,8 @@ export class World {
       for (const x of [maxX - 1.9, minX + 1.9]) this._mesh(new THREE.BoxGeometry(0.6, 26, 17), m.cabinetDark, x, F + 17, z, { cast: false });
     }
     this._mesh(new THREE.BoxGeometry(w - 5, 3, d - 5), m.dark, 0, F + 1.5, 0, { cast: false });
-    addBox(minX, maxX, minZ, maxZ, F, 0, { surface: 'wood', counter: true });
+    addBox(minX + 1.6, maxX - 1.6, minZ + 1.6, maxZ - 1.6, F, -2.2, { surface: 'wood', counter: true }); // (0.35) the cupboards, then the top that overhangs them
+    addBox(minX, maxX, minZ, maxZ, -2.2, 0, { surface: 'wood', counter: true });
 
 
     // props (same layout as the first prototype)
@@ -386,13 +390,18 @@ export class World {
     addBox(40, 44, 10, 20, 0, 16, { surface: 'cardboard' });
     this._mesh(new THREE.CylinderGeometry(3.7, 3.7, 8.4, 40), m.jam, -6, 4.2, 22, shadowy);
     this._mesh(new THREE.CylinderGeometry(4, 4, 10, 40, 1, true), m.glass, -6, 5, 22, { cast: false });
+    this._glassRim(-6, 9.6, 22, 4);
     const lid = new THREE.MeshStandardMaterial({ color: '#d9c27a', metalness: 0.8, roughness: 0.3 });
     this._mesh(new THREE.CylinderGeometry(4.2, 4.2, 1.6, 40), lid, -6, 10.4, 22, shadowy);
     addCyl(-6, 22, 4, 0, 11, { surface: 'glass' });
     this._mesh(new THREE.CylinderGeometry(4.2, 3.9, 9, 40), m.mug, 14, 4.5, -16, shadowy);
-    this._mesh(new THREE.TorusGeometry(2.4, 0.6, 12, 24).rotateY(Math.PI / 2), m.mug, 18.5, 4.8, -16, shadowy);
-    addCyl(14, -16, 4.2, 0, 9, { surface: 'ceramic' });
-    addBox(17.6, 19.6, -16.6, -15.4, 2.2, 7.4, { surface: 'ceramic' }); // the mug's handle
+    this._mesh(new THREE.TorusGeometry(2.4, 0.6, 12, 24), m.mug, 18.5, 4.8, -16, shadowy); // (0.35) the handle sticks out (it faced sideways)
+    this._mesh(new THREE.CircleGeometry(3.9, 32).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#4a2a14', roughness: 0.2 }), 14, 9.03, -16, { cast: false }); // coffee in it
+    addCyl(14, -16, 4.1, 0, 9, { surface: 'ceramic' });
+    for (let i = 0; i < 6; i++) { // the handle: solid along its arc
+      const a0 = -Math.PI / 2 + (i / 6) * Math.PI, a1 = -Math.PI / 2 + ((i + 1) / 6) * Math.PI;
+      this._rod(new THREE.Vector3(18.5 + 2.4 * Math.cos(a0), 4.8 + 2.4 * Math.sin(a0), -16), new THREE.Vector3(18.5 + 2.4 * Math.cos(a1), 4.8 + 2.4 * Math.sin(a1), -16), 0.6, 1, { surface: 'ceramic' });
+    }
     const boardMat = new THREE.MeshStandardMaterial({ color: '#c98f55', roughness: 0.55 });
     this._mesh(new THREE.BoxGeometry(24, 1, 14), boardMat, 0, 0.5, -1, shadowy);
     this._mesh(new THREE.CylinderGeometry(1.2, 1.2, 1.1, 20), m.dark, 10, 0.55, -1, { cast: false });
@@ -428,7 +437,8 @@ export class World {
       this._box(x + 5, x + 6, maxZ - 1.4, maxZ - 0.8, F + 20, F + 27, m.chrome, { cast: false });
     }
     this._box(minX, maxX, minZ + 4, maxZ - 5, F, F + 3, m.dark, { cast: false });
-    addBox(minX, maxX, minZ, maxZ, F, 0, { surface: 'wood', counter: true });
+    addBox(minX, maxX, minZ, maxZ - 1.4, F, -2, { surface: 'wood', counter: true }); // (0.35) the cupboards, then the top that overhangs them
+    addBox(minX, maxX, minZ, maxZ, -2, 0, { surface: 'wood', counter: true });
     // backsplash and upper cabinets (overhead, out of reach)
     for (let x = minX + 20; x < maxX; x += 40) {
       if (x > -130 && x < -70) continue; // leave the window clear
@@ -446,7 +456,10 @@ export class World {
     this._mesh(new THREE.CylinderGeometry(1.6, 2, 16, 16), m.chrome, -100, 8, -174);
     this._mesh(new THREE.TorusGeometry(5, 1.1, 10, 20, Math.PI).rotateY(Math.PI / 2), m.chrome, -100, 16, -169);
     addCyl(-100, -174, 2, 0, 18, { surface: 'steel' });
-    addBox(-101.2, -98.8, -175, -163.5, 14.5, 18.2, { surface: 'steel' }); // the faucet's arch
+    for (let i = 0; i < 10; i++) { // the faucet's arch (0.35: solid along the arch, not a bar under it)
+      const t0 = (i / 10) * Math.PI, t1 = ((i + 1) / 10) * Math.PI;
+      this._rod(new THREE.Vector3(-100, 16 + 5 * Math.sin(t0), -169 - 5 * Math.cos(t0)), new THREE.Vector3(-100, 16 + 5 * Math.sin(t1), -169 - 5 * Math.cos(t1)), 1.1, 1, { surface: 'steel' });
+    }
     // stove: two burners that cycle, a big stock pot and a range hood
     this._box(58, 132, -176, -148, 0, 0.6, m.dark, { cast: false });
     this._burner(78, 0.6, -162, 7, false);
@@ -454,11 +467,15 @@ export class World {
     this._box(60, 130, -178, -150, 40, 52, m.steel, { cast: false });
     this._mesh(new THREE.CylinderGeometry(12, 11, 16, 36), m.steel, 170, 8, -162);
     this._mesh(new THREE.TorusGeometry(12, 0.8, 8, 36).rotateX(Math.PI / 2), m.chrome, 170, 16, -162, { cast: false });
-    addCyl(170, -162, 12, 0, 16, { surface: 'steel' });
+    addCyl(170, -162, 11.3, 0, 8, { surface: 'steel' });
+    addCyl(170, -162, 12, 8, 16, { surface: 'steel' });
     // coffee maker (tall cover)
     this._box(-178, -152, -176, -160, 0, 26, m.dark);
     this._mesh(new THREE.CylinderGeometry(6, 6.5, 10, 24), m.glass, -165, 6, -158, { cast: false });
-    addBox(-178, -152, -176, -156, 0, 26, { surface: 'steel' });
+    this._mesh(new THREE.CylinderGeometry(5.6, 6.1, 5, 24), new THREE.MeshStandardMaterial({ color: '#3a1f10', roughness: 0.2 }), -165, 3.6, -158); // (0.35) coffee in the pot
+    this._glassRim(-165, 10.8, -158, 6);
+    addBox(-178, -152, -176, -160, 0, 26, { surface: 'steel' }); // (0.35) the machine, and the pot in front of it (not a block above it)
+    addCyl(-165, -158, 6.3, 0, 11, { surface: 'glass' });
     this._honey(20, 0, -160, 3.2);
   }
 
@@ -494,11 +511,14 @@ export class World {
     }
     for (const [x, z] of [[-14, 90], [16, 124]]) {
       this._mesh(new THREE.CylinderGeometry(2.8, 2.4, 11, 24, 1, true), m.glass, x, tTop + 5.5, z, { cast: false });
-      this._mesh(new THREE.CylinderGeometry(2.3, 2.3, 5, 24), new THREE.MeshPhysicalMaterial({ color: '#ff9a3c', roughness: 0.1, transmission: 0, clearcoat: 1 }), x, tTop + 2.6, z);
-      addCyl(x, z, 2.8, tTop, tTop + 11, { surface: 'glass' });
+      this._glassRim(x, tTop + 10.9, z, 2.8);
+      this._mesh(new THREE.CylinderGeometry(2.55, 2.4, 8.4, 24), new THREE.MeshPhysicalMaterial({ color: '#ff9a3c', roughness: 0.1, transmission: 0, clearcoat: 1 }), x, tTop + 4.4, z);
+      addCyl(x, z, 2.6, tTop, tTop + 8.6, { surface: 'glass' }); // (0.35) solid up to the juice, then the glass's wall
+      this._ring(x, z, 2.8, 0.5, tTop + 8.6, tTop + 11, 8, { surface: 'glass' });
     }
-    this._mesh(new THREE.SphereGeometry(8, 32, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), m.ceramic, 0, tTop + 5, 106);
-    addCyl(0, 106, 7.5, tTop, tTop + 5, { surface: 'ceramic' });
+    // (0.35) a blue bowl with a cream inside: its top no longer shows the table through it
+    this._bowl(0, tTop + 5, 106, 8, new THREE.MeshPhysicalMaterial({ color: '#2f6fb0', roughness: 0.2, clearcoat: 1 }), '#f7f1e3');
+    this._roundCols(0, 106, tTop, tTop + 5, 3, (y) => Math.sqrt(Math.max(0, 64 - (tTop + 5 - y) ** 2)), { surface: 'ceramic' });
     this._honey(46, tTop, 106, 3);
   }
 
@@ -525,19 +545,20 @@ export class World {
     // a can lying on its side
     this._mesh(new THREE.CylinderGeometry(6, 6, 16, 36, 1, true).rotateZ(Math.PI / 2), canMat, 110, F + 6, -80);
     for (const ex of [102, 118]) this._mesh(new THREE.CylinderGeometry(6, 6, 0.4, 36).rotateZ(Math.PI / 2), tin, ex, F + 6, -80);
-    addBox(102, 118, -86, -74, F, F + 12, { surface: 'steel' });
+    this._lyingCyl('x', 102, 118, F + 6, -80, 6, { surface: 'steel' }); // (0.35) round, not a crate
 
     // rolling pin (low wall you can hop onto)
     const pinWood = new THREE.MeshStandardMaterial({ color: '#e0b27a', roughness: 0.55 });
     this._mesh(new THREE.CylinderGeometry(2.6, 2.6, 40, 24).rotateX(Math.PI / 2), pinWood, -150, F + 2.6, 120);
     for (const hz of [95, 145]) this._mesh(new THREE.CylinderGeometry(1.1, 1.3, 10, 16).rotateX(Math.PI / 2), m.walnut, -150, F + 2.6, hz);
-    addBox(-152.6, -147.4, 92, 148, F, F + 5.2, { surface: 'wood' });
+    this._lyingCyl('z', 100, 140, F + 2.6, -150, 2.6, { surface: 'wood' }); // (0.35) the pin, then its thinner handles
+    for (const [z0, z1] of [[90, 100], [140, 150]]) this._lyingCyl('z', z0, z1, F + 2.6, -150, 1.2, { surface: 'wood' });
 
     // colander dome
     const colander = new THREE.MeshStandardMaterial({ color: '#dfe3e8', metalness: 0.85, roughness: 0.3, side: THREE.DoubleSide });
     this._mesh(new THREE.SphereGeometry(10, 36, 14, 0, Math.PI * 2, 0, Math.PI / 2), colander, 180, F, -40);
     this._mesh(new THREE.TorusGeometry(10.2, 0.6, 8, 40).rotateX(Math.PI / 2), tin, 180, F + 0.5, -40, { cast: false });
-    addCyl(180, -40, 9.6, F, F + 9, { surface: 'steel' });
+    this._roundCols(180, -40, F, F + 9.6, 4, (y) => Math.sqrt(Math.max(0, 100 - (y - F) ** 2)), { surface: 'steel' }); // (0.35) a dome, not a drum
 
     // sugar cubes: stacked steps
     const sugar = new THREE.MeshStandardMaterial({ color: '#fbfaf4', roughness: 0.95 });
@@ -583,9 +604,14 @@ export class World {
     addBox(50.5, 53.5, 2.5, 5.5, 0, 3, { surface: 'sugar' });
 
     // back counter: a stack of bowls and a row of spice jars
-    const bowl = new THREE.MeshPhysicalMaterial({ color: '#e98c5a', roughness: 0.25, clearcoat: 1 });
-    for (let i = 0; i < 3; i++) this._mesh(new THREE.CylinderGeometry(7 - i * 0.2, 4.5, 2.4, 36), bowl, -15, 1.2 + i * 1.6, -163);
-    addCyl(-15, -163, 7, 0, 5.5, { surface: 'ceramic' });
+    // (0.35) teal with a cream inside, so the top bowl doesn't blend into the wooden counter
+    const bowl = new THREE.MeshPhysicalMaterial({ color: '#2f8f9d', roughness: 0.25, clearcoat: 1 });
+    for (let i = 0; i < 3; i++) {
+      this._mesh(new THREE.CylinderGeometry(7 - i * 0.2, 4.5, 2.4, 36), bowl, -15, 1.2 + i * 1.6, -163);
+      addCyl(-15, -163, 5.2, i * 1.6, i * 1.6 + 1.2, { surface: 'ceramic' });
+      addCyl(-15, -163, 6.4 - i * 0.2, i * 1.6 + 1.2, i * 1.6 + 2.4, { surface: 'ceramic' });
+    }
+    this._mesh(new THREE.CylinderGeometry(6.1, 4.6, 0.6, 36), new THREE.MeshStandardMaterial({ color: '#fbf1dc', roughness: 0.3 }), -15, 5.75, -163, { cast: false });
     const spices = ['#b5471b', '#d9a21b', '#6b8e23', '#7a3b1b', '#c2410c'];
     const spiceIM = new THREE.InstancedMesh(new THREE.CylinderGeometry(1.6, 1.6, 5.2, 20), new THREE.MeshStandardMaterial({ roughness: 0.9 }), spices.length);
     this.scene.add(spiceIM); // one draw call, a colour per jar
@@ -594,6 +620,7 @@ export class World {
       spiceIM.setMatrixAt(i, new THREE.Matrix4().makeTranslation(x, 2.6, -171));
       spiceIM.setColorAt(i, new THREE.Color(col));
       this._mesh(new THREE.CylinderGeometry(1.8, 1.8, 6, 20, 1, true), m.glass, x, 3, -171, { cast: false });
+      this._glassRim(x, 0.15, -171, 1.8);
       this._mesh(new THREE.CylinderGeometry(1.9, 1.9, 1.2, 20), tin, x, 6.6, -171);
       addCyl(x, -171, 1.9, 0, 7.2, { surface: 'glass' });
     });
@@ -642,9 +669,10 @@ export class World {
         mixHex('#4c9a3e', '#1f5a24', s > 0.25 ? 1 : s > -0.1 ? 0.5 : 0, c);
         if (py < -5.8) c.lerp(_col2.set('#d9d27a'), 0.6); // the pale spot it grew on
       }, x, F + 7.1, z);
-      addCyl(x, z, 7.4, F, F + 14.4, fruit);
-      addCyl(x - 6.5, z, 5.6, F, F + 12.2, fruit);
-      addCyl(x + 6.5, z, 5.6, F, F + 12.2, fruit);
+      for (let i = 0; i < 6; i++) { // (0.35) six slices along its length, each round in cross-section
+        const a = -11 + (22 * i) / 6, b = -11 + (22 * (i + 1)) / 6, k = Math.sqrt(1 - (((a + b) / 2) / 11) ** 2);
+        for (const [w, h] of [[0.95, 0.3], [0.7, 0.7], [0.3, 0.95]]) addBox(x + a, x + b, z - 7.6 * k * w, z + 7.6 * k * w, F + 7.1 - 7.4 * k * h, F + 7.1 + 7.4 * k * h, fruit);
+      }
     }
 
     // --- floor: a broccoli tree you can hide under
@@ -661,8 +689,10 @@ export class World {
       for (const [ox, oy, oz, s] of florets) {
         food(lumpy(new THREE.IcosahedronGeometry(s, 2), 0.12), (px, py, pz, c) => mixHex('#2f7a2a', '#5aa83e', 0.5 + bump(px + ox, py, pz + oz) * 1.4, c), x + ox, F + 13 + oy, z + oz, true);
       }
-      addCyl(x, z, 3.2, F, F + 10, fruit);
-      addCyl(x, z, 9.2, F + 9.4, F + 16.6, fruit);
+      addCyl(x, z, 3, F, F + 10, fruit);
+      addCyl(x, z, 8.6, F + 9.4, F + 12.5, fruit); // (0.35) the crown narrows toward the top
+      addCyl(x, z, 7.2, F + 12.5, F + 15.2, fruit);
+      addCyl(x, z, 4.6, F + 15.2, F + 17.6, fruit);
     }
 
     // --- floor: a dropped donut (stand in the hole)
@@ -694,18 +724,17 @@ export class World {
         const g = new THREE.ConeGeometry(0.9, 9, 6).translate(0, 4.5, 0).rotateZ(Math.PI / 2 + Math.sin(i * 2.1) * 0.4).rotateY(Math.sin(i * 1.3) * 0.5);
         food(g, '#3f8f2f', x - L / 2, F + R + 1.4, z + Math.sin(i * 4.1) * 1.2, true);
       }
-      addBox(x - 19, x - 6.3, z - 3.2, z + 3.2, F, F + 6.4, fruit);
-      addBox(x - 6.3, x + 6.3, z - 2.4, z + 2.4, F, F + 4.6, fruit);
-      addBox(x + 6.3, x + 18, z - 1.4, z + 1.4, F, F + 2.6, fruit);
+      for (let i = 0; i < 6; i++) { // (0.35) round, narrowing to the tip
+        const a = x - L / 2 + (L * i) / 6, b = x - L / 2 + (L * (i + 1)) / 6, m = (a + b) / 2, rr = R * (1 - (m - (x - L / 2)) / L);
+        this._lyingCyl('x', a, b, F + R - (m - x) * 0.085, z, rr, fruit); // (its tip dips toward the floor)
+      }
     }
 
     // --- floor: a giant banana curled on its side
     {
       const pts = [[-135, -114], [-126, -104], [-116, -100.5], [-106, -103.5], [-99, -112]].map(([px, pz]) => new THREE.Vector3(px, 0, pz));
       this._mesh(bananaGeo(pts, 2.7), m.food, 0, F + 2.5, 0);
-      addBox(-137, -123, -118, -103, F, F + 4.8, fruit);
-      addBox(-124, -108, -106, -97, F, F + 5.2, fruit);
-      addBox(-109, -96, -116, -99, F, F + 4.8, fruit);
+      this._bananaCols(pts, 2.7, F + 2.5, fruit); // (0.35) solid along the banana, tapered ends too
     }
 
     // --- floor: a red pepper and an orange
@@ -766,8 +795,10 @@ export class World {
       };
       food(shell(), '#f5efe2', x - 7, F + H, z + 2);                                 // a cup, open side up
       food(shell().rotateX(Math.PI), '#f5efe2', x + 8, F, z - 3);                    // a cap, open side down
-      addCyl(x - 7, z + 2, R - 0.1, F, F + H, fruit);
-      addCyl(x + 8, z - 3, R - 0.1, F, F + H, fruit);
+      // (0.35) the cup: solid at the bottom, a thin wall above (you can stand in it); the cap: a dome
+      this._roundCols(x - 7, z + 2, F, F + 1.4, 2, (y) => R * Math.sqrt(Math.max(0, 1 - (1 - (y - F) / H) ** 2)), fruit);
+      this._ring(x - 7, z + 2, R, 0.6, F + 1.4, F + H, 10, fruit);
+      this._roundCols(x + 8, z - 3, F, F + H, 4, (y) => R * Math.sqrt(Math.max(0, 1 - ((y - F) / H) ** 2)), fruit);
     }
 
     // --- floor: a glass pickle jar on its side: walk in at the open end
@@ -832,7 +863,7 @@ export class World {
         const a = i * 2.39, r = 0.4 + (i % 4) * 0.45;
         food(new THREE.SphereGeometry(0.85, 12, 10), (px, py, pz, c) => mixHex('#5a2276', '#8e3fae', 0.5 + py, c), bx - 1 + Math.cos(a) * r, tTop + 8.8 - (i % 4) * 0.55, bz + 3 + Math.sin(a) * r);
       }
-      addCyl(bx, bz, 6.8, tTop, tTop + 8.8, fruit);
+      addCyl(bx, bz, 4.2, tTop + 5, tTop + 8.8, fruit); // (0.35) the fruit pile, on the bowl (the bowl is solid below it)
     }
 
     // --- the back counter: a loaf of bread, a pineapple and a bunch of bananas
@@ -842,7 +873,8 @@ export class World {
         mixHex('#d68a3c', '#9a5520', clamp(py / 4.4, 0, 1), c);
         if (py > 2.4 && Math.abs(Math.sin((px + pz * 0.6) * 0.75)) > 0.93) c.set('#f2d2a0'); // scored top
       }, x, 4, z, true);
-      addBox(x - 12, x + 12, z - 5.2, z + 5.2, 0, 8.4, { surface: 'bread' });
+      this._lyingCyl('x', x - 7, x + 7, 4, z, 5.2, { surface: 'bread' }, 4.4); // (0.35) round, with rounded ends
+      this._lyingCyl('x', x - 11, x + 11, 4, z, 3.6, { surface: 'bread' }, 3.1);
     }
     {
       const x = 146, z = -165;
@@ -864,9 +896,9 @@ export class World {
         const t = new THREE.Vector3(...tip);
         const mid = s.clone().lerp(t, 0.5).setY(1.5);
         this._mesh(bananaGeo([s.clone(), mid, t], 1.6), m.food, 0, 0, 0);
+        this._bananaCols([s.clone(), mid, t], 1.6, 0, fruit); // (0.35) each banana solid, not one block
       }
       food(new THREE.CylinderGeometry(0.6, 0.8, 2.4, 8).rotateZ(Math.PI / 2), '#6b4a22', s.x + 1.2, s.y, s.z, true);
-      addBox(-56, -34, -171, -157, 0, 4.4, fruit);
     }
 
     // --- the island: a strawberry
@@ -936,7 +968,8 @@ export class World {
     this._box(-175, -115, 40, 44, F, F + 2, spoonMat);
     this._mesh(new THREE.SphereGeometry(8, 24, 10).scale(1, 0.3, 0.7), spoonMat, -107, F + 1.5, 42);
     addBox(-175, -115, 40, 44, F, F + 2, { surface: 'wood' });
-    addCyl(-107, 42, 7, F, F + 2.4, { surface: 'wood' });
+    addBox(-114, -100, 38.5, 45.5, F, F + 3.2, { surface: 'wood' }); // (0.35) the spoon's oval bowl
+    addBox(-111.5, -102.5, 37, 47, F, F + 3.2, { surface: 'wood' });
   }
 
   // ------------------------------------------------------------------ hazards
@@ -955,6 +988,69 @@ export class World {
     }
     this.burners.push({ x, y, z, r, coilMat, light, state: 'off', t: rand(4, 12) });
   }
+  // ------------------------------------------------------------------ (0.35) solid shapes that match what you see
+  // A Titan is under a metre wide, so a solid box a metre or two bigger than the thing drawn is an
+  // invisible wall. These helpers fit the solid shapes to round and tilted things.
+  // A tilted rod (a leg, a spout) from a to b: short boxes that follow it.
+  _rod(a, b, r, segs, props) {
+    const d = b.clone().sub(a).normalize(); // its thickness reaches out across the rod, not past its ends
+    const ex = r * Math.sqrt(1 - d.x * d.x), ey = r * Math.sqrt(1 - d.y * d.y), ez = r * Math.sqrt(1 - d.z * d.z);
+    for (let i = 0; i < segs; i++) {
+      const p = a.clone().lerp(b, i / segs), q = a.clone().lerp(b, (i + 1) / segs);
+      addBox(Math.min(p.x, q.x) - ex, Math.max(p.x, q.x) + ex, Math.min(p.z, q.z) - ez, Math.max(p.z, q.z) + ez, Math.min(p.y, q.y) - ey, Math.max(p.y, q.y) + ey, props);
+    }
+  }
+  // The same, for a mesh made from a geometry along y of this length (its rotation and position applied).
+  _rodOf(mesh, len, r, segs, props) {
+    mesh.updateMatrix();
+    this._rod(new THREE.Vector3(0, -len / 2, 0).applyMatrix4(mesh.matrix), new THREE.Vector3(0, len / 2, 0).applyMatrix4(mesh.matrix), r, segs, props);
+  }
+  // Something round about a vertical axis (a dome, a bowl, a tapered trunk): n stacked cylinders, each as
+  // wide as the outline halfway up it. radiusAt(y) gives the outline's radius at height y.
+  _roundCols(x, z, y0, y1, n, radiusAt, props) {
+    for (let i = 0; i < n; i++) {
+      const a = y0 + ((y1 - y0) * i) / n, b = y0 + ((y1 - y0) * (i + 1)) / n, r = radiusAt((a + b) / 2);
+      if (r > 0.1) addCyl(x, z, r, a, b, props);
+    }
+  }
+  // Something round lying along x or z (a can on its side, a rolling pin, a bottle): its circle
+  // (radius r round (cy, c)) as three boxes, wide-and-flat, square and narrow-and-tall.
+  _lyingCyl(axis, a0, a1, cy, c, r, props, ry = r) {
+    for (const [w, h] of [[0.95, 0.3], [0.7, 0.7], [0.3, 0.95]]) {
+      if (axis === 'x') addBox(a0, a1, c - r * w, c + r * w, cy - ry * h, cy + ry * h, props);
+      else addBox(c - r * w, c + r * w, a0, a1, cy - ry * h, cy + ry * h, props);
+    }
+  }
+  // A banana (bananaGeo's curve and taper), offset by (0, dy, 0): rods along it.
+  _bananaCols(points, radius, dy, props) {
+    const curve = new THREE.CatmullRomCurve3(points), n = Math.max(6, Math.ceil(curve.getLength() / 1.4));
+    for (let i = 0; i < n; i++) {
+      const u = (i + 0.5) / n, r = radius * (0.3 + 0.7 * Math.sin(Math.PI * u) ** 0.6) * 0.92;
+      const a = curve.getPointAt(i / n).add(new THREE.Vector3(0, dy, 0)), b = curve.getPointAt((i + 1) / n).add(new THREE.Vector3(0, dy, 0));
+      this._rod(a, b, r, 1, props);
+    }
+  }
+  // A thin round wall (a cup or a glass above its drink): n short boxes round a circle.
+  _ring(x, z, r, t, y0, y1, n, props) {
+    for (let i = 0; i < n; i++) {
+      const a = ((i + 0.5) / n) * Math.PI * 2, cx = x + Math.cos(a) * (r - t / 2), cz = z + Math.sin(a) * (r - t / 2);
+      const half = Math.max(t, (Math.PI * r) / n) / 2;
+      addBox(cx - half, cx + half, cz - half, cz + half, y0, y1, props);
+    }
+  }
+  // (0.35) A bowl: the outside, an inside of its own colour (its top never shows the table through it)
+  // and a rim. Its centre is at (x, y, z); it reaches r below that.
+  _bowl(x, y, z, r, outMat, inside) {
+    const g = new THREE.SphereGeometry(r, 36, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
+    this._mesh(g, outMat, x, y, z);
+    this._mesh(g.clone().scale(0.95, 0.95, 0.95), new THREE.MeshStandardMaterial({ color: inside, roughness: 0.35, side: THREE.BackSide }), x, y, z, { cast: false });
+    this._mesh(new THREE.TorusGeometry(r * 0.975, r * 0.035, 8, 48).rotateX(Math.PI / 2), outMat, x, y, z, { cast: false });
+  }
+  // (0.35) The rim of a glass: an opaque ring so the glass reads from anywhere.
+  _glassRim(x, y, z, r) {
+    this._mesh(new THREE.TorusGeometry(r, Math.max(0.12, r * 0.05), 8, 32).rotateX(Math.PI / 2), this.mats.rim, x, y, z, { cast: false });
+  }
+
   _water(x, y, z, rx, rz) {
     const w = this._mesh(new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2), this.mats.water, x, y + 0.03, z, { cast: false, dyn: true });
     w.scale.set(rx, 1, rz);
