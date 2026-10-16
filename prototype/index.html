@@ -518,6 +518,46 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 #menu-error { color: #ffb3a6; font-weight: 700; margin: 0; }
 @media (max-width: 520px) { .menu-panel { width: 100%; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+/* (0.36) highlight reels */
+.reel { position: fixed; inset: 0; z-index: 40; pointer-events: none; overflow: hidden; }
+.reel .reel-bar { position: absolute; left: 0; right: 0; height: 11vh; background: #000; transition: transform 0.6s cubic-bezier(.2,.9,.3,1); }
+.reel .reel-bar.rtop { top: 0; } .reel .reel-bar.rbot { bottom: 0; }
+.reel.out .reel-bar.rtop { transform: translateY(-100%); } .reel.out .reel-bar.rbot { transform: translateY(100%); }
+.reel .vig { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(10,4,16,0.55) 100%); transition: opacity 0.4s; opacity: 0.6; }
+.reel.slow .vig { opacity: 1; }
+.reel-fade { position: absolute; inset: 0; background: #000; opacity: 0; }
+.reel-fade.on { animation: reelFade 0.55s ease-out; }
+@keyframes reelFade { 0% { opacity: 1; } 100% { opacity: 0; } }
+.reel.out .reel-fade { animation: none; opacity: 1; transition: opacity 0.8s; }
+.reel-flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+.reel-flash.on { animation: reelFlash 0.45s ease-out; }
+@keyframes reelFlash { 0% { opacity: 0.75; } 100% { opacity: 0; } }
+.reel-title { position: absolute; left: 0; right: 0; top: 38%; display: grid; justify-items: center; gap: 8px; text-align: center; opacity: 0; transform: scale(1.25); padding-inline: 16px; }
+.reel-title.on { animation: reelTitle 1.9s ease-out forwards; }
+@keyframes reelTitle { 0% { opacity: 0; transform: scale(1.3); letter-spacing: 0.2em; } 18% { opacity: 1; transform: scale(1); letter-spacing: 0.02em; } 80% { opacity: 1; transform: scale(0.97); } 100% { opacity: 0; transform: scale(0.94); } }
+.reel-title strong { font-family: var(--display); font-weight: 400; font-size: clamp(36px, 8vw, 78px); color: var(--butter); text-shadow: 4px 5px 0 var(--tomato), 0 0 30px rgba(0,0,0,0.6); line-height: 1; text-transform: uppercase; }
+.reel-title span { font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase; font-size: 13px; color: var(--paper); background: rgba(0,0,0,0.55); padding: 5px 14px; border-radius: 999px; }
+.reel-cap { position: absolute; left: max(16px, 4vw); bottom: calc(11vh + 18px); display: grid; gap: 4px; max-width: min(560px, calc(100vw - 32px)); opacity: 0; transform: translateX(-30px); }
+.reel-cap.on { animation: reelCap 0.5s cubic-bezier(.2,1.4,.4,1) forwards; }
+@keyframes reelCap { to { opacity: 1; transform: none; } }
+.reel-cap b#reel-kind { justify-self: start; font-family: var(--display); font-weight: 400; font-size: clamp(22px, 4vw, 34px); color: var(--ink); background: var(--butter); padding: 2px 14px 4px; border-radius: 10px; transform: skewX(-8deg); text-transform: uppercase; box-shadow: 4px 4px 0 var(--tomato); }
+.reel-cap #reel-text { justify-self: start; font-weight: 700; font-size: clamp(14px, 2.4vw, 18px); color: var(--paper); background: rgba(10,4,16,0.62); padding: 4px 12px; border-radius: 10px; }
+.reel-cap #reel-text b { font-weight: 900; }
+.reel-cap #reel-text b.nm { color: #fff; box-shadow: inset 0 -3px 0 var(--c); }
+.reel-cap #reel-text b.you { color: var(--butter); }
+.reel-cap small { font-weight: 800; font-size: 11px; letter-spacing: 0.2em; color: var(--paper-dim); }
+.reel-pop { position: absolute; left: 0; right: 0; top: 30%; text-align: center; font-family: var(--display); font-size: clamp(48px, 11vw, 120px); color: var(--paper); text-shadow: 5px 6px 0 var(--tomato), 0 0 30px rgba(0,0,0,0.5); opacity: 0; text-transform: uppercase; }
+.reel-pop.on { animation: reelPop 1.4s ease-out; }
+@keyframes reelPop { 0% { opacity: 0; transform: scale(2.2) rotate(-6deg); } 12% { opacity: 1; transform: scale(1) rotate(-4deg); } 70% { opacity: 1; transform: scale(1.05) rotate(-4deg); } 100% { opacity: 0; transform: scale(1.12) rotate(-4deg); } }
+.reel-slow { position: absolute; right: max(16px, 4vw); top: calc(11vh + 14px); font-weight: 900; font-size: 11px; letter-spacing: 0.3em; color: var(--paper); opacity: 0; transition: opacity 0.25s; }
+.reel.slow .reel-slow { opacity: 0.85; }
+.reel-ui { position: absolute; left: 0; right: 0; bottom: 0; height: 11vh; display: flex; align-items: center; gap: 10px; padding: 0 max(16px, 4vw); pointer-events: auto; }
+.reel-prog { flex: 1; height: 4px; border-radius: 2px; background: rgba(255,244,226,0.18); overflow: hidden; }
+.reel-prog i { display: block; height: 100%; width: 0; background: var(--butter); }
+.reel-ui .btn { padding: 6px 14px; font-size: 14px; }
+body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause { display: none !important; }
+#end .row.reels { margin-top: -4px; }
+#end .row.reels .btn { padding: 8px 14px; font-size: 15px; }
 </style>
 <script type="importmap">
 { "imports": {
@@ -610,7 +650,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.35 · Cleaner maps</p>
+      <p class="eyebrow">Prototype 0.36 · Highlight reels</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in, or smash the other teams' pots in Cooking Pot Wars.</p>
       <nav class="homenav" aria-label="Main menu">
@@ -818,7 +858,23 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
       <button id="spectate" class="btn ghost" type="button">Keep watching</button>
       <button id="end-menu" class="btn ghost" type="button">Menu</button>
     </div>
+    <div class="row reels" id="end-reels" hidden>
+      <button id="reel-all" class="btn ghost" type="button">▶ Match highlights</button>
+      <button id="reel-me" class="btn ghost" type="button">▶ Your highlights</button>
+    </div>
   </div>
+</section>
+
+<section id="reel" class="reel" hidden aria-label="Highlight reel">
+  <div class="vig"></div>
+  <div class="reel-bar rtop"></div><div class="reel-bar rbot"></div>
+  <div id="reel-flash" class="reel-flash"></div>
+  <div id="reel-pop" class="reel-pop"></div>
+  <div id="reel-title" class="reel-title"></div>
+  <div id="reel-cap" class="reel-cap"><b id="reel-kind"></b><span id="reel-text"></span><small id="reel-n"></small></div>
+  <div class="reel-slow">Slow motion</div>
+  <div class="reel-ui"><div class="reel-prog"><i id="reel-prog"></i></div><button id="reel-next" class="btn ghost" type="button">Next ›</button><button id="reel-skip" class="btn ghost" type="button">Skip</button></div>
+  <div id="reel-fade" class="reel-fade"></div>
 </section>
 
 <script type="module" src="src/main.js"></script>

@@ -283,6 +283,7 @@ function boot() {
     enterPlay();
   }
   async function toMenu() {
+    game.highlights.stop();
     $('loadout').hidden = true;
     if (game.online) await game.stopOnline();
     playing = false; input.enabled = false; end.hidden = true; pause.hidden = true; hud.show(false); touch.hidden = true;
@@ -685,6 +686,26 @@ function boot() {
     $('end-receipt').innerHTML = `${r.lines.map(([k, n]) => `${k} <b>+${n}</b>`).join(' · ')} · you have ${coins(wallet.coins)}`;
     return r;
   };
+  // (0.36) Highlight reels: the match's best plays (it plays by itself when a match ends) and yours.
+  const showEndCard = () => {
+    const all = game.highlights.has('all'), me = game.highlights.has('me');
+    $('reel-all').hidden = !all; $('reel-me').hidden = !me; $('end-reels').hidden = !all && !me;
+    end.hidden = false; touch.hidden = true; input.exitLock();
+  };
+  const playReel = (mode, after = showEndCard) => {
+    if (!game.highlights.play(mode, after)) return false;
+    end.hidden = true; input.exitLock();
+    return true;
+  };
+  $('reel-all').addEventListener('click', () => playReel('all'));
+  $('reel-me').addEventListener('click', () => playReel('me'));
+  $('reel-next').addEventListener('click', () => game.highlights.playing?.next());
+  $('reel-skip').addEventListener('click', () => game.highlights.playing?.skip());
+  addEventListener('keydown', (e) => {
+    const r = game.highlights.playing;
+    if (!r) return;
+    if (e.code === 'Escape') { r.skip(); e.preventDefault(); } else if (['Space', 'Enter', 'ArrowRight'].includes(e.code)) { r.next(); e.preventDefault(); }
+  });
   game.onMatchEvent = (type, data) => {
     if (type === 'start') { pay.due = !game.online; pay.kills = game.player?.kills || 0; $('end-coins').textContent = '+0'; $('end-receipt').textContent = ''; }
     if (type === 'joined') { pay.due = true; pay.kills = game.player?.kills || 0; }
@@ -706,7 +727,7 @@ function boot() {
       $('end-place').textContent = `#${data.placement}`;
       payOut(data.placement, false);
       $('spectate').hidden = false;
-      setTimeout(() => { end.hidden = false; touch.hidden = true; input.exitLock(); }, 1400);
+      setTimeout(() => { if (!game.highlights.playing) showEndCard(); }, 1400);
     }
     if (type === 'over') {
       const won = data.won ?? (data.winner && data.winner === game.player);
@@ -717,7 +738,8 @@ function boot() {
       $('end-place').textContent = `#${game.player.placement || 1}`;
       payOut(won ? 1 : game.player.placement || 2, !!won);
       $('spectate').hidden = true;
-      setTimeout(() => { end.hidden = false; touch.hidden = true; input.exitLock(); }, won ? 2600 : 1600);
+      // the match's highlight reel first (Skip or Esc to go straight to the card), then the card
+      setTimeout(() => { if (playing && !game.highlights.playing && !playReel('all')) showEndCard(); }, 2800);
     }
   };
 

@@ -63,6 +63,19 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.36: highlight reels at the end of a match** (`src/highlights.js`, `src/game.js`, `src/projectiles.js`, `src/main.js`, `index.html`)
+
+- **Two reels:** when a match vs bots ends, **Match highlights** plays by itself: the best plays of anyone in the match. The end card then has **Match highlights** and **Your highlights** (only plays you made) to watch again; both are also on the card you get when you're splatted before the end (the match waits while a reel plays, then carries on exactly where it was). Skip (or Esc) ends a reel, Next (or Space, Enter, the right arrow) jumps to the next play.
+- **What counts as a highlight** (each play gets a score, the best are picked, best last):
+  - **Splats**: knockouts. More for a long throw, a headshot, a throw from the air; a **double / triple splat** when one Titan splats several within a few seconds; the **winning splat** that ended the match.
+  - **Snipes**: a hit of 14 or more from 30 m away or further; a **snipe splat** if it knocked them out.
+  - **Dodges**: a dangerous throw (12 damage or more) passing within about a metre of a Titan who was running, dashing or in the air, and missing; a **double dodge** (or more) when they come close together. (A dodge followed straight away by a splat counts for less.)
+  - **Big hits** (your reel only, to fill it out): 30 damage or more, or a headshot.
+  - A reel has up to 6 plays (5 in yours), no two overlapping, no more than 3 of one kind when there's a choice.
+- **How it looks:** letterbox bars; a title card ("Match highlights · 6 plays"); per play a caption (the kind of play in a big badge, who did what to whom, how far) and its number; the camera cuts **over the thrower's shoulder** as they throw, **chases the food** through the air on a long throw, then goes to **slow motion round the impact** (following the target as it's knocked back) with a white flash and a big "Splat!", "Snipe!" or "Dodge!", and ends on a **reaction shot** of the thrower (a dodge: a wide shot of the throw coming in, the dodge close up and slowed down, then a crane up and away). "Play of the match" (or "Your best play") before the last one; a fade out to the end card. The bursts and sounds of the match are replayed with it, and the Soap Tide is where it was.
+- **How it works:** the match is recorded 15 times a second (every Titan's position, facing, aim, movement and state, what they hold; every flying food; every burst and sound). Only the frames around scored plays are kept (plus the last 9 s), so a 5-minute match keeps about 2 to 3.5 MB. A reel poses the Titans and food from the recording, and puts everything back exactly afterwards. Online rooms have no reels (the other players' games decide too much of what happened).
+- Tests: full matches on all three maps with "you" driven like a bot: 30 to 45 plays scored (splats, snipes, dodges, a triple splat), both reels picked and played through (title, every shot type, the "Play of the match" card, the fade, then the end card with both buttons); a reel stopped half way puts the match back exactly (positions, health, held food, flying food, the tide, the clock) and the match plays on.
+
 **Version 0.35: no more invisible walls, glasses you can see, bowls with insides, and no meat** (`src/world.js`, `src/map-backyard.js`, `src/map-restaurant.js`, `src/main.js`)
 
 - **Invisible objects, found by a scan.** A new test looks at every solid shape on all three maps from outside and checks that something is drawn where you would bump into it (a Titan is under a metre wide, so a shape a metre or two bigger than its drawing is an invisible wall). It found about 140 of them. The worst:
@@ -371,6 +384,7 @@ npm run dev          # http://localhost:5173
 | `src/coins.js` | Coins: match rewards, skin and pack prices, the wallet (kept on this device) |
 | `src/stains.js` | Food stains on every surface: decals cut from the scenery triangles, one atlas, one draw call |
 | `src/net.js`, `src/viewmodel.js` | Online rooms (hosting, shared rounds and bots); first-person arm and held food |
+| `src/highlights.js` | Highlight reels: records the match, scores splats, snipes and dodges, plays the cinematic reels |
 | `src/p2p.js` | Public peer-to-peer rooms (PeerJS): a hub per room code, hand-over when the hub leaves; STUN and TURN servers |
 | `src/map-backyard.js` | The Backyard BBQ map |
 | `src/map-restaurant.js` | Chez Titan, the Restaurant map |

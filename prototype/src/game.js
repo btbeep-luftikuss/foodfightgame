@@ -15,6 +15,7 @@ import { Abilities } from './abilities.js';
 import { BotBrain, BOT_NAMES } from './bots.js';
 import { ViewModel } from './viewmodel.js';
 import { Spectator } from './spectator.js';
+import { Highlights } from './highlights.js';
 import { PotWars, POT_SETUP } from './potwars.js';
 import { TEAMS, teamCount, teamHome, assignTeams, emptiest, cleanSize, sidesLeft, winningTeam, renderTeamBar } from './teams.js';
 import { randomSkinId } from './skins.js';
@@ -79,6 +80,7 @@ export class Game {
     this.spectator = new Spectator(this); // what you watch while you're out (or only watching)
     this.pots = new PotWars(this); // Cooking Pot Wars
     this.endAt = 0;
+    this.highlights = new Highlights(this); // (0.36) records the match for the highlight reels
 
     // aim-preview dots for lobbed foods (GDD 5.1: arc shows the first part of the path only)
     this.previewDots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffd447', transparent: true, opacity: 0.85, depthWrite: false }), 40);
@@ -113,6 +115,7 @@ export class Game {
   // and drop in with them (or only watch); knocked-out players watch until the next round.
   startOnline(net) {
     this.net = net; this.online = true;
+    this.highlights.stop(); this.highlights.stopRecording(); // (highlight reels are for matches vs bots)
     this.pots.clear(); this.teamSize = 1; this.autoTeam = null;
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear(); this.abilities.reset();
     this.world.resetRound(); this.hud.clearFeed(); this.brains.clear(); this.utensils.reset(); this.slickAt = 0;
@@ -492,6 +495,7 @@ export class Game {
   // opts.mode 'chef' = Chef's Choice: every Titan brings 3 foods with endless ammo and no food spawns.
   // opts.team: team size (1 Solo, 2 Duos, 3 Trios, 4 Squads); opts.myTeam: the team you picked (-1: any).
   newMatch(withPlayer, opts = {}) {
+    this.highlights.stop(); // (a reel playing ends first)
     this.mode = opts.mode === 'chef' || opts.mode === 'pots' ? opts.mode : 'classic';
     this.teamSize = withPlayer ? cleanSize(opts.team, this.mode) : 1;
     if (opts.potMenu?.length) this.potMenu = opts.potMenu;
@@ -545,6 +549,7 @@ export class Game {
     this.endAt = 0; this.winner = null;
     this.spectator.reset();
     if (this.mode === 'pots') this.pots.start(); else this.pots.clear();
+    this.highlights.start();
     this.onMatchEvent?.('start');
     if (withPlayer && nT && this.mode !== 'pots') this.hud.banner(`${TEAMS[this.player.team].name}`, `${{ 2: 'Duos', 3: 'Trios', 4: 'Squads' }[this.teamSize]}: stick with your team. Last team standing wins`, 3.4);
     else if (withPlayer && this.mode !== 'pots') this.hud.banner(chef ? "Chef's Choice" : 'Drop in!', chef ? 'Your 3 foods never run out. Food doesn\'t heal: grab the green crosses' : 'Steer your napkin glider onto the counter');
@@ -575,6 +580,7 @@ export class Game {
     }
     target.takeDamage(amt);
     if (attacker && attacker !== target) { target.lastHitBy = attacker; target.lastHitFood = foodId; target.lastHitAt = this.time; }
+    this.highlights.onDamage(target, attacker, amt, foodId, opts);
     const byPlayer = this.player && attacker === this.player && target !== attacker;
     if (byPlayer) {
       this.hud.float(target.headPos(_c).setY(target.pos.y + 2.3), Math.round(amt), opts.head ? 'crit' : 'dmg');
@@ -684,6 +690,7 @@ export class Game {
     let killer = attacker && attacker !== victim ? attacker : null;
     if (!killer && this.time - victim.lastHitAt < 6 && victim.lastHitBy !== victim) killer = victim.lastHitBy;
     if (killer) killer.kills++;
+    this.highlights.onKill(victim, killer, foodId);
     victim.koBy = killer; // the spectator camera moves on to them
     victim.placement = this.aliveCount() + 1;
     const c = victim.center(_c).clone();
@@ -743,6 +750,7 @@ export class Game {
     const w = this.actors.find((a) => a.team === team && a.alive) || this.actors.find((a) => a.team === team) || null;
     this.winner = w;
     if (w) w.placement = 1;
+    this.highlights.onOver();
     const won = team != null && team === this.player?.team;
     if (won) { this.sfx.play('win'); this.hud.banner("Chef's Kiss!", `${T.name} wins`, 4); }
     else if (this.player) this.hud.banner('Match over', `${T ? T.name : 'Nobody'} wins`, 4);
@@ -784,6 +792,7 @@ export class Game {
     this.winner = w;
     if (w) w.placement = 1;
     this.endAt = this.time;
+    this.highlights.onOver();
     if (w && w === this.player) { this.sfx.play('win'); this.hud.banner("Chef's Kiss!", 'Last Bite Standing', 4); }
     this.onMatchEvent?.('over', { winner: w });
   }
@@ -797,6 +806,7 @@ export class Game {
   // ------------------------------------------------------------------ main update
   update(realDt) {
     realDt = Math.max(0, realDt);
+    if (this.highlights.playing) { this.highlights.playing.update(realDt); return; } // (0.36) a highlight reel: the match waits
     let total = this.paused ? 0 : Math.min(realDt, 0.1);
     if (performance.now() < this.hitStopUntil) total *= 0.08; // local hit-stop on heavy hits
     // Up to 3 fixed substeps of <= 1/30 s, so a slow device plays at normal speed.
@@ -863,6 +873,7 @@ export class Game {
     this.world.update(dt, this.time, this.fx, this.sfx);
     this.fx.update(dt);
     if (this.state === 'play' && !this.pots.active && Math.random() < dt * 30) this._tideBubbles();
+    this.highlights.step();
   }
 
   _tideUpdate(dt) {
