@@ -1247,6 +1247,17 @@ export class World {
   // (GDD 11.7). Transparent and multi-material meshes are left alone.
   _mergeStatic() {
     this.scene.updateMatrixWorld(true);
+    // (0.37) the outline (a box) of every scenery piece up to 30 m across, for the highlight reels'
+    // camera: some decorations have no solid shape, so raycasts against the solid ones go through them
+    const sight = [], box = new THREE.Box3();
+    for (const o of this.scene.children) {
+      if (!o.isMesh || !o.userData.world || o.userData.dyn || o.material?.transparent) continue;
+      box.setFromObject(o);
+      const sx = box.max.x - box.min.x, sy = box.max.y - box.min.y, sz = box.max.z - box.min.z;
+      if (Math.max(sx, sy, sz) > 30 || Math.min(sx, sy, sz) < 0.05) continue;
+      sight.push(box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z);
+    }
+    this.sightBoxes = new Float32Array(sight);
     const groups = new Map();
     for (const o of [...this.scene.children]) {
       if (!o.isMesh || !o.userData.world || o.userData.dyn || Array.isArray(o.material) || o.material.transparent) continue;

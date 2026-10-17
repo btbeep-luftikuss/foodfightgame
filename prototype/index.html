@@ -521,7 +521,8 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 /* (0.36) highlight reels */
 .reel { position: fixed; inset: 0; z-index: 40; pointer-events: none; overflow: hidden; }
 .reel .reel-bar { position: absolute; left: 0; right: 0; height: 11vh; background: #000; transition: transform 0.6s cubic-bezier(.2,.9,.3,1); }
-.reel .reel-bar.rtop { top: 0; } .reel .reel-bar.rbot { bottom: 0; }
+.reel .reel-bar.rtop { top: 0; transform-origin: top; } .reel .reel-bar.rbot { bottom: 0; transform-origin: bottom; }
+.reel.slow .reel-bar { transform: scaleY(1.22); }
 .reel.out .reel-bar.rtop { transform: translateY(-100%); } .reel.out .reel-bar.rbot { transform: translateY(100%); }
 .reel .vig { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(10,4,16,0.55) 100%); transition: opacity 0.4s; opacity: 0.6; }
 .reel.slow .vig { opacity: 1; }
@@ -530,14 +531,24 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 @keyframes reelFade { 0% { opacity: 1; } 100% { opacity: 0; } }
 .reel.out .reel-fade { animation: none; opacity: 1; transition: opacity 0.8s; }
 .reel-flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
-.reel-flash.on { animation: reelFlash 0.45s ease-out; }
-@keyframes reelFlash { 0% { opacity: 0.75; } 100% { opacity: 0; } }
+.reel-flash.on { animation: reelFlash 0.5s ease-out; }
+@keyframes reelFlash { 0% { opacity: var(--fl, 0.75); } 100% { opacity: 0; } }
+/* (0.37) speed lines while the camera rides a throw, the distance it flew, bigger words on a splat */
+.reel-lines { position: absolute; inset: -20%; opacity: 0; transition: opacity 0.35s; background: repeating-conic-gradient(from 0deg, rgba(255,255,255,0) 0deg 4deg, rgba(255,255,255,0.3) 4.4deg 4.9deg, rgba(255,255,255,0) 5.3deg 9deg); -webkit-mask: radial-gradient(closest-side, transparent 55%, #000 100%); mask: radial-gradient(closest-side, transparent 55%, #000 100%); }
+.reel.bullet .reel-lines { opacity: 0.55; animation: reelLines 0.16s steps(2) infinite; }
+@keyframes reelLines { to { transform: rotate(3deg) scale(1.04); } }
+.reel-dist { position: absolute; left: 0; right: 0; top: calc(11vh + 12px); display: flex; justify-content: center; align-items: baseline; gap: 6px; font-family: var(--display); color: var(--paper); text-shadow: 4px 5px 0 var(--tomato), 0 0 24px rgba(0,0,0,0.55); opacity: 0; transition: opacity 0.3s; }
+.reel-dist b { display: inline-block; font-weight: 400; font-size: clamp(40px, 8vw, 80px); line-height: 1; }
+.reel-dist span { font-size: clamp(18px, 3vw, 30px); text-transform: uppercase; }
+.reel-dist.on { opacity: 1; }
+.reel-dist.hit b { color: var(--butter); animation: reelDist 0.6s cubic-bezier(.2,1.6,.4,1); }
+@keyframes reelDist { 0% { transform: scale(1.8); } 100% { transform: scale(1); } }
 .reel-title { position: absolute; left: 0; right: 0; top: 38%; display: grid; justify-items: center; gap: 8px; text-align: center; opacity: 0; transform: scale(1.25); padding-inline: 16px; }
 .reel-title.on { animation: reelTitle 1.9s ease-out forwards; }
 @keyframes reelTitle { 0% { opacity: 0; transform: scale(1.3); letter-spacing: 0.2em; } 18% { opacity: 1; transform: scale(1); letter-spacing: 0.02em; } 80% { opacity: 1; transform: scale(0.97); } 100% { opacity: 0; transform: scale(0.94); } }
 .reel-title strong { font-family: var(--display); font-weight: 400; font-size: clamp(36px, 8vw, 78px); color: var(--butter); text-shadow: 4px 5px 0 var(--tomato), 0 0 30px rgba(0,0,0,0.6); line-height: 1; text-transform: uppercase; }
 .reel-title span { font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase; font-size: 13px; color: var(--paper); background: rgba(0,0,0,0.55); padding: 5px 14px; border-radius: 999px; }
-.reel-cap { position: absolute; left: max(16px, 4vw); bottom: calc(11vh + 18px); display: grid; gap: 4px; max-width: min(560px, calc(100vw - 32px)); opacity: 0; transform: translateX(-30px); }
+.reel-cap { position: absolute; left: max(16px, 4vw); bottom: calc(11vh + 18px); display: grid; gap: 4px; max-width: min(560px, calc(100vw - 32px)); opacity: 0; transform: translateX(-30px); transition: opacity 0.35s; }
 .reel-cap.on { animation: reelCap 0.5s cubic-bezier(.2,1.4,.4,1) forwards; }
 @keyframes reelCap { to { opacity: 1; transform: none; } }
 .reel-cap b#reel-kind { justify-self: start; font-family: var(--display); font-weight: 400; font-size: clamp(22px, 4vw, 34px); color: var(--ink); background: var(--butter); padding: 2px 14px 4px; border-radius: 10px; transform: skewX(-8deg); text-transform: uppercase; box-shadow: 4px 4px 0 var(--tomato); }
@@ -546,8 +557,10 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 .reel-cap #reel-text b.nm { color: #fff; box-shadow: inset 0 -3px 0 var(--c); }
 .reel-cap #reel-text b.you { color: var(--butter); }
 .reel-cap small { font-weight: 800; font-size: 11px; letter-spacing: 0.2em; color: var(--paper-dim); }
-.reel-pop { position: absolute; left: 0; right: 0; top: 30%; text-align: center; font-family: var(--display); font-size: clamp(48px, 11vw, 120px); color: var(--paper); text-shadow: 5px 6px 0 var(--tomato), 0 0 30px rgba(0,0,0,0.5); opacity: 0; text-transform: uppercase; }
+.reel-pop { position: absolute; left: 0; right: 0; top: 24%; text-align: center; font-family: var(--display); font-size: clamp(48px, 11vw, 120px); color: var(--paper); text-shadow: 5px 6px 0 var(--tomato), 0 0 30px rgba(0,0,0,0.5); opacity: 0; text-transform: uppercase; }
 .reel-pop.on { animation: reelPop 1.4s ease-out; }
+.reel-pop.ko { color: var(--butter); font-size: clamp(52px, 11.5vw, 124px); }
+.reel-pop.dodge { color: #e6f7ff; text-shadow: 5px 6px 0 #2f8fd8, 0 0 30px rgba(0,0,0,0.5); }
 @keyframes reelPop { 0% { opacity: 0; transform: scale(2.2) rotate(-6deg); } 12% { opacity: 1; transform: scale(1) rotate(-4deg); } 70% { opacity: 1; transform: scale(1.05) rotate(-4deg); } 100% { opacity: 0; transform: scale(1.12) rotate(-4deg); } }
 .reel-slow { position: absolute; right: max(16px, 4vw); top: calc(11vh + 14px); font-weight: 900; font-size: 11px; letter-spacing: 0.3em; color: var(--paper); opacity: 0; transition: opacity 0.25s; }
 .reel.slow .reel-slow { opacity: 0.85; }
@@ -650,7 +663,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.36 · Highlight reels</p>
+      <p class="eyebrow">Prototype 0.37 · Bullet-cam replays</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in, or smash the other teams' pots in Cooking Pot Wars.</p>
       <nav class="homenav" aria-label="Main menu">
@@ -867,9 +880,11 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
 
 <section id="reel" class="reel" hidden aria-label="Highlight reel">
   <div class="vig"></div>
+  <div class="reel-lines"></div>
   <div class="reel-bar rtop"></div><div class="reel-bar rbot"></div>
   <div id="reel-flash" class="reel-flash"></div>
   <div id="reel-pop" class="reel-pop"></div>
+  <div id="reel-dist" class="reel-dist"><b>0</b><span>m</span></div>
   <div id="reel-title" class="reel-title"></div>
   <div id="reel-cap" class="reel-cap"><b id="reel-kind"></b><span id="reel-text"></span><small id="reel-n"></small></div>
   <div class="reel-slow">Slow motion</div>
