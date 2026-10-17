@@ -74,7 +74,7 @@ class ParticlePool {
 }
 
 const C = (hex) => new THREE.Color(hex);
-const PALETTE = {
+export const PALETTE = { // (also the highlight reels' knockout splash)
   tomato: [C('#d8231b'), C('#ff4a2e'), C('#b3120f')],
   seed: [C('#f3e3a0'), C('#e9d27a')],
   ice: [C('#dff6ff'), C('#aee4ff'), C('#ffffff')],

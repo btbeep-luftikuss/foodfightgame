@@ -63,6 +63,14 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.39: reels about the splats, and splats that land** (`src/highlights.js`, `src/fx.js`)
+
+- **Splats first:** a reel picks knockouts first (splats, snipe splats, double splats, the winning splat), then snipes and big hits, and a dodge only to fill a gap: one at most, and never the last play while there's a splat to end on. (Before, up to 3 dodges could make a reel, and a good dodge could be its best play.) The same in your reel and the online round reel (where your own best play, a splat if you have one, is always in).
+- **The splatting throw lands all the way:** the food that knocks someone out used to stop at the edge of their body (where the game counts the hit), which slow motion made plain. In the replay it now flies on right into them (their chest, or their head on a headshot) before it bursts, and the one splatted squashes flat as it does.
+- **A bigger explosion for the splat** than any hit: the food splattered everywhere in its own colours (tomato red, carrot orange, banana yellow, cookie crumbs ...), a cloud of it, the confetti, a shockwave ring in the food's colour plus two more, a longer freeze, a harder shake and lens punch, a louder boom and the splat-out sound. The burst blooms even while the frame is held.
+- Blueberries' flights are recorded too now, so a blueberry knockout flies in like any other.
+- Tests: full bot matches on the kitchen, backyard and restaurant maps: the match reels were 6 splats out of 6 on each (before: snipes and dodges mixed in), your reel at most one dodge; at every knockout the one splatted is in the shot as the food goes in, and the screenshots just after show the food-coloured explosion (chili, carrot, banana, cookie); reels put the match back exactly; online round highlights as before (both players, the next round waits, no updates refused); no errors.
+
 **Version 0.38: highlight reels online too** (`src/highlights.js`, `src/game.js`, `src/net.js`, `src/main.js`, `src/spectator.js`)
 
 - **Round highlights:** when an online round ends, everyone in the room gets a short reel of that round's best plays (up to 3, always with your own best play in it, the best last), shot the same way as against bots: riding along with long throws in slow motion, wide shots of close plays, bullet-time dodges, impact freezes and hero shots. Skip (or Esc) and Next (or Space) work as before.

@@ -35,6 +35,7 @@
 import * as THREE from 'three';
 import { clamp, damp, lerp, raycastWorld, segSegDist2, angleLerp, forwardOf, FLOOR_Y } from './core.js';
 import { FOODS, FOOD_IDS } from './foods.js';
+import { PALETTE } from './fx.js';
 
 const HZ = 15;                // frames a second
 const K = 13;                 // numbers per Titan per frame: x y z yaw pitch vx vy vz flags charge armT held hitFlash
@@ -48,7 +49,7 @@ const MAX_MOMENTS = 90;
 const PATH_MAX = 4 * 240;     // numbers kept per flight path: its last 8 s
 const TRAIL_N = 150;          // points along a trail
 const KO_HOLD = 0.22;         // seconds a splatted Titan stays in the replay after the hit (squashing flat), so you see it land
-const UP = new THREE.Vector3(0, 1, 0), WHITE = new THREE.Color('#ffffff');
+const UP = new THREE.Vector3(0, 1, 0), WHITE = new THREE.Color('#ffffff'), RING = new THREE.Color('#fff1c2'), _col = new THREE.Color();
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
 const _e = new THREE.Vector3(), _f = new THREE.Vector3(), _g = new THREE.Vector3(), _h = new THREE.Vector3();
@@ -60,6 +61,8 @@ const smooth = (x) => { const t = clamp(x, 0, 1); return t * t * (3 - 2 * t); };
 const foodName = (id) => (FOODS[id]?.name || '').replace(/ies$/, 'y').replace(/s$/, '');
 const danger = (food) => FOODS[food]?.dmg ?? 25; // (most foods work out their damage as they land)
 const mult = (n) => ['', '', 'Double', 'Triple', 'Quadruple'][n] || `${n}x`;
+// each food's splash (fx.js bursts), for the knockout's big one
+const BURST = { tomato: 'tomato', banana: 'banana', carrot: 'carrot', ice: 'ice', soda: 'soda', cheese: 'cheese', grapes: 'grape', grape: 'grape', chili: 'fire', cookie: 'crumb', watermelon: 'melon', melonchunk: 'melon', pineapple: 'pine', jelly: 'jelly', blueberry: 'berry', berry: 'berry' };
 const dirOf = (az, el, out) => out.set(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az));
 // a Titan's colour made bright and saturated (a trail that shows up on a cream table)
 const vivid = (css) => { const c = new THREE.Color(css || '#ffd447'), h = {}; c.getHSL(h); return c.setHSL(h.h, Math.max(0.75, h.s), clamp(h.l, 0.52, 0.6)); };
@@ -232,8 +235,8 @@ export class Highlights {
     const g = this.game;
     p.hl = {
       id: this.nextPid++, t: g.time, from: (p.owner?.pos || p.pos).clone(), owner: p.owner, near: null,
-      // its flight, from the hand (it left at the start of this step); not berries and grape shot
-      path: danger(p.food) >= 10 ? { s: [g.time - (this.stepDt || 1 / 30), p.pos.x, p.pos.y, p.pos.z], orient: !!p.orient, food: p.food } : null,
+      // its flight, from the hand (it left at the start of this step)
+      path: { s: [g.time - (this.stepDt || 1 / 30), p.pos.x, p.pos.y, p.pos.z], orient: !!p.orient, food: p.food },
     };
   }
 
@@ -262,7 +265,7 @@ export class Highlights {
     else if (attacker === g.player && (amt >= 30 || rec.head)) this._bigHit(rec);
   }
 
-  _hit(rec) { return { tk: rec.t, tt: rec.launchT, ti: rec.ti ?? rec.t, b: this.idx.get(rec.victim), pid: rec.pid, path: rec.path || null, head: !!rec.head, dist: rec.dist }; }
+  _hit(rec) { return { tk: rec.t, tt: rec.launchT, ti: rec.ti ?? rec.t, b: this.idx.get(rec.victim), pid: rec.pid, path: rec.path || null, head: !!rec.head, dist: rec.dist, food: rec.food }; }
 
   _snipe(rec) {
     const a = this.idx.get(rec.by), hit = this._hit(rec);
@@ -289,7 +292,7 @@ export class Highlights {
     const h = this.lastHit.get(victim);
     const link = h && h.by === killer && t - h.t < 6 ? h : null;
     const dist = link ? link.dist : killer.pos.distanceTo(victim.pos);
-    const hit = link ? this._hit(link) : { tk: t, tt: null, ti: t, b, pid: 0, path: null, head: false, dist };
+    const hit = link ? this._hit(link) : { tk: t, tt: null, ti: t, b, pid: 0, path: null, head: false, dist, food: foodId };
     const same = link && t - link.t <= late;
     if (link && !same) Object.assign(hit, { tt: null, ti: t, pid: 0, path: null }); // (knocked out later, by a burn: not that throw's moment)
     hit.tk = same ? link.t : t; hit.b = b;
@@ -380,8 +383,10 @@ export class Highlights {
   }
 
   // ------------------------------------------------------------------ the reels
-  // The plays for a reel: 'all' (the match) or 'me' (your own), best last. opts.max: at most this
-  // many; opts.mine: your best play is always one of them (online round reels).
+  // The plays for a reel: 'all' (the match) or 'me' (your own), best last. Splats first (knockouts,
+  // snipe splats included), then snipes and big hits; a dodge only to fill a gap, one at most, never
+  // the last play (0.39). opts.max: at most this many; opts.mine: your best play is always one of
+  // them (online round reels).
   reel(mode, opts = {}) {
     const fr = this.frames;
     if (fr.length < 10) return [];
@@ -391,17 +396,19 @@ export class Highlights {
     pool = mode === 'me' ? pool.filter((m) => m.a === me) : pool.filter((m) => m.kind !== 'hit');
     // a dodge that was splatted straight after isn't one to show
     for (const m of pool) if (m.kind === 'dodge' && !this._aliveAt(m.a, Math.min(last, m.hits.at(-1).tk + 1.2))) m.score *= 0.4;
-    pool.sort((p, q) => q.score - p.score);
+    const rank = (m) => (m.ko ? 0 : m.kind === 'dodge' ? 2 : 1);
+    pool.sort((p, q) => rank(p) - rank(q) || q.score - p.score);
     const max = opts.max || (mode === 'me' ? 5 : 6), kinds = {}, out = [];
     if (opts.mine) { const i = pool.findIndex((m) => m.a === me); if (i > 0) pool.unshift(...pool.splice(i, 1)); }
     for (const m of pool) {
       if (out.length >= max) break;
       if (out.some((o) => Math.min(o.t1, m.t1) - Math.max(o.t0, m.t0) > 0.4 * Math.min(o.t1 - o.t0, m.t1 - m.t0))) continue; // overlaps a chosen one
-      if ((kinds[m.kind] || 0) >= 3 && pool.length > max) continue; // a mix of plays
+      if (m.kind === 'dodge' ? kinds.dodge >= 1 : !m.ko && (kinds[m.kind] || 0) >= 3) continue; // (splats can fill a reel)
       kinds[m.kind] = (kinds[m.kind] || 0) + 1;
       out.push({ ...m, hits: m.hits.map((h) => ({ ...h })), t0: Math.max(m.t0, first), t1: Math.min(m.t1, last) });
     }
-    return out.sort((p, q) => p.score - q.score);
+    out.sort((p, q) => rank(q) - rank(p) || p.score - q.score); // best last: a splat closes the reel when there is one
+    return out;
   }
   has(mode) { return this.reel(mode).length > 0; }
 
@@ -624,9 +631,10 @@ class Reel {
       this.g.scene.remove(o); o.geometry.dispose(); o.material.dispose();
     }
   }
-  _ring(at, size, delay = 0, life = 0.55) {
+  _ring(at, size, delay = 0, life = 0.55, color = null) {
     const r = this.rings.find((x) => x.age - x.delay >= x.life) || this.rings[0];
     r.m.position.copy(at); Object.assign(r, { age: 0, delay, life, size });
+    r.m.material.color.set(color ? _col.copy(color).lerp(WHITE, 0.3) : RING);
   }
   _drawRings(dt) { // (in real time: they spread through the freeze)
     for (const r of this.rings) {
@@ -822,7 +830,19 @@ class Reel {
     for (const h of c.hits) {
       h.ti ??= h.tk;
       if (!(h.ti <= h.tk && h.ti > h.tk - 0.2)) h.ti = h.tk;
-      const P = h.path && h.path.s.length >= 8 ? h.path : null;
+      let P = h.path && h.path.s.length >= 8 ? h.path : null;
+      // (0.39) a knockout: the food flew up to the edge of their body; in the replay it carries on all the
+      // way into them (their chest, or their head on a headshot) and bursts there
+      if (P && c.ko && Math.abs(pathEnd(P) - h.ti) < 1e-3) {
+        const end = pathAt(P, h.ti, new THREE.Vector3(), _v), C = this.hl.posAt(h.b, h.ti, new THREE.Vector3(), false);
+        C.y += h.head ? 1.7 : 1.05;
+        const d = end.distanceTo(C);
+        if (d > 0.05 && d < 3) {
+          const dt = d / Math.max(4, _v.length());
+          P = { ...P, s: [...P.s, h.ti + dt, C.x, C.y, C.z] };
+          h.ti0 = h.ti; h.ti += dt;
+        }
+      }
       h.path = P;
       if (P) this.paths.set(h.pid, P);
       h.bullet = c.kind !== 'dodge' && !!P && (h.dist || 0) >= LONG && h.ti - P.s[0] > 0.05 && h.ti > c.t0 + 0.2;
@@ -851,7 +871,7 @@ class Reel {
         if (dead < 0) continue;
         let j = dead;
         while (j > 0 && !up(j, x.b)) j--;
-        this.kos.set(x.b, { tk: x.tk, j, dead: fr[dead].t });
+        this.kos.set(x.b, { tk: Math.max(x.tk, x.ti), j, dead: fr[dead].t }); // (squashed once the food is in)
       }
     }
   }
@@ -922,9 +942,12 @@ class Reel {
     let sp = Math.min(1, this._speed(this.t) * c.boost);
     if (this.freeze > 0) { this.freeze -= dt; sp = 0.02; } // (the frame it lands, held)
     const step = dt * sp;
+    this.fxStep = this.freeze > 0 ? dt * 0.12 : step; // (while it's held, the explosion still blooms)
     this.t += step;
     c.hits.forEach((h, n) => { if (!this.popped.has(h) && this.t >= h.ti) { this.popped.add(h); this._impact(h, n); } });
-    this._events(this.evT, this.t); this.evT = Math.max(this.evT, this.t);
+    // the match's bursts and sounds as they come (a hit's own wait for the food to land: see _impact)
+    const upTo = Math.min(this.t, ...c.hits.filter((h) => !this.popped.has(h)).map((h) => (h.ti0 ?? h.ti) - 1e-4));
+    if (upTo > this.evT) { this._events(this.evT, upTo); this.evT = upTo; }
     this._frame(step, dt);
     this._overlay(sp);
     const k = clamp((this.t - c.t0) / (c.tEnd - c.t0), 0, 1);
@@ -937,23 +960,36 @@ class Reel {
     const c = this.clip, g = this.g, dodge = c.kind === 'dodge', ko = c.ko;
     this._events(this.evT, h.tk); this.evT = Math.max(this.evT, h.tk); // (its splat goes off as it lands)
     const at = h.path ? pathAt(h.path, h.ti, _h) : this.hl.posAt(dodge ? c.a : h.b, h.tk, _h);
+    const big = ko && this.kos.has(h.b); // the splat itself
+    const kind = BURST[h.food || c.food] || 'tomato', cols = PALETTE[kind] || PALETTE.tomato;
+    if (big) { // (0.39) a bigger explosion than any hit: the food splattered everywhere, in its own colours
+      this.emitting = true;
+      g.fx.burst(kind, at, 2.6);
+      g.fx.burst('splat-out', at);
+      this.emitting = false;
+      g.fx.spray('blobs', at, 90, { speed: 15, up: 11, colors: cols, size: 0.34, life: 1.5, grav: 0.8 });
+      g.fx.spray('chunks', at, 40, { speed: 12, up: 9, colors: cols, size: 0.26, life: 1.6 });
+      g.fx.spray('puffs', at, 10, { speed: 3, up: 2, colors: [cols[0]], size: 1.4, life: 0.9, grav: 0, grow: 2.2 });
+    }
     let word;
     if (dodge) word = n ? `${mult(n + 1)} dodge!` : 'Dodged!';
     else if (h.head) word = 'Headshot!';
     else if (c.kind === 'snipe') word = ko ? 'Sniped!' : 'Snipe!';
     else if (c.kind === 'hit') word = 'Bam!';
     else word = n ? `${mult(n + 1)}!` : c.final && c.hits.length === 1 ? 'Winner!' : 'Splat!';
-    this._pop(word, dodge ? 'dodge' : ko ? 'ko' : '', dodge ? 0.15 : ko ? 0.85 : 0.6);
-    this.freeze = dodge ? 0.1 : ko ? 0.24 : 0.15;
-    this.punch = dodge ? 0.4 : ko ? 1 : 0.7;
-    this.shake = Math.min(1, this.shake + (dodge ? 0.1 : ko ? 0.6 : 0.4));
+    this._pop(word, dodge ? 'dodge' : ko ? 'ko' : '', dodge ? 0.15 : big ? 0.9 : ko ? 0.85 : 0.6);
+    this.freeze = dodge ? 0.1 : big ? 0.32 : ko ? 0.24 : 0.15;
+    this.punch = dodge ? 0.4 : big ? 1.35 : ko ? 1 : 0.7;
+    this.shake = Math.min(1.2, this.shake + (dodge ? 0.1 : big ? 0.95 : ko ? 0.6 : 0.4));
     if (dodge) { this._sfx('whoosh', at, 0.9); return; }
     _x.subVectors(g.camera.position, at);
     const dl = _x.length();
     if (dl > 0.01) at.addScaledVector(_x, Math.min(0.6, dl * 0.3) / dl); // (just in front of them)
-    this._ring(at, ko ? 5.5 : 3.6);
-    if (ko) this._ring(at, 3, 0.09, 0.5);
-    this._sfx(ko ? 'boom' : 'thud', at, ko ? 0.5 : 0.7);
+    this._ring(at, big ? 8 : ko ? 5.5 : 3.6, 0, big ? 0.75 : 0.55, big ? cols[0] : null); // (the splat's in the food's colour)
+    if (ko) this._ring(at, big ? 5 : 3, 0.09, 0.55);
+    if (big) this._ring(at, 3, 0.2, 0.5);
+    this._sfx(ko ? 'boom' : 'thud', at, big ? 0.85 : ko ? 0.5 : 0.7);
+    if (big) this._sfx('splatout', at, 0.8);
     if (this.distEl.classList.contains('on')) { this.distEl.classList.remove('hit'); void this.distEl.offsetWidth; this.distEl.classList.add('hit'); }
   }
 
@@ -1064,7 +1100,7 @@ class Reel {
       if (a.glint.visible) a.glint.scale.multiplyScalar(0.45); // (a sniper's glint: not a flare over the whole shot)
     }
     g.utensils.updateVisual();
-    g.fx.update(step);
+    g.fx.update(this.stage === 'play' ? this.fxStep ?? step : step);
     g._blobShadows();
     g.viewModel.update(realDt, g.player || g.actors[0], false);
     this._camera(realDt);
