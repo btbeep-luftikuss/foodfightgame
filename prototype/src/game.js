@@ -37,6 +37,7 @@ const ENV = new Set(['burner', 'burning', 'tide']);
 const BOT_LEVELS_ONLINE = ['easy', 'medium', 'hard'];
 const LATE_JOIN = 25; // online: seconds into a round you can still drop in
 const OVER_FOR = 6;   // online: seconds between rounds
+const REEL_WAIT = 32; // online: seconds more the next round waits for players watching the round's highlights
 const random3 = () => [...FOOD_IDS].sort(() => Math.random() - 0.5).slice(0, 3);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -115,7 +116,7 @@ export class Game {
   // and drop in with them (or only watch); knocked-out players watch until the next round.
   startOnline(net) {
     this.net = net; this.online = true;
-    this.highlights.stop(); this.highlights.stopRecording(); // (highlight reels are for matches vs bots)
+    this.highlights.stop(); this.highlights.stopRecording(); // (each round is recorded, from its start)
     this.pots.clear(); this.teamSize = 1; this.autoTeam = null;
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear(); this.abilities.reset();
     this.world.resetRound(); this.hud.clearFeed(); this.brains.clear(); this.utensils.reset(); this.slickAt = 0;
@@ -160,6 +161,7 @@ export class Game {
   // A round begins (on every client): fresh round state, the host brings bots. Players who want to
   // play drop in right away (see _lateJoin).
   beginRound(id, rs) {
+    this.highlights.stop(); // (a reel still playing ends: a new round, maybe a new map)
     if (rs.map) this.setMap(rs.map);
     this.mode = rs.mode === 'chef' || rs.mode === 'pots' ? rs.mode : 'classic';
     this.teamSize = cleanSize(rs.team, this.mode);
@@ -208,6 +210,7 @@ export class Game {
     p.team = this.myTeam();
     if (this.mode === 'pots') this.pots.start(); else this.pots.clear();
     this.spectator.newRound();
+    this.highlights.start(); // (0.38) the round's highlight reel
     this.onMatchEvent?.('start');
   }
   // Foods and a utensil for a Titan dropping into an online round. Classic: a stack of each food
@@ -290,8 +293,8 @@ export class Game {
       R.idle = restart ? (R.idle || 0) + dt : 0;
       if (R.started >= 2 && sides <= 1 && !(this.pots.active && this.pots.setup)) this._roundOver();
       else if (R.idle > (h.inRound ? 3 : 5)) this._roundOver(true);
-    } else if (R.state === 'over' && R.t > OVER_FOR) {
-      this.beginRound(R.id + 1, net.roomSettings());
+    } else if (R.state === 'over' && R.t > OVER_FOR && (!this.watchingReel() || R.t > OVER_FOR + REEL_WAIT)) {
+      this.beginRound(R.id + 1, net.roomSettings()); // (0.38) once nobody is watching the round's highlights
     }
   }
   // Host, early in a round: a player joined a team the bots had already filled. One of that team's
@@ -327,7 +330,12 @@ export class Game {
     this.state = 'over';
     this._showRoundOver(w, fresh, tName);
   }
+  // (0.38) Someone in the room (me too) is watching the round's highlight reel.
+  watchingReel() {
+    return !!this.highlights.playing?.live || [...(this.net?.proxies.values() || [])].some((pr) => pr.watching);
+  }
   _showRoundOver(w, fresh, tName = null) {
+    if (!fresh) this.highlights.onOver(); // (the last splat won it)
     if (!fresh) { // coins for the round (main.js pays the players who played it)
       const P = this.player;
       const won = tName ? P?.team != null && TEAMS[P.team]?.name === tName : !!w && w === P;
@@ -562,6 +570,7 @@ export class Game {
     amount *= this.dmgScale;
     this._action(target, attacker);
     if (target.isRemote) { // online: that player's own game decides; we only show our hit
+      this.highlights.onDamage(target, attacker, amount, foodId, opts); // (as it showed here, for the highlights)
       if (attacker === this.player) {
         this.hud.float(target.headPos(_c).setY(target.pos.y + 2.3), Math.round(amount), opts.head ? 'crit' : 'dmg');
         this.hud.hitmarker(opts.head, false);
@@ -760,6 +769,7 @@ export class Game {
   // Another player's game says they were knocked out (online).
   remoteKnockout(victim, killer, food) {
     if (victim.alive) { victim.alive = false; victim.hide(); }
+    this.highlights.onKill(victim, killer, food, 1.5); // (it comes a moment after the hit showed here)
     victim.koBy = killer;
     this._feed(victim, killer, food);
     if (killer === this.player) {
@@ -806,14 +816,16 @@ export class Game {
   // ------------------------------------------------------------------ main update
   update(realDt) {
     realDt = Math.max(0, realDt);
-    if (this.highlights.playing) { this.highlights.playing.update(realDt); return; } // (0.36) a highlight reel: the match waits
+    const reel = this.highlights.playing;
+    if (reel && !reel.live) { reel.update(realDt); return; } // (0.36) a highlight reel: the match waits
+    reel?.unpose(); // (0.38) online the match goes on under the reel: its own state back before it steps
     let total = this.paused ? 0 : Math.min(realDt, 0.1);
     if (performance.now() < this.hitStopUntil) total *= 0.08; // local hit-stop on heavy hits
     // Up to 3 fixed substeps of <= 1/30 s, so a slow device plays at normal speed.
     const steps = Math.min(3, Math.max(1, Math.ceil(total * 30 - 1e-6)));
     const dt = total / steps;
     if (total > 0 && this.state !== 'menu') {
-      const intent = this.input.enabled ? this.input.intent() : null;
+      const intent = this.input.enabled && !reel ? this.input.intent() : null; // (watching a reel: hands off)
       for (let s = 0; s < steps; s++) {
         // edge-triggered presses only count once per frame
         if (s === 1 && intent) Object.assign(intent, { jump: false, dodge: false, alt: false, sniff: false, view: false, ladle: false, turret: false, slot: -1, cycle: 0, uslot: -1, ucycle: 0 });
@@ -821,6 +833,7 @@ export class Game {
       }
     }
     if (this.net) this.net.tick(realDt);
+    if (this.highlights.playing?.live) { this.highlights.playing.update(realDt); return; } // (0.38) what's shown is the reel
     // out of the round (or only watching) while in a game: spectator mode
     const p = this.player;
     this.spectator.setActive(this.input.enabled && !!p && !p.alive && this.state !== 'menu');
@@ -871,7 +884,7 @@ export class Game {
     this.surface.update(dt, this.time);
     this._spikeStep(dt);
     this.world.update(dt, this.time, this.fx, this.sfx);
-    this.fx.update(dt);
+    if (!this.highlights.playing?.live) this.fx.update(dt); // (under an online reel the particles are the reel's, at its speed)
     if (this.state === 'play' && !this.pots.active && Math.random() < dt * 30) this._tideBubbles();
     this.highlights.step();
   }

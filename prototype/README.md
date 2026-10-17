@@ -63,6 +63,15 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.38: highlight reels online too** (`src/highlights.js`, `src/game.js`, `src/net.js`, `src/main.js`, `src/spectator.js`)
+
+- **Round highlights:** when an online round ends, everyone in the room gets a short reel of that round's best plays (up to 3, always with your own best play in it, the best last), shot the same way as against bots: riding along with long throws in slow motion, wide shots of close plays, bullet-time dodges, impact freezes and hero shots. Skip (or Esc) and Next (or Space) work as before.
+- **The next round waits for it:** the host starts the next round once everyone has watched or skipped their reel (at most 32 s longer than the usual 6 s break). Someone who skipped sees "Next round once everyone has seen the highlights" while the others finish.
+- **The match doesn't stop for it:** online the match can't wait for one player (the host still runs the room, its bots and the clock), so it carries on underneath while the reel plays: every frame the reel poses the recording, the frame is drawn, then the live match is put back exactly as it was. The live match's sounds and bursts are muted under the reel, and your Titan takes no input while you watch.
+- **What each player's game records:** the round as it saw it: every Titan in it (players who drop in late and the host's bots too), hits on other players as they showed on your screen (their own game decides the real damage), and knockouts as the room reports them (they come a moment after the hit; the reel shows the hit itself, and the one splatted squashes flat right then).
+- While a reel plays the game no longer grabs the mouse, so Esc only skips the reel.
+- Tests: two players in a room (the stand-in room, as strict as claude.ai's), the bots and one player fighting at 4x speed on the kitchen, backyard and restaurant maps: when the round ended both got "Round highlights" (3 plays each, each with that player's own best play: a 67 m carrot snipe, dodges), the match's clock and the room went on underneath, each saw the other watching, the host held the next round while either watched (still waiting after Bob skipped), started it as soon as Alice skipped too, and both dropped in; no updates refused by the room; Cooking Pot Wars online as before; reels against bots still put the match back exactly; no errors.
+
 **Version 0.37: highlight reels shot like a sports replay** (`src/highlights.js`, `src/world.js`, `index.html`)
 
 - **Long throws ride with the food.** On a throw from 13 m or more the camera starts over the thrower's shoulder as they let go, then rides right behind the food itself, in slow motion that gets slower and slower as it barrels toward its target (a carrot snipe at 200 m/s slows almost to a stop, a lobbed tomato only a little: every ride takes 2 to 3.6 s). The target is ahead of it all the way; the camera lets the food fly the last few metres alone and watches it hit. Speed lines rush past at the edges, and a counter at the top counts the metres as it flies (the full distance pops up in yellow as it lands). Then the reverse angle: from behind the one it hit, back along the glowing trail of the throw to the thrower far off.
@@ -395,7 +404,7 @@ npm run dev          # http://localhost:5173
 | `src/coins.js` | Coins: match rewards, skin and pack prices, the wallet (kept on this device) |
 | `src/stains.js` | Food stains on every surface: decals cut from the scenery triangles, one atlas, one draw call |
 | `src/net.js`, `src/viewmodel.js` | Online rooms (hosting, shared rounds and bots); first-person arm and held food |
-| `src/highlights.js` | Highlight reels: records the match (and every throw's flight), scores splats, snipes and dodges, directs the reels (riding along with long throws in slow motion, wide shots of the whole play, bullet-time dodges, impact freezes, hero shots) |
+| `src/highlights.js` | Highlight reels: records the match or online round (and every throw's flight), scores splats, snipes and dodges, directs the reels (riding along with long throws in slow motion, wide shots of the whole play, bullet-time dodges, impact freezes, hero shots); online, plays them over the live match |
 | `src/p2p.js` | Public peer-to-peer rooms (PeerJS): a hub per room code, hand-over when the hub leaves; STUN and TURN servers |
 | `src/map-backyard.js` | The Backyard BBQ map |
 | `src/map-restaurant.js` | Chez Titan, the Restaurant map |

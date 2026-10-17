@@ -434,6 +434,7 @@ export class Spectator {
     const R = g.round, next = g.nextRoundIn();
     if (!R || R.id < 0) return 'Finding the room…';
     if (!g.net.ready) return 'Only watching · press Play to join in';
+    if (R.state === 'over' && next === 0 && g.watchingReel()) return 'Next round once everyone has seen the highlights';
     if (next !== null) return `Next round in ${next} s · you drop in`;
     return 'You drop in at the next round';
   }

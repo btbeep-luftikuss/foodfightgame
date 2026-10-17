@@ -291,7 +291,7 @@ export class Net {
     const p = this.game.player, g = this.game, t = g.time;
     this.frame = (this.frame + 1) % 1e6;
     // every field, every time: what isn't mine (any more) goes out as null, which takes it off my presence
-    const msg = { n: this.name, c: this.color, k: this.game.playerSkin, w: this.ready ? 1 : 0, s: this._stateOf(p, this.game.input.pitch), pm: null, rs: null, rd: null, b: null, pw: null, e: [] };
+    const msg = { n: this.name, c: this.color, k: this.game.playerSkin, w: this.ready ? 1 : 0, hl: g.highlights.playing?.live ? 1 : 0, s: this._stateOf(p, this.game.input.pitch), pm: null, rs: null, rd: null, b: null, pw: null, e: [] };
     if (g.mode === 'pots') msg.pm = (g.potMenu || []).map((id) => FOOD_IDS.indexOf(id).toString(36)).join(''); // my pick for my pot's menu
     if (this.isHost && g.pots.active) msg.pw = [Math.max(0, g.round.id), ...g.pots.state()]; // Cooking Pot Wars: the pots
     if (this.isHost) {
@@ -489,6 +489,7 @@ export class Net {
   _apply(pr, pres, peer) {
     pr.presence = pres;
     pr.ready = pres.w !== 0; // wants to play (older games always did)
+    pr.watching = pres.hl === 1; // (0.38) watching the round's highlight reel (the next round waits for them)
     pr.actor.name = cleanName(pres.n);
     if (/^#[0-9a-f]{6}$/i.test(pres.c)) pr.actor.ownColor = pres.c;
     pr.potMenu = typeof pres.pm === 'string' && pres.pm.length <= 5 ? [...pres.pm].map((c) => FOOD_IDS[parseInt(c, 36)]).filter(Boolean) : null;

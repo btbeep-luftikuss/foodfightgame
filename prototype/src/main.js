@@ -663,8 +663,8 @@ function boot() {
   });
   $('spectate').addEventListener('click', () => { end.hidden = true; });
   $('resume').addEventListener('click', () => { pause.hidden = true; game.paused = false; if (!input.isTouch && !game.spectator.active) input.requestLock(true); });
-  input.wantLock = () => playing && !game.paused && pause.hidden && end.hidden && loadout.hidden && !game.spectator.active && !input.isTouch;
-  input.blockClicks = () => game.spectator.active || !loadout.hidden; // clicks there are for the spectator bar and the card
+  input.wantLock = () => playing && !game.paused && pause.hidden && end.hidden && loadout.hidden && !game.spectator.active && !input.isTouch && !game.highlights.playing; // (not under a reel: Esc skips it, and would unlock the mouse into the pause menu)
+  input.blockClicks = () => game.spectator.active || !loadout.hidden || !!game.highlights.playing; // clicks there are for the spectator bar, the card, the reel's buttons
 
 
   input.onLockChange = (locked) => {
@@ -692,8 +692,8 @@ function boot() {
     $('reel-all').hidden = !all; $('reel-me').hidden = !me; $('end-reels').hidden = !all && !me;
     end.hidden = false; touch.hidden = true; input.exitLock();
   };
-  const playReel = (mode, after = showEndCard) => {
-    if (!game.highlights.play(mode, after)) return false;
+  const playReel = (mode, after = showEndCard, opts = {}) => {
+    if (!game.highlights.play(mode, after, opts)) return false;
     end.hidden = true; input.exitLock();
     return true;
   };
@@ -711,7 +711,14 @@ function boot() {
     if (type === 'joined') { pay.due = true; pay.kills = game.player?.kills || 0; }
     if (type === 'roundOver') { // online: the round ended; coins for it if I played
       const r = playing ? payOut(data.placement, data.won) : null;
-      if (r) setTimeout(() => { if (playing) game.hud.banner(`+${r.total} coins`, r.lines.map(([k, n]) => `${k} +${n}`).join(' · '), 3.2); }, 2600); // after "Round over"
+      if (r) setTimeout(() => { if (playing) game.hud.banner(`+${r.total} coins`, r.lines.map(([k, n]) => `${k} +${n}`).join(' · '), 3.2); }, 2200); // after "Round over"
+      // (0.38) then the round's highlights (its best plays, always with your best one); the match goes on
+      // underneath, and the next round waits until everyone has watched or skipped
+      setTimeout(() => {
+        if (playing && game.online && game.round?.state === 'over' && loadout.hidden && !game.highlights.playing) {
+          playReel('all', () => {}, { live: true, max: 3, mine: true, title: 'Round highlights' });
+        }
+      }, 3400);
       return;
     }
     if (type === 'joined') { loadout.hidden = true; return; } // online: dropped into a round
@@ -948,6 +955,7 @@ function boot() {
     // High: moving shadows refresh at 30 Hz instead of every frame (half the shadow cost).
     if (quality.dynamicShadows) renderer.shadowMap.needsUpdate = (frameNo++ & 1) === 0;
     if (composer) composer.render(dt); else renderer.render(scene, camera);
+    game.highlights.playing?.unpose(); // (0.38) online: the reel's pose was for this frame only; the match is back
     game.lastDrawCalls = renderer.info.render.calls;
 
     if (dt > 0) fpsEma += (1 / dt - fpsEma) * 0.05;

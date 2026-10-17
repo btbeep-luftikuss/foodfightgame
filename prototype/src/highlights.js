@@ -25,6 +25,13 @@
 // Letterbox bars, a caption per play, a title card before the best play. Two reels: the whole match
 // ("Match highlights"), and only your own plays ("Your highlights"). While a reel plays the match is
 // frozen; afterwards everything is put back.
+//
+// Online (0.38) each player's game records the round as it saw it (hits on other players as it
+// showed them, knockouts as the room reported them), and when a round ends a short "Round
+// highlights" reel plays (the best plays, always with your best one). The match can't wait for
+// one player there, so it goes on underneath: every frame the reel poses the recording for the
+// frame that's drawn, then puts the live match back (see Reel.unpose). The host starts the next
+// round once everyone has watched or skipped (or after REEL_WAIT in game.js).
 import * as THREE from 'three';
 import { clamp, damp, lerp, raycastWorld, segSegDist2, angleLerp, forwardOf, FLOOR_Y } from './core.js';
 import { FOODS, FOOD_IDS } from './foods.js';
@@ -123,24 +130,31 @@ export class Highlights {
     // every burst and sound, so a replay looks and sounds like the match
     const fx = game.fx, sfx = game.sfx;
     const burst = fx.burst.bind(fx), play = sfx.play.bind(sfx);
+    // (the match's own, not a reel's replay of them; under an online reel the live match's aren't shown)
     fx.burst = (kind, pos, power) => {
-      if (this.on && !this.playing && pos) this.events.push({ t: game.time, fx: kind, x: pos.x, y: pos.y, z: pos.z, p: power });
+      const R = this.playing;
+      if (this.rec && pos && !R?.emitting) this.events.push({ t: game.time, fx: kind, x: pos.x, y: pos.y, z: pos.z, p: power });
+      if (R?.live && !R.emitting) return;
       return burst(kind, pos, power);
     };
     sfx.play = (name, pos, gain) => {
-      if (this.on && !this.playing) this.events.push({ t: game.time, sfx: name, pos: pos ? [pos.x, pos.y, pos.z] : null, g: gain });
+      const R = this.playing;
+      if (this.rec && !R?.emitting) this.events.push({ t: game.time, sfx: name, pos: pos ? [pos.x, pos.y, pos.z] : null, g: gain });
+      if (R?.live && !R.emitting) return;
       return play(name, pos, gain);
     };
   }
 
   // ------------------------------------------------------------------ recording
-  // A new match: record it if it's yours and offline (online, other players' games decide too much).
+  // Recording now: a match (or an online round) is on, and no reel has the match waiting.
+  get rec() { return this.on && !(this.playing && !this.playing.live); }
+  // A new match (or online round): record it.
   start() {
     this.stop();
     const g = this.game;
     this.frames = []; this.events = []; this.moments = [];
     this.lastHit.clear(); this.pending = null;
-    this.on = !!g.player && !g.online;
+    this.on = !!g.player;
     this.actors = [...g.actors];
     this.idx = new Map(this.actors.map((a, i) => [a, i]));
     this.meta = this.actors.map((a) => ({ name: a.name, color: a.color }));
@@ -150,7 +164,7 @@ export class Highlights {
 
   // Every simulation step (30 a second): each flight path, then dodges; a frame 15 times a second.
   step() {
-    if (!this.on || this.playing) return;
+    if (!this.rec) return;
     const g = this.game, t = g.time;
     this.stepDt = clamp(t - this.lastStep, 1 / 120, 1 / 15);
     this.lastStep = t;
@@ -163,6 +177,8 @@ export class Highlights {
     this._watchDodges(t);
     if (t < this.sampleAt) return;
     this.sampleAt = t + 1 / HZ - 1e-4;
+    // Titans who turned up since (online: players dropping in late, the host's bots on other screens)
+    for (const a of g.actors) if (!this.idx.has(a)) { this.idx.set(a, this.actors.length); this.actors.push(a); this.meta.push({ name: a.name, color: a.color }); }
     const buf = new Float32Array(this.actors.length * K);
     this.actors.forEach((a, i) => {
       const o = i * K;
@@ -204,13 +220,15 @@ export class Highlights {
     this.pruneAt = t + 1;
     const from = t - KEEP;
     const wins = this.moments.map((m) => [m.t0 - 0.7, m.t1 + 0.7]);
+    for (const c of this.playing?.clips || []) wins.push([c.t0 - 1, c.t1 + 2]); // (online, the reel playing over the match)
+    this.actors.forEach((a, i) => { this.meta[i].name = a.name; this.meta[i].color = a.color; });
     const keep = (x) => x >= from || wins.some(([a, b]) => x >= a && x <= b);
     this.frames = this.frames.filter((f) => keep(f.t));
     this.events = this.events.filter((e) => keep(e.t));
   }
 
   onLaunch(p) {
-    if (!this.on || this.playing) return;
+    if (!this.rec) return;
     const g = this.game;
     p.hl = {
       id: this.nextPid++, t: g.time, from: (p.owner?.pos || p.pos).clone(), owner: p.owner, near: null,
@@ -221,7 +239,7 @@ export class Highlights {
 
   // A throw hits a Titan (its damage, if any, follows in the same instant).
   onProjectileHit(p, a, head) {
-    if (!this.on || !p.hl || !p.owner || p.owner === a) return;
+    if (!this.rec || !p.hl || !p.owner || p.owner === a) return;
     const t = this.game.time, P = p.hl.path;
     let ti = t;
     if (P) { // where it touched them, and when (part way through this step)
@@ -233,8 +251,9 @@ export class Highlights {
     this.pending = { victim: a, by: p.owner, t, launchT: p.hl.t, dist: p.hl.from.distanceTo(a.pos), pid: p.hl.id, head: !!head, food: p.food, path: P, ti };
   }
 
+  // (online, a hit on another player is their game's to decide: this is the damage it showed here)
   onDamage(target, attacker, amt, foodId, opts = {}) {
-    if (!this.on || this.playing || !attacker || attacker === target || !this.idx.has(attacker) || !this.idx.has(target)) return;
+    if (!this.rec || !attacker || attacker === target || !this.idx.has(attacker) || !this.idx.has(target)) return;
     const g = this.game;
     const pend = this.pending && this.pending.victim === target && this.pending.by === attacker && this.pending.t === g.time ? this.pending : null;
     const rec = pend ? { ...pend, amt } : { victim: target, by: attacker, t: g.time, launchT: null, dist: attacker.pos.distanceTo(target.pos), pid: 0, head: !!opts.head, food: foodId, amt, path: null, ti: g.time };
@@ -261,27 +280,30 @@ export class Highlights {
     this._add({ kind: 'hit', a, hits: [this._hit(rec)], pid: rec.pid, dist: rec.dist, food: rec.food, head: rec.head, amt: rec.amt, ko: false, count: 1, score: 12 + rec.amt / 2 + (rec.head ? 12 : 0) });
   }
 
-  onKill(victim, killer, foodId) {
-    if (!this.on || this.playing || !killer || killer === victim || !this.idx.has(killer) || !this.idx.has(victim)) return;
+  // `late`: how long after the hit that knocked them out the knockout can come (online it comes over
+  // the network, a moment after the hit showed here; then it's that hit's moment)
+  onKill(victim, killer, foodId, late = 0.25) {
+    if (!this.rec || !killer || killer === victim || !this.idx.has(killer) || !this.idx.has(victim)) return;
     const g = this.game, t = g.time;
     const a = this.idx.get(killer), b = this.idx.get(victim);
     const h = this.lastHit.get(victim);
     const link = h && h.by === killer && t - h.t < 6 ? h : null;
     const dist = link ? link.dist : killer.pos.distanceTo(victim.pos);
     const hit = link ? this._hit(link) : { tk: t, tt: null, ti: t, b, pid: 0, path: null, head: false, dist };
-    if (link && t - link.t > 0.25) Object.assign(hit, { tt: null, ti: t, pid: 0, path: null }); // (knocked out later, by a burn: not that throw's moment)
-    hit.tk = t; hit.b = b;
+    const same = link && t - link.t <= late;
+    if (link && !same) Object.assign(hit, { tt: null, ti: t, pid: 0, path: null }); // (knocked out later, by a burn: not that throw's moment)
+    hit.tk = same ? link.t : t; hit.b = b;
     const air = !killer.onGround;
     const bonus = Math.min(40, dist * 0.8) + (link?.head ? 15 : 0) + (air ? 10 : 0);
     // a snipe that knocked them out: a snipe splat
     const snipe = link?.pid ? this.moments.find((m) => m.kind === 'snipe' && m.pid === link.pid && m.hits[0].b === b) : null;
-    if (snipe) { snipe.ko = true; snipe.score += 45; snipe.t1 = Math.max(snipe.t1, t + 2.2); return; }
+    if (snipe) { snipe.ko = true; snipe.score += 45; snipe.t1 = Math.max(snipe.t1, hit.tk + 2.2); return; }
     // a double, a triple ...: the same Titan splatted someone a moment ago
     const prev = this.moments.find((m) => m.ko && m.a === a && t - m.hits.at(-1).tk < 4.5);
     if (prev) {
       prev.hits.push(hit); prev.count++;
       prev.score += 40 + bonus * 0.5;
-      prev.t1 = t + 2.2;
+      prev.t1 = hit.tk + 2.2;
       return;
     }
     // (a big hit that was the same throw becomes this splat)
@@ -292,7 +314,7 @@ export class Highlights {
 
   // The match is over: the last splat won it (and its clip runs on, for the crane up and away).
   onOver() {
-    if (!this.on) return;
+    if (!this.rec) return;
     const t = this.game.time;
     const last = this.moments.filter((m) => m.ko && t - m.hits.at(-1).tk < 3).sort((p, q) => q.hits.at(-1).tk - p.hits.at(-1).tk)[0];
     if (last) { last.final = true; last.score += 35; last.t1 = Math.max(last.t1, last.hits.at(-1).tk + 3.2); }
@@ -358,8 +380,9 @@ export class Highlights {
   }
 
   // ------------------------------------------------------------------ the reels
-  // The plays for a reel: 'all' (the match) or 'me' (your own), best last.
-  reel(mode) {
+  // The plays for a reel: 'all' (the match) or 'me' (your own), best last. opts.max: at most this
+  // many; opts.mine: your best play is always one of them (online round reels).
+  reel(mode, opts = {}) {
     const fr = this.frames;
     if (fr.length < 10) return [];
     const first = fr[0].t, last = fr.at(-1).t;
@@ -369,7 +392,8 @@ export class Highlights {
     // a dodge that was splatted straight after isn't one to show
     for (const m of pool) if (m.kind === 'dodge' && !this._aliveAt(m.a, Math.min(last, m.hits.at(-1).tk + 1.2))) m.score *= 0.4;
     pool.sort((p, q) => q.score - p.score);
-    const max = mode === 'me' ? 5 : 6, kinds = {}, out = [];
+    const max = opts.max || (mode === 'me' ? 5 : 6), kinds = {}, out = [];
+    if (opts.mine) { const i = pool.findIndex((m) => m.a === me); if (i > 0) pool.unshift(...pool.splice(i, 1)); }
     for (const m of pool) {
       if (out.length >= max) break;
       if (out.some((o) => Math.min(o.t1, m.t1) - Math.max(o.t0, m.t0) > 0.4 * Math.min(o.t1 - o.t0, m.t1 - m.t0))) continue; // overlaps a chosen one
@@ -381,11 +405,12 @@ export class Highlights {
   }
   has(mode) { return this.reel(mode).length > 0; }
 
-  play(mode, onDone) {
+  // opts: max, mine (see reel); live (online: the match goes on under it); title
+  play(mode, onDone, opts = {}) {
     if (this.playing) return false;
-    const clips = this.reel(mode);
+    const clips = this.reel(mode, opts);
     if (!clips.length) return false;
-    this.playing = new Reel(this, clips, mode, (quiet) => { this.playing = null; if (!quiet) onDone?.(); });
+    this.playing = new Reel(this, clips, mode, (quiet) => { this.playing = null; if (!quiet) onDone?.(); }, opts);
     return true;
   }
   stop() { if (this.playing) this.playing.finish(true); } // (quietly: leaving for the menu, a new match)
@@ -400,15 +425,16 @@ export class Highlights {
     return [lo, (t - fr[lo].t) / Math.max(1e-6, fr[lo + 1].t - fr[lo].t)];
   }
   _aliveAt(i, t) { const [j] = this._at(t); return (this.frames[j].a[i * K + 8] & FL.alive) !== 0; }
-  yawAt(i, t) { const [j, k] = this._at(t), fr = this.frames, o = i * K + 3; return angleLerp(fr[j].a[o], fr[Math.min(j + 1, fr.length - 1)].a[o], k); }
+  yawAt(i, t) { const [j, k] = this._at(t), fr = this.frames, o = i * K + 3, A = fr[j].a, B = fr[Math.min(j + 1, fr.length - 1)].a; return angleLerp(A[o] ?? B[o] ?? 0, B[o] ?? A[o] ?? 0, k); }
   // A Titan's middle (or feet) at time t: a smooth curve through the frames (slow motion shows the
   // corners of straight lines between them), no sliding across a respawn.
   posAt(i, t, out = new THREE.Vector3(), mid = true) {
     const fr = this.frames, [j, k] = this._at(t), o = i * K;
     const F = fr[j], N = fr[Math.min(j + 1, fr.length - 1)], A = F.a, B = N.a, h = N.t - F.t;
     if (h <= 0 || h > 0.25 || !linked(A, B, o)) {
-      const P = k < 0.5 ? A : B;
-      out.set(P[o], P[o + 1], P[o + 2]);
+      let P = k < 0.5 ? A : B;
+      if (P.length <= o) P = P === A ? B : A; // (a frame from before they turned up)
+      out.set(P[o] || 0, P[o + 1] || 0, P[o + 2] || 0);
     } else {
       const k2 = k * k, k3 = k2 * k;
       const h00 = 2 * k3 - 3 * k2 + 1, h10 = k3 - 2 * k2 + k, h01 = 3 * k2 - 2 * k3, h11 = k3 - k2;
@@ -433,8 +459,10 @@ export class Highlights {
 // One reel playing: poses the Titans and the flying food from the recording, replays the bursts and
 // sounds, directs the camera and runs the overlay. The live match waits, and is put back after.
 class Reel {
-  constructor(hl, clips, mode, done) {
+  constructor(hl, clips, mode, done, opts = {}) {
     this.hl = hl; this.g = hl.game; this.clips = clips; this.mode = mode; this.done = done;
+    this.live = !!opts.live;   // online: the match goes on underneath (see unpose)
+    this.rInv = new Map();     // (online) what each Titan holds in the replay, apart from what they hold live
     this.ghosts = new Map(); // pid -> mesh
     this.paths = new Map();  // pid -> the flight path of a throw in this play
     this.cam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 55, shot: -1, clip: -1, rt: 0 };
@@ -453,37 +481,22 @@ class Reel {
     this.ci = -1; this.stage = 'intro'; this.st = 0; this.t = 0;
     const me = this.g.player && this.hl.idx.get(this.g.player);
     this.me = me;
-    this._title(mode === 'me' ? 'Your highlights' : 'Match highlights', `${clips.length} ${clips.length === 1 ? 'play' : 'plays'}${mode === 'me' ? ' starring you' : ''}`);
+    this._title(opts.title || (mode === 'me' ? 'Your highlights' : 'Match highlights'), `${clips.length} ${clips.length === 1 ? 'play' : 'plays'}${mode === 'me' ? ' starring you' : ''}`);
     this._enterClip(0, true);
   }
 
   // ---------------------------------------------------------------- save and put back the live match
-  _save() {
-    const g = this.g;
-    this.saved = {
-      time: g.time, fovKick: g.fovKick, fov: g.camera.fov,
-      camPos: g.camera.position.clone(), camQ: g.camera.quaternion.clone(),
-      tide: [g.tide.x, g.tide.z, g.tide.r],
-      actors: this.hl.actors.map((a) => ({
-        a, pos: a.pos.clone(), vel: a.vel.clone(), yaw: a.yaw, aimY: a.aimDir.y, alive: a.alive, vis: a.root.visible,
-        onGround: a.onGround, gliding: a.gliding, dashT: a.dashT, frozenUntil: a.frozenUntil, trippedUntil: a.trippedUntil,
-        rootedUntil: a.rootedUntil, burnUntil: a.burnUntil, charging: a.charging, chargeT: a.chargeT, armT: a.armT,
-        eat: a.eat, shieldUp: a.shieldUp, inv: a.inv, sel: a.sel, hitFlash: a.hitFlash, fpCam: a.fpCam,
-      })),
-      projVis: this.g.projectiles.list.map((p) => [p, p.mesh.visible]),
-      hud: !g.hud.el.hidden,
-    };
-    for (const p of this.g.projectiles.list) p.mesh.visible = false;
-    g.hud.show(false);
-    g.previewDots.count = 0;
-    g.fx.clear();
-    for (const a of this.hl.actors) { a.fpCam = null; a.inv = [null, null, null, null, null]; a.sel = 0; }
+  // What a reel changes on the Titans: where they are, what they're doing, what they hold.
+  _grab() {
+    return this.hl.actors.map((a) => ({
+      a, pos: a.pos.clone(), vel: a.vel.clone(), yaw: a.yaw, aimY: a.aimDir.y, alive: a.alive, vis: a.root.visible,
+      onGround: a.onGround, gliding: a.gliding, dashT: a.dashT, frozenUntil: a.frozenUntil, trippedUntil: a.trippedUntil,
+      rootedUntil: a.rootedUntil, burnUntil: a.burnUntil, charging: a.charging, chargeT: a.chargeT, armT: a.armT,
+      eat: a.eat, shieldUp: a.shieldUp, inv: a.inv, sel: a.sel, hitFlash: a.hitFlash, fpCam: a.fpCam,
+    }));
   }
-  _restore() {
-    const g = this.g, s = this.saved;
-    for (const m of this.ghosts.values()) g.projectiles.releaseMesh(m.userData.food, m);
-    this.ghosts.clear();
-    for (const x of s.actors) {
+  _putBack(list) {
+    for (const x of list) {
       const a = x.a;
       Object.assign(a, {
         yaw: x.yaw, alive: x.alive, onGround: x.onGround, gliding: x.gliding, dashT: x.dashT, frozenUntil: x.frozenUntil,
@@ -492,8 +505,69 @@ class Reel {
       });
       a.pos.copy(x.pos); a.vel.copy(x.vel); a.aimDir.y = x.aimY;
       a.root.visible = x.vis; a.root.scale.set(1, 1, 1);
-      a._refreshHeld();
     }
+  }
+  _save() {
+    const g = this.g;
+    this.saved = {
+      time: g.time, fovKick: g.fovKick, fov: g.camera.fov,
+      camPos: g.camera.position.clone(), camQ: g.camera.quaternion.clone(),
+      tide: [g.tide.x, g.tide.z, g.tide.r],
+      actors: this._grab(),
+      projVis: this.g.projectiles.list.map((p) => [p, p.mesh.visible]),
+      hud: !g.hud.el.hidden,
+    };
+    g.hud.show(false);
+    g.previewDots.count = 0;
+    g.fx.clear();
+    if (this.live) return; // (online: posed and put back frame by frame, see _pose)
+    for (const p of this.g.projectiles.list) p.mesh.visible = false;
+    for (const a of this.hl.actors) { a.fpCam = null; a.inv = [null, null, null, null, null]; a.sel = 0; }
+  }
+  // Online, the match goes on under the reel (the host still runs the room). Each frame: keep the live
+  // state, hide what's live but not in the replay (thrown food, Titans who came later), pose the
+  // replay, draw it; then unpose puts the live state back (main.js calls it once the frame is drawn,
+  // game.update before stepping), so the match carries on exactly as if nobody watched.
+  _pose() {
+    const g = this.g;
+    this.posed = {
+      time: g.time, actors: this._grab(),
+      proj: g.projectiles.list.map((p) => [p, p.mesh.visible]),
+      others: g.actors.filter((a) => !this.hl.idx.has(a)).map((a) => [a, a.root.visible]),
+    };
+    for (const p of g.projectiles.list) p.mesh.visible = false;
+    for (const [a] of this.posed.others) { a.root.visible = false; a.glint.visible = false; }
+    for (const a of this.hl.actors) {
+      if (!this.rInv.has(a)) this.rInv.set(a, [null, null, null, null, null]);
+      a.fpCam = null; a.inv = this.rInv.get(a); a.sel = 0;
+    }
+    g.previewDots.count = 0;
+  }
+  unpose() {
+    const s = this.posed;
+    if (!s) return;
+    this.posed = null;
+    const g = this.g;
+    this._putBack(s.actors);
+    for (const [p, v] of s.proj) p.mesh.visible = v && !p.done;
+    for (const [a, v] of s.others) a.root.visible = v;
+    g.time = s.time;
+    g.world.setTide(g.tide.x, g.tide.z, g.tide.r);
+  }
+  _restore() {
+    const g = this.g, s = this.saved;
+    for (const m of this.ghosts.values()) g.projectiles.releaseMesh(m.userData.food, m);
+    this.ghosts.clear();
+    if (this.live) { // (online: the match went on; it's back as it is now, the camera to the match)
+      this.unpose();
+      for (const a of this.hl.actors) { a.root.scale.set(1, 1, 1); a._refreshHeld(); }
+      g.camera.fov = s.fov; g.camera.updateProjectionMatrix();
+      g.fx.clear();
+      g.hud.show(s.hud);
+      return;
+    }
+    this._putBack(s.actors);
+    for (const x of s.actors) x.a._refreshHeld();
     for (const [p, v] of s.projVis) p.mesh.visible = v && !p.done;
     g.time = s.time; g.fovKick = s.fovKick;
     g.camera.position.copy(s.camPos); g.camera.quaternion.copy(s.camQ); g.camera.fov = s.fov; g.camera.updateProjectionMatrix();
@@ -767,14 +841,17 @@ class Reel {
     else if (c.kind === 'dodge') c.t0 = Math.max(c.t0, h.tk - 1.8);
     else c.t0 = Math.max(c.t0, Math.min(h.ti - 1.6, (h.path ? h.path.s[0] : h.ti) - 0.9));
     // who it knocks out: they stay in the replay as it lands (from the last frame they were in)
+    // (knocked out: gone from the recording a moment after; online, once the room said so)
     this.kos = new Map();
-    if (c.kind !== 'dodge') {
-      const fr = this.hl.frames;
+    if (c.ko) {
+      const fr = this.hl.frames, up = (k, b) => (fr[k].a[b * K + 8] & FL.alive) !== 0;
       for (const x of c.hits) {
-        if (this.hl._aliveAt(x.b, x.tk + 0.12)) continue;
-        let j = this.hl._at(x.tk)[0];
-        while (j > 0 && !(fr[j].a[x.b * K + 8] & FL.alive)) j--;
-        this.kos.set(x.b, { tk: x.tk, j });
+        let dead = -1;
+        for (let k = this.hl._at(x.tk)[0]; k < fr.length && fr[k].t <= x.tk + 1.6; k++) if (!up(k, x.b)) { dead = k; break; }
+        if (dead < 0) continue;
+        let j = dead;
+        while (j > 0 && !up(j, x.b)) j--;
+        this.kos.set(x.b, { tk: x.tk, j, dead: fr[dead].t });
       }
     }
   }
@@ -826,6 +903,7 @@ class Reel {
   // ---------------------------------------------------------------- per frame
   update(realDt) {
     if (this.over) return;
+    if (this.live) { this.unpose(); this._pose(); } // (online: keep the live match's state, then pose the replay)
     const dt = Math.min(0.05, Math.max(0, realDt));
     this.st += dt; this.realDt = dt;
     if (this.titleT > 0 && (this.titleT -= dt) <= 0) this.el('reel-title').classList.remove('on');
@@ -869,23 +947,27 @@ class Reel {
     this.freeze = dodge ? 0.1 : ko ? 0.24 : 0.15;
     this.punch = dodge ? 0.4 : ko ? 1 : 0.7;
     this.shake = Math.min(1, this.shake + (dodge ? 0.1 : ko ? 0.6 : 0.4));
-    if (dodge) { g.sfx.play('whoosh', at, 0.9); return; }
+    if (dodge) { this._sfx('whoosh', at, 0.9); return; }
     _x.subVectors(g.camera.position, at);
     const dl = _x.length();
     if (dl > 0.01) at.addScaledVector(_x, Math.min(0.6, dl * 0.3) / dl); // (just in front of them)
     this._ring(at, ko ? 5.5 : 3.6);
     if (ko) this._ring(at, 3, 0.09, 0.5);
-    g.sfx.play(ko ? 'boom' : 'thud', at, ko ? 0.5 : 0.7);
+    this._sfx(ko ? 'boom' : 'thud', at, ko ? 0.5 : 0.7);
     if (this.distEl.classList.contains('on')) { this.distEl.classList.remove('hit'); void this.distEl.offsetWidth; this.distEl.classList.add('hit'); }
   }
 
+  // The reel's own sounds (online, the live match's are muted while a reel plays).
+  _sfx(name, pos, gain) { this.emitting = true; this.g.sfx.play(name, pos, gain); this.emitting = false; }
   // Bursts and sounds from the recording, between two moments.
   _events(a, b) {
     const g = this.g;
     for (const e of this.hl.events) {
       if (e.t <= a || e.t > b) continue;
+      this.emitting = true;
       if (e.fx) g.fx.burst(e.fx, _c.set(e.x, e.y, e.z), e.p);
       else if (e.sfx) g.sfx.play(e.sfx, e.pos ? _d.set(e.pos[0], e.pos[1], e.pos[2]) : null, e.g);
+      this.emitting = false;
     }
   }
 
@@ -910,9 +992,12 @@ class Reel {
     hl.actors.forEach((a, i) => {
       const o = i * K;
       let A = F.a, B = N.a, flags = (k < 0.5 ? A : B)[o + 8], kk = linked(A, B, o) ? k : k < 0.5 ? 0 : 1; // (a respawn or a teleport: don't slide)
-      // splatted in this play: still there as the food lands, then squashed flat into the confetti
-      const ko = this.kos.get(i), hold = ko && t >= ko.tk - 0.3 && t < ko.tk + KO_HOLD && !linked(A, B, o);
+      // splatted in this play: still there as the food lands, then squashed flat into the confetti and
+      // gone (online, however late the room said so)
+      const ko = this.kos.get(i), inKo = ko && t >= ko.tk - 0.3 && t < Math.max(ko.dead, ko.tk + KO_HOLD) + 0.05;
+      const hold = inKo && !linked(A, B, o); // (the recording has them gone already: their last pose)
       if (hold) { A = B = fr[ko.j].a; flags = A[o + 8]; kk = 0; }
+      if (inKo && t >= ko.tk + KO_HOLD) flags = 0;
       const alive = (flags & FL.alive) !== 0;
       a.alive = alive; a.root.visible = alive;
       a.root.scale.set(1, 1, 1);
@@ -934,7 +1019,9 @@ class Reel {
       a.eat = flags & FL.eating ? (a.eat || { end: Infinity, done: () => {}, dmg: 0 }) : null;
       const held = (k < 0.5 ? A : B)[o + 11];
       const id = held >= 0 ? HELD[held] : null;
-      if ((a.inv[0]?.id || null) !== id) { a.inv[0] = id ? { id, count: 1 } : null; a.sel = 0; a._refreshHeld(); }
+      if ((a.inv[0]?.id || null) !== id) a.inv[0] = id ? { id, count: 1 } : null;
+      a.sel = 0;
+      if ((a.heldId || null) !== id) a._refreshHeld();
       const food = id ? FOODS[id] : null;
       a.chargeT = lerp(A[o + 9], B[o + 9], kk) * Math.max(0.2, food?.charge || 1);
       a.armT = lerp(A[o + 10], B[o + 10], kk);
@@ -972,7 +1059,7 @@ class Reel {
     for (const [pid, m] of this.ghosts) if (!seen.has(pid)) { g.projectiles.releaseMesh(m.userData.food, m); this.ghosts.delete(pid); }
     g.world.setTide(lerp(F.tide[0], N.tide[0], k), lerp(F.tide[1], N.tide[1], k), lerp(F.tide[2], N.tide[2], k));
     // animate at the speed of play (slow motion slows the Titans too)
-    for (const a of g.actors) {
+    for (const a of hl.actors) {
       a.updateVisual(Math.max(step, 1e-4), g.camera);
       if (a.glint.visible) a.glint.scale.multiplyScalar(0.45); // (a sniper's glint: not a flare over the whole shot)
     }
@@ -1131,7 +1218,7 @@ class Reel {
       look.copy(_q).lerp(s.hitP, t >= h.ti ? 1 : 0.4 + 0.6 * ku);
       fov = t >= h.ti ? 44 : lerp(64, 46, ku);
       from = _p; // (walls: look from the food)
-      if (this.stage === 'play' && !s.whoosh) { s.whoosh = true; g.sfx.play('whoosh', null, 0.75); }
+      if (this.stage === 'play' && !s.whoosh) { s.whoosh = true; this._sfx('whoosh', null, 0.75); }
       roll = 0.07 * s.sg * (t >= h.ti ? 0.3 : 1);
     } else if (s.type === 'two') { // from beside them all, drifting round, leaning to the splat after it lands
       const pts = this._pts;
@@ -1162,7 +1249,7 @@ class Reel {
       pos.copy(Fe).addScaledVector(s.fw, R * 0.82).addScaledVector(side, R * 0.57).addScaledVector(UP, 0.4);
       look.copy(Fe).addScaledVector(UP, 1.3);
       fov = 46;
-      if (this.stage === 'play' && !s.sting && this.ci === this.clips.length - 1) { s.sting = true; g.sfx.play('win', null, 0.5); } // (the best play: a fanfare)
+      if (this.stage === 'play' && !s.sting && this.ci === this.clips.length - 1) { s.sting = true; this._sfx('win', null, 0.5); } // (the best play: a fanfare)
       if (c.final) { // the winning splat: up and away over the arena
         const k = smooth((rt - 0.9) / 1.8);
         pos.addScaledVector(s.fw, 4 * k).addScaledVector(side, 1.5 * k).addScaledVector(UP, 5.5 * k);
