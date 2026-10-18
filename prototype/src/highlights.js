@@ -5,7 +5,8 @@
 // moments worth seeing again:
 //   - splats: knockouts by a throw or an ability; more for a long throw, a headshot, a double or
 //     triple splat (one Titan splatting several in a few seconds), and the splat that won the match;
-//   - snipes: a hit from 30 m or more (a snipe splat if it knocked them out);
+//   - snipes: a hit by a throw that flew 30 m or more (along its flight, every climb and drop
+//     counted; a snipe splat if it knocked them out);
 //   - dodges: a dangerous throw passing within a metre of a Titan who was running, dashing or in the
 //     air, and missing (a double dodge when two come close together);
 //   - big hits (your reel only, to fill it out): a hit of 30 or more, or a headshot.
@@ -41,7 +42,7 @@ const HZ = 15;                // frames a second
 const K = 13;                 // numbers per Titan per frame: x y z yaw pitch vx vy vz flags charge armT held hitFlash
 const FL = { alive: 1, ground: 2, glide: 4, dash: 8, trip: 16, frozen: 32, rooted: 64, charging: 128, shield: 256, eating: 512, burning: 1024 };
 const KEEP = 9;               // seconds of the latest frames always kept (a throw can fly for 6 s)
-const SNIPE = 30;             // metres: a hit from this far is a snipe
+const SNIPE = 30;             // metres: a hit by a throw that flew this far is a snipe
 const LONG = 13;              // metres: a hit from this far is followed through the air
 const DODGE_R = 1.1;          // a dangerous throw passing this close to a Titan's body (and missing) is a dodge
 const HELD = [...FOOD_IDS, 'peel'];
@@ -100,6 +101,18 @@ function pathAt(P, t, out, vel = null) {
   return out;
 }
 const pathEnd = (P) => P.s[P.s.length - 4];
+// (0.40) How far a food has flown along its path by time t: every climb and every drop counts.
+function flownTo(P, t) {
+  const s = P.s;
+  let d = 0;
+  for (let k = 4; k < s.length; k += 4) {
+    const seg = Math.hypot(s[k + 1] - s[k - 3], s[k + 2] - s[k - 2], s[k + 3] - s[k - 1]);
+    if (s[k] <= t) { d += seg; continue; }
+    d += seg * clamp((t - s[k - 4]) / Math.max(1e-6, s[k] - s[k - 4]), 0, 1);
+    break;
+  }
+  return d;
+}
 
 // The nearest scenery outline (the world's sightBoxes: min xyz, max xyz) along a ray, ignoring any it
 // starts inside. Some decorations aren't solid, so a camera checking only raycastWorld sees through them.
@@ -251,7 +264,9 @@ export class Highlights {
       ti = clamp(last + d / Math.max(1, p.vel.length()), last + 1e-3, Math.max(t, last + 1e-3));
       s.push(ti, p.pos.x, p.pos.y, p.pos.z);
     }
-    this.pending = { victim: a, by: p.owner, t, launchT: p.hl.t, dist: p.hl.from.distanceTo(a.pos), pid: p.hl.id, head: !!head, food: p.food, path: P, ti };
+    // how far: the length of its flight, up and down included (0.40); else thrower to target
+    const dist = P ? flownTo(P, ti) : p.hl.from.distanceTo(a.pos);
+    this.pending = { victim: a, by: p.owner, t, launchT: p.hl.t, dist, pid: p.hl.id, head: !!head, food: p.food, path: P, ti };
   }
 
   // (online, a hit on another player is their game's to decide: this is the damage it showed here)
@@ -777,7 +792,7 @@ class Reel {
     if (h?.bullet && (s.type === 'bullet' || s.type === 'reveal')) {
       de.classList.add('on');
       let k = 1;
-      if (this.t < h.ti) { pathAt(h.path, this.t, _x); k = clamp(Math.hypot(_x.x - h.p0.x, _x.z - h.p0.z) / h.span, 0, 1); }
+      if (this.t < (h.ti0 ?? h.ti)) k = clamp(flownTo(h.path, this.t) / h.flown, 0, 1);
       const v = Math.round(h.dist * k);
       if (v !== this.distShown) { this.distShown = v; this.distB.textContent = v; }
     } else if (de.classList.contains('on')) de.classList.remove('on', 'hit');
@@ -850,9 +865,7 @@ class Reel {
         h.bs = Math.max(P.s[0], h.ti - 1.5, c.t0);
         const fl = Math.max(0.02, h.ti - h.bs);
         h.s0 = (fl * BULLET_C) / clamp(1.7 + 0.9 * fl, 1.9, 3.6);
-        h.p0 = pathAt(P, P.s[0], new THREE.Vector3());
-        const pi = pathAt(P, h.ti, new THREE.Vector3());
-        h.span = Math.max(0.1, Math.hypot(pi.x - h.p0.x, pi.z - h.p0.z));
+        h.flown = Math.max(0.1, flownTo(P, h.ti0 ?? h.ti)); // (the counter's full distance: up and down count)
       }
     }
     // a short look at the throw, then into the air (or the action)

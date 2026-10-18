@@ -451,7 +451,8 @@ export class PotWars {
     return null;
   }
   // Close enough to swing at the pot it's heading for?
-  inReach(a, goal) { return Math.hypot(goal.x - a.pos.x, goal.z - a.pos.z) < POT_R + LADLE_REACH - 0.4; }
+  // (0.40) and level with it: a pot up on a table can't be reached from the floor under it
+  inReach(a, goal) { return Math.hypot(goal.x - a.pos.x, goal.z - a.pos.z) < POT_R + LADLE_REACH - 0.4 && Math.abs(goal.y - a.pos.y) < 2.2; }
 
   // ---------------------------------------------------------------- every step
   update(dt) {

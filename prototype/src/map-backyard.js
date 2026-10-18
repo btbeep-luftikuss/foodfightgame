@@ -110,7 +110,7 @@ export function buildBackyard(W) {
   m.cupRim = new THREE.MeshStandardMaterial({ color: '#e0405a', roughness: 0.5 });
   m.lemonade = new THREE.MeshPhysicalMaterial({ color: '#f7e36a', roughness: 0.1, clearcoat: 1 });
   m.pool = new THREE.MeshPhysicalMaterial({ color: '#4fb8e8', roughness: 0.25, clearcoat: 1 });
-  m.water = new THREE.MeshPhysicalMaterial({ color: '#9fdcff', roughness: 0.03, transparent: true, opacity: 0.6, clearcoat: 1, depthWrite: false });
+  m.water = new THREE.MeshPhysicalMaterial({ color: '#9fdcff', roughness: 0.03, transparent: true, opacity: 0.82, clearcoat: 1, depthWrite: false }); // (0.40) 0.6 before
   m.leaves = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
   m.bark = new THREE.MeshStandardMaterial({ color: '#6b4a2f', roughness: 0.9 });
   m.food = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.4, clearcoat: 0.55, clearcoatRoughness: 0.3 });
@@ -201,7 +201,7 @@ export function buildBackyard(W) {
   W._water(-128, F, -80, 14, 9);
   for (const [x, z] of [[-122, -70], [-135, -76]]) {
     addBox(x - 2.3, x + 2.3, z - 2.3, z + 2.3, F, F + 5, { surface: 'ice' });
-    W._mesh(new THREE.BoxGeometry(5, 5, 5).rotateY(rand(0, 1)), new THREE.MeshPhysicalMaterial({ color: '#e3f6ff', roughness: 0.05, transparent: true, opacity: 0.8, clearcoat: 1 }), x, F + 2.5, z);
+    W._mesh(new THREE.BoxGeometry(5, 5, 5).rotateY(rand(0, 1)), new THREE.MeshPhysicalMaterial({ color: '#e3f6ff', roughness: 0.05, transparent: true, opacity: 0.92, clearcoat: 1 }), x, F + 2.5, z);
   }
 
   // ---------------------------------------------------------------- kiddie pool: get Wet

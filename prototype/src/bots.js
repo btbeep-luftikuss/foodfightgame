@@ -61,7 +61,12 @@ export class BotBrain {
     const tide = g.tide;
     const onFloor = a.pos.y < FLOOR_Y + 5;
     const pg = g.pots.active ? g.pots.botGoal(a, this.target, bestD) : null; // Cooking Pot Wars: raid, guard, carry home
-    if (pg) { this.goal = pg.pos.clone(); this.goalKind = pg.kind; }
+    if (pg) {
+      this.goal = pg.pos.clone(); this.goalKind = pg.kind;
+      // (0.40) the pot is up on a counter or a table and I'm down below: up a spatula pad first (walking in
+      // under it and swinging at the tabletop does nothing)
+      if (pg.pos.y > a.pos.y + 2.5 && a.onGround) this._goPad(pg.pos);
+    }
     else if (tide && Math.hypot(a.pos.x - tide.x, a.pos.z - tide.z) > tide.r - 4) {
       // The safe zone may be up on a counter: then take the spatula pad that lands closest to it.
       const zoneY = groundHeight(tide.x, tide.z, 50);

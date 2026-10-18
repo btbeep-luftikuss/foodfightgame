@@ -298,14 +298,14 @@ export class World {
     m.chrome = new THREE.MeshStandardMaterial({ color: '#f2f4f6', metalness: 1, roughness: 0.08 });
     m.ceramic = new THREE.MeshPhysicalMaterial({ color: '#f7f5f0', roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.08 });
     m.mug = new THREE.MeshPhysicalMaterial({ color: '#2f6fb0', roughness: 0.2, clearcoat: 1 });
-    m.glass = new THREE.MeshPhysicalMaterial({ color: '#d8ecff', roughness: 0.05, transparent: true, opacity: 0.36, clearcoat: 1, depthWrite: false }); // (0.35) a touch more visible, and every glass has a rim
+    m.glass = new THREE.MeshPhysicalMaterial({ color: '#d8ecff', roughness: 0.05, transparent: true, opacity: 0.68, clearcoat: 1, depthWrite: false, side: THREE.DoubleSide }); // (0.40) mostly solid, from both sides (it was 0.36: you saw straight through)
     m.jam = new THREE.MeshPhysicalMaterial({ color: '#8e0f2c', roughness: 0.2, clearcoat: 1, sheen: 0.4 });
     m.dark = new THREE.MeshStandardMaterial({ color: '#2b2a2e', roughness: 0.6 });
     m.ceiling = new THREE.MeshStandardMaterial({ color: '#f4ede2', roughness: 0.9 });
     m.lamp = new THREE.MeshBasicMaterial({ color: '#fff7e0' });
     m.walnut = new THREE.MeshStandardMaterial({ color: '#7a4a2a', roughness: 0.45 });
     m.walnutTop = new THREE.MeshPhysicalMaterial({ color: '#8a5530', roughness: 0.3, clearcoat: 0.6, clearcoatRoughness: 0.2 });
-    m.water = new THREE.MeshPhysicalMaterial({ color: '#b9e2ff', roughness: 0.03, transparent: true, opacity: 0.55, clearcoat: 1, depthWrite: false });
+    m.water = new THREE.MeshPhysicalMaterial({ color: '#b9e2ff', roughness: 0.03, transparent: true, opacity: 0.82, clearcoat: 1, depthWrite: false }); // (0.40) 0.55 before
     m.white = new THREE.MeshStandardMaterial({ color: '#fff6e6', roughness: 0.5 });
   }
 
@@ -804,7 +804,7 @@ export class World {
     // --- floor: a glass pickle jar on its side: walk in at the open end
     {
       const x = -150, z = -10, R = 7, L = 26;
-      const jarGlass = new THREE.MeshPhysicalMaterial({ color: '#d6f0dc', roughness: 0.05, transparent: true, opacity: 0.42, clearcoat: 1, depthWrite: false, side: THREE.DoubleSide });
+      const jarGlass = new THREE.MeshPhysicalMaterial({ color: '#d6f0dc', roughness: 0.05, transparent: true, opacity: 0.68, clearcoat: 1, depthWrite: false, side: THREE.DoubleSide });
       this._mesh(new THREE.CylinderGeometry(R, R, L, 40, 1, true).rotateZ(Math.PI / 2), jarGlass, x, F + R, z, { cast: false });
       this._mesh(new THREE.TorusGeometry(R + 0.1, 0.45, 8, 40).rotateY(Math.PI / 2), jarGlass, x + L / 2 - 1.2, F + R, z, { cast: false });
       const label = canvasTex(512, 128, (c, w, h) => {
@@ -1245,7 +1245,29 @@ export class World {
 
   // Scenery never moves, so meshes that share a material are merged into one draw call
   // (GDD 11.7). Transparent and multi-material meshes are left alone.
+  // (0.40) An open shape (a plane, a disc, a ring, an open-ended cylinder or cone, part of a sphere, a
+  // lathe) drawn from one side only is see-through from the other: a lamp shade from below, a
+  // tablecloth's skirt from under the table, the grill's lid from inside. The opaque ones are drawn
+  // from both sides (glass and water stay see-through).
+  _twoSided() {
+    const swap = new Map();
+    const open = (geo) => {
+      const P = geo.parameters || {}, t = geo.type;
+      return t === 'PlaneGeometry' || t === 'CircleGeometry' || t === 'RingGeometry' || t === 'ShapeGeometry' || t === 'LatheGeometry'
+        || ((t === 'CylinderGeometry' || t === 'ConeGeometry') && P.openEnded)
+        || (t === 'SphereGeometry' && ((P.phiLength ?? 7) < 6.28 || (P.thetaLength ?? 4) < 3.14));
+    };
+    this.scene.traverse((o) => {
+      if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material)) return;
+      const m = o.material;
+      if (m.side !== THREE.FrontSide || m.transparent || !open(o.geometry)) return;
+      if (!swap.has(m)) { const c = m.clone(); c.side = THREE.DoubleSide; swap.set(m, c); }
+      o.material = swap.get(m);
+    });
+  }
+
   _mergeStatic() {
+    this._twoSided();
     this.scene.updateMatrixWorld(true);
     // (0.37) the outline (a box) of every scenery piece up to 30 m across, for the highlight reels'
     // camera: some decorations have no solid shape, so raycasts against the solid ones go through them

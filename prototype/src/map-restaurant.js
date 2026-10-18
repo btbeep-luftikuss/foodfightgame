@@ -161,11 +161,11 @@ export function buildRestaurant(W) {
   m.chrome = new THREE.MeshStandardMaterial({ color: '#f2f4f6', metalness: 1, roughness: 0.08 });
   m.dark = new THREE.MeshStandardMaterial({ color: '#2b2a2e', roughness: 0.6 });
   m.ceramic = new THREE.MeshPhysicalMaterial({ color: '#f7f5f0', roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.08 });
-  m.glass = new THREE.MeshPhysicalMaterial({ color: '#d8ecff', roughness: 0.05, transparent: true, opacity: 0.36, clearcoat: 1, depthWrite: false }); // (0.35) a touch more visible, and every glass has a rim
+  m.glass = new THREE.MeshPhysicalMaterial({ color: '#d8ecff', roughness: 0.05, transparent: true, opacity: 0.68, clearcoat: 1, depthWrite: false, side: THREE.DoubleSide }); // (0.40) mostly solid, from both sides (it was 0.36: you saw straight through)
   m.leather = new THREE.MeshPhysicalMaterial({ color: '#8a1d24', roughness: 0.45, clearcoat: 0.4 });
   m.piano = new THREE.MeshPhysicalMaterial({ color: '#141118', roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05 });
   m.ceiling = new THREE.MeshStandardMaterial({ color: '#3a2418', roughness: 0.9 });
-  m.water = new THREE.MeshPhysicalMaterial({ color: '#b9e2ff', roughness: 0.03, transparent: true, opacity: 0.55, clearcoat: 1, depthWrite: false });
+  m.water = new THREE.MeshPhysicalMaterial({ color: '#b9e2ff', roughness: 0.03, transparent: true, opacity: 0.82, clearcoat: 1, depthWrite: false }); // (0.40) 0.55 before
   m.white = new THREE.MeshStandardMaterial({ color: '#fff6e6', roughness: 0.5 });
   m.martini = new THREE.MeshPhysicalMaterial({ color: '#e8f0b0', roughness: 0.05, clearcoat: 1 });
   m.wine = new THREE.MeshStandardMaterial({ color: '#8e1530', roughness: 0.15 });
@@ -250,7 +250,7 @@ export function buildRestaurant(W) {
   W._mesh(new THREE.CylinderGeometry(7, 6, 10, 32), m.steel, -40, 5, -158);
   W._mesh(new THREE.TorusGeometry(7, 0.5, 8, 32).rotateX(Math.PI / 2), m.chrome, -40, 10, -158, { cast: false });
   for (const [dx, dz, a] of [[-2, -2, 0.3], [2.5, 1, 1.1], [-1, 3, 2]]) {
-    const ice = W._mesh(new THREE.BoxGeometry(3, 3, 3), new THREE.MeshPhysicalMaterial({ color: '#e3f6ff', roughness: 0.05, transparent: true, opacity: 0.8, clearcoat: 1 }), -40 + dx, 10.4, -158 + dz, { cast: false });
+    const ice = W._mesh(new THREE.BoxGeometry(3, 3, 3), new THREE.MeshPhysicalMaterial({ color: '#e3f6ff', roughness: 0.05, transparent: true, opacity: 0.92, clearcoat: 1 }), -40 + dx, 10.4, -158 + dz, { cast: false });
     ice.rotation.set(a, a * 0.7, 0.3);
   }
   W._water(-40, 10.05, -158, 6, 6);
@@ -324,7 +324,7 @@ export function buildRestaurant(W) {
   { // the punch bowl: wade in to get Wet
     const px = -48, pz = 14;
     W._mesh(new THREE.CylinderGeometry(9.4, 7, 2.6, 40, 1, true), m.glass, px, 1.3, pz, { cast: false });
-    const punch = W._mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), new THREE.MeshPhysicalMaterial({ color: '#e0405a', roughness: 0.05, transparent: true, opacity: 0.7, clearcoat: 1, depthWrite: false }), px, 2.45, pz, { cast: false, dyn: true });
+    const punch = W._mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), new THREE.MeshPhysicalMaterial({ color: '#e0405a', roughness: 0.05, transparent: true, opacity: 0.88, clearcoat: 1, depthWrite: false }), px, 2.45, pz, { cast: false, dyn: true });
     punch.scale.set(8.6, 1, 8.6);
     W.waters.push({ x: px, y: 2.4, z: pz, rx: 8.6, rz: 8.6 });
     for (const [dx, dz] of [[-3, 2], [4, -1], [1, 4]]) food(new THREE.CylinderGeometry(1.4, 1.4, 0.5, 16), '#ffd23a', px + dx, 2.6, pz + dz); // lemon slices

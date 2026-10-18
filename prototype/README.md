@@ -63,6 +63,15 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.40: distances up and down, bots that climb to a pot, fewer see-through things** (`src/highlights.js`, `src/bots.js`, `src/potwars.js`, `src/world.js`, `src/map-restaurant.js`, `src/map-backyard.js`)
+
+- **Highlight distances count up and down:** a throw's distance is now how far the food actually flew, along its arc: climbing, dropping off a counter, curving (a seeking chili). The counter ticks up with it all the way (before, it counted only progress across the floor) and the captions and the 30 m for a snipe use the same distance. For example, a chili that crossed 43.7 m of floor while dropping 13.5 m now counts 49.1 m.
+- **Bots climb to a pot that's up high:** in Cooking Pot Wars a bot raiding (or guarding, or carrying home to) a pot up on a counter or a table used to walk straight at it and stand on the floor under the table, swinging at the tabletop. Now a bot below a pot takes the spatula pad that lands nearest it first, and only swings when it's level with the pot.
+- **Fewer see-through things:**
+  - Shapes open on one side were drawn from the front only, so from the other side they vanished: the restaurant's lamp shades and chandelier shades from below (you saw only the bulbs), the round tables' tablecloth skirts from underneath, open cups, half domes and flat panels from behind. Every opaque open shape in the scenery is now drawn from both sides (on all three maps; glass and water stay as they are).
+  - Glass was so faint that glasses, jars and cups looked like they weren't there (about a third solid): now about two-thirds solid and drawn from both sides, so a martini glass or a jar reads as glass you can't see straight through. Water in the sink, pool and ice bucket, the ice cubes and the bar's punch are nearly solid too.
+- Tests: the restaurant with one team's pot on a round dining table (30 m above the floor): before, bots spent the raid on the floor under the table and the pot kept all its health (300); now none stood under it, two enemy bots got up onto the table and knocked it down to 195. Screenshots of the same spots before and after (lamp shades from below, the tablecloth skirt from underneath, martini glasses, a jar, the ice by the pool). Every recorded throw's flight distance against its floor and straight-line distances. Highlight reels still put the match back exactly; no errors.
+
 **Version 0.39: reels about the splats, and splats that land** (`src/highlights.js`, `src/fx.js`)
 
 - **Splats first:** a reel picks knockouts first (splats, snipe splats, double splats, the winning splat), then snipes and big hits, and a dodge only to fill a gap: one at most, and never the last play while there's a splat to end on. (Before, up to 3 dodges could make a reel, and a good dodge could be its best play.) The same in your reel and the online round reel (where your own best play, a splat if you have one, is always in).
