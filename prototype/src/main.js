@@ -55,6 +55,10 @@ const QUALITY = {
 };
 
 function readQuality() {
+  if (window.__ttSafe) { // (0.42) the last start crashed (out of memory on an iPad): Low, and lighter still
+    Object.assign(QUALITY.low, { pixelRatio: Math.min(QUALITY.low.pixelRatio, 0.6), splatRes: 512, particles: 0.25 });
+    return 'low';
+  }
   const h = location.hash.replace('#', '');
   if (h.startsWith('q-') && QUALITY[h.slice(2)]) return h.slice(2);
   try { const s = localStorage.getItem('tt-quality'); if (s && QUALITY[s]) return s; } catch { /* storage blocked */ }
@@ -137,7 +141,7 @@ function boot() {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.antialias, powerPreference: 'high-performance' });
   } catch (e) {
     $('menu-error').hidden = false;
-    $('menu-error').textContent = 'WebGL is not available in this browser, so the game cannot start. Try a recent Chrome, Edge, Firefox or Safari.';
+    $('menu-error').textContent = 'WebGL is not available in this browser, so the game cannot start. Try a recent Chrome, Edge, Firefox or Safari (on an iPad: iPadOS 15 or newer).';
     return;
   }
   renderer.setPixelRatio(quality.pixelRatio);
@@ -161,6 +165,9 @@ function boot() {
   try { const v = localStorage.getItem('tt-map'); if (MAPS[v]) mapId = v; } catch { /* storage blocked */ }
   const game = new Game({ renderer, scene, camera, quality, hud, input, sfx, map: mapId });
   window.__game = game; // handy for debugging in the console
+  // (0.42) started: errors from here on go to the console; 15 s later this start counts as one that didn't crash
+  window.__ttUp = true; document.getElementById('tt-fail')?.remove();
+  setTimeout(() => { try { sessionStorage.removeItem('tt-booting'); } catch { /* storage blocked */ } }, 15000);
   window.__colliders = colliders; window.__THREE = THREE; // (and the solid shapes and three.js, for map checks)
 
   // Menu food legend, using the same rendered icons.

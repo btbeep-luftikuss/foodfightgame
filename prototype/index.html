@@ -4,6 +4,39 @@
 <title>Tiny Titans Food Fight</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<script>
+// (0.42) Before the game's own code: help older browsers (iPads), and never fail silently.
+(function () {
+  // .at() arrived in Safari 15.4
+  [Array, String, Int8Array, Uint8Array, Uint8ClampedArray, Int16Array, Uint16Array, Int32Array, Uint32Array, Float32Array, Float64Array].forEach(function (C) {
+    if (!C.prototype.at) Object.defineProperty(C.prototype, 'at', { configurable: true, writable: true, value: function (i) { i = Math.trunc(i) || 0; if (i < 0) i += this.length; return i < 0 || i >= this.length ? undefined : this[i]; } });
+  });
+  // Safe mode: if the last visit died while starting (Safari reloads a page that runs out of memory), start smaller
+  var crashed = false;
+  try { crashed = sessionStorage.getItem('tt-booting') === '1'; sessionStorage.setItem('tt-booting', '1'); } catch (e) { /* storage blocked */ }
+  window.__ttSafe = crashed;
+  // Anything that goes wrong before the game is up is shown on screen, with the browser it happened in
+  function show(msg) {
+    if (window.__ttUp) return; // up and running: the console is enough
+    var box = document.getElementById('tt-fail');
+    if (!box) {
+      box = document.createElement('div'); box.id = 'tt-fail';
+      box.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;background:#2a1530;color:#ffd9cf;font:14px/1.45 system-ui,sans-serif;padding:12px 14px;border-radius:12px;box-shadow:0 0 0 2px #ff6b5a;white-space:pre-wrap;word-break:break-word;max-height:45vh;overflow:auto';
+      (document.body || document.documentElement).appendChild(box);
+      box.textContent = 'The game hit a problem while starting. Please send this to whoever made it:\n';
+    }
+    box.textContent += '\n' + msg;
+  }
+  window.__ttShowFail = show;
+  addEventListener('error', function (e) { show((e.message || 'error') + (e.filename ? ' @' + String(e.filename).slice(-40) + ':' + e.lineno + ':' + e.colno : '')); });
+  addEventListener('unhandledrejection', function (e) { show('promise: ' + (e.reason && (e.reason.message || e.reason))); });
+  addEventListener('load', function () {
+    setTimeout(function () {
+      if (!window.__game) show('Still not started after 20 s.\nBrowser: ' + navigator.userAgent + '\nWebGL 2: ' + !!document.createElement('canvas').getContext('webgl2'));
+    }, 20000);
+  });
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Rubik:wght@400;500;700;800&display=swap">
@@ -663,7 +696,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.41 · Mobile or PC</p>
+      <p class="eyebrow">Prototype 0.42 · iPad help</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in, or smash the other teams' pots in Cooking Pot Wars.</p>
       <nav class="homenav" aria-label="Main menu">

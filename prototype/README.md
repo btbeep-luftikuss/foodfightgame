@@ -63,6 +63,13 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.42: help for iPads, and no silent failures** (`index.html`, `src/main.js`)
+
+- **Shows why it didn't start:** a small script runs before the game's own code. Any error before the game is up, or no game after 20 s, puts a box on screen with the error, the browser and whether WebGL 2 is there (the game needs it: iPadOS 15 or newer), instead of an empty page.
+- **Older Safari:** `.at()` (only in Safari 15.4 and later, used throughout the game) is added where it's missing.
+- **Safe mode after a crash:** Safari quietly reloads a page that runs out of memory. If the last start didn't make it 15 s, the game starts on Low with a lower resolution, smaller splat textures and fewer particles.
+- Tests: an iPad-sized touch screen with Safari's user agent starts normally (touch controls, no box); reloading right after a start comes back in safe mode, and the flag clears after 15 s; a page with WebGL broken and a start error shows the box with both. No errors.
+
 **Version 0.41: a Mobile / PC switch** (`src/input.js`, `src/main.js`, `index.html`)
 
 - **Settings, Controls:** Auto (what the device says, shown in brackets), Mobile (touch sticks and buttons) or PC (keyboard and mouse). It's remembered, and a change reloads the page (mid-match it asks first, since that leaves the match). Useful on a touchscreen laptop or a tablet with a keyboard, where the guess can be wrong.
