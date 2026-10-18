@@ -4,6 +4,15 @@ import * as THREE from 'three';
 
 const _f = new THREE.Vector3(), _r = new THREE.Vector3();
 
+// Controls: 'mobile' (touch sticks and buttons), 'pc' (keyboard and mouse), or 'auto' (by the device).
+// Picked in Settings and remembered; a change reloads the page.
+export const controlsDetected = () => (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window ? 'mobile' : 'pc');
+export function controlsPref() {
+  try { const v = localStorage.getItem('tt-controls'); if (v === 'mobile' || v === 'pc') return v; } catch { /* storage blocked */ }
+  return 'auto';
+}
+export const touchControls = () => (controlsPref() === 'auto' ? controlsDetected() : controlsPref()) === 'mobile';
+
 export class Input {
   constructor(canvas) {
     this.canvas = canvas;
@@ -19,7 +28,8 @@ export class Input {
     this.blockClicks = null; // set by main.js: clicks on the game do nothing (spectating)
     this.enabled = false;
     this.touch = { active: false, moveId: null, moveOrigin: null, move: { x: 0, y: 0 }, lookId: null, lookLast: null, fire: false };
-    this.isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+    this.isTouch = touchControls();
+    document.documentElement.classList.toggle('touchui', this.isTouch); // the touch layout in the CSS hangs off this
 
     addEventListener('keydown', (e) => {
       if (!this.enabled) return;

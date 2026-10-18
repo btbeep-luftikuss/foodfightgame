@@ -164,7 +164,7 @@ button { font: inherit; color: inherit; }
 .hudbtn { position: absolute; right: calc(12px + env(safe-area-inset-right, 0px)); top: calc(10px + env(safe-area-inset-top, 0px)); pointer-events: auto; display: none; border: 0; width: 38px; height: 38px; border-radius: 50%; padding: 0; background: var(--ink-glass); color: transparent; font-size: 0; }
 .hudbtn::before, .hudbtn::after { content: ""; position: absolute; top: 12px; width: 4px; height: 14px; border-radius: 2px; background: var(--paper); }
 .hudbtn::before { left: 14px; } .hudbtn::after { right: 14px; }
-@media (pointer: coarse) { .hudbtn { display: block; } .feed { top: calc(54px + env(safe-area-inset-top, 0px)); } }
+.touchui .hudbtn { display: block; } .touchui .feed { top: calc(54px + env(safe-area-inset-top, 0px)); }
 .scores { margin: 0; padding: 5px 8px; list-style: none; background: var(--ink-glass); border-radius: 10px; display: grid; gap: 2px; min-width: 130px; font-size: 12px; }
 .scores li { display: flex; justify-content: space-between; gap: 12px; }
 .scores span { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
@@ -306,11 +306,11 @@ button { font: inherit; color: inherit; }
   .spec-bar { flex-wrap: wrap; border-radius: 16px; justify-content: space-between; }
   .spec-names { order: -1; flex-basis: 100%; }
 }
-@media (pointer: coarse) and (max-width: 560px) {
-  .mm canvas { width: min(150px, 40vw); }
-  .spec-card { padding: 7px 10px; }
-  .sc-name { font-size: 18px; }
-  .sc-it { width: 32px; height: 32px; }
+@media (max-width: 560px) {
+  .touchui .mm canvas { width: min(150px, 40vw); }
+  .touchui .spec-card { padding: 7px 10px; }
+  .touchui .sc-name { font-size: 18px; }
+  .touchui .sc-it { width: 32px; height: 32px; }
 }
 @media (max-height: 500px) { /* a phone on its side: a smaller map, a shorter loadout card */
   .mm canvas { width: min(165px, 24vw); }
@@ -333,9 +333,9 @@ button { font: inherit; color: inherit; }
 .plate.potplate .name { color: var(--c); font-size: 13px; }
 .plate.potplate .mini { width: 70px; height: 7px; }
 .tbtn.turretb { width: 50px; height: 50px; right: calc(170px + var(--sr)); bottom: calc(262px + var(--sb)); background: #9fd3f2; font-size: 10px; }
-@media (pointer: coarse) and (max-width: 560px) { .tbtn.turretb { width: 46px; height: 46px; right: calc(160px + var(--sr)); bottom: calc(318px + var(--sb)); } }
+@media (max-width: 560px) { .touchui .tbtn.turretb { width: 46px; height: 46px; right: calc(160px + var(--sr)); bottom: calc(318px + var(--sb)); } }
 .tbtn.ladle { width: 54px; height: 54px; right: calc(170px + var(--sr)); bottom: calc(196px + var(--sb)); background: #f3c89a; font-size: 10px; }
-@media (pointer: coarse) and (max-width: 560px) { .tbtn.ladle { width: 48px; height: 48px; right: calc(160px + var(--sr)); bottom: calc(262px + var(--sb)); } .pots ul { gap: 6px; } .pots li { font-size: 11px; } .php { width: 30px; } }
+@media (max-width: 560px) { .touchui .tbtn.ladle { width: 48px; height: 48px; right: calc(160px + var(--sr)); bottom: calc(262px + var(--sb)); } .touchui .pots ul { gap: 6px; } .touchui .pots li { font-size: 11px; } .touchui .php { width: 30px; } }
 /* the loadout card: what you bring into an online round */
 .card.loadout { width: min(880px, 100%); gap: 10px; padding: 20px 22px 0; }
 .card.loadout h3 { font-size: 34px; }
@@ -440,31 +440,31 @@ h3.sub { margin: 4px 0 0; font-size: 12px; letter-spacing: 0.14em; text-transfor
 .ubrief { position: fixed; right: calc(8px + var(--sr)); bottom: calc(106px + var(--sb)); max-width: 86px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--ink-glass); color: var(--butter); box-shadow: inset 0 0 0 2px var(--uc, var(--butter)); pointer-events: none; }
 .ubrief.warn { color: #ffb3a6; box-shadow: inset 0 0 0 2px var(--tomato); }
 
-@media (pointer: coarse) {
-  .bottom, .sniffdot { display: none; }
-  .fps { display: none !important; }
-  .vitals { width: min(190px, 42vw); }
-  .feed { font-size: 11px; max-width: 46vw; }
-  .toast { font-size: 13px; }
+@media all {
+  .touchui .bottom, .touchui .sniffdot { display: none; }
+  .touchui .fps { display: none !important; }
+  .touchui .vitals { width: min(190px, 42vw); }
+  .touchui .feed { font-size: 11px; max-width: 46vw; }
+  .touchui .toast { font-size: 13px; }
 }
-@media (pointer: coarse) and (max-width: 560px) { /* phone held upright: stack the buttons above the aim stick (must come after the base touch rules) */
-  .dial.food { --R: 106px; }
-  .dial.ut { --R: 94px; }
-  .aimstick { width: 116px; height: 116px; right: calc(92px + var(--sr)); bottom: calc(82px + var(--sb)); }
-  .aimstick .knob { width: 70px; height: 70px; margin: -35px 0 0 -35px; }
-  .tbtn.jump { width: 58px; height: 58px; right: calc(18px + var(--sr)); bottom: calc(178px + var(--sb)); }
-  .tbtn.roll { width: 50px; height: 50px; right: calc(22px + var(--sr)); bottom: calc(250px + var(--sb)); }
-  .tbtn.alt { width: 50px; height: 50px; right: calc(96px + var(--sr)); bottom: calc(214px + var(--sb)); }
-  .tbtn.sniffb { width: 46px; height: 46px; right: calc(92px + var(--sr)); bottom: calc(282px + var(--sb)); }
-  .ubrief { right: calc(6px + var(--sr)); bottom: calc(100px + var(--sb)); max-width: 80px; }
-  .vitals { width: min(150px, 38vw); }
-  .pill { left: auto; right: calc(58px + env(safe-area-inset-right, 0px)); transform: none; }
-  .pill.urgent { animation: none; }
-  .pill b { font-size: 14px; }
-  .pill .seg { padding: 1px 7px 1px 5px; gap: 4px; }
-  .ico { width: 15px; height: 15px; }
-  .feed { top: calc(54px + env(safe-area-inset-top, 0px)); max-width: 62vw; }
-  .toast { top: calc(96px + env(safe-area-inset-top, 0px)); }
+@media (max-width: 560px) { /* phone held upright: stack the buttons above the aim stick (must come after the base touch rules) */
+  .touchui .dial.food { --R: 106px; }
+  .touchui .dial.ut { --R: 94px; }
+  .touchui .aimstick { width: 116px; height: 116px; right: calc(92px + var(--sr)); bottom: calc(82px + var(--sb)); }
+  .touchui .aimstick .knob { width: 70px; height: 70px; margin: -35px 0 0 -35px; }
+  .touchui .tbtn.jump { width: 58px; height: 58px; right: calc(18px + var(--sr)); bottom: calc(178px + var(--sb)); }
+  .touchui .tbtn.roll { width: 50px; height: 50px; right: calc(22px + var(--sr)); bottom: calc(250px + var(--sb)); }
+  .touchui .tbtn.alt { width: 50px; height: 50px; right: calc(96px + var(--sr)); bottom: calc(214px + var(--sb)); }
+  .touchui .tbtn.sniffb { width: 46px; height: 46px; right: calc(92px + var(--sr)); bottom: calc(282px + var(--sb)); }
+  .touchui .ubrief { right: calc(6px + var(--sr)); bottom: calc(100px + var(--sb)); max-width: 80px; }
+  .touchui .vitals { width: min(150px, 38vw); }
+  .touchui .pill { left: auto; right: calc(58px + env(safe-area-inset-right, 0px)); transform: none; }
+  .touchui .pill.urgent { animation: none; }
+  .touchui .pill b { font-size: 14px; }
+  .touchui .pill .seg { padding: 1px 7px 1px 5px; gap: 4px; }
+  .touchui .ico { width: 15px; height: 15px; }
+  .touchui .feed { top: calc(54px + env(safe-area-inset-top, 0px)); max-width: 62vw; }
+  .touchui .toast { top: calc(96px + env(safe-area-inset-top, 0px)); }
 }
 
 /* ------------------------------------------------------------------ menus */
@@ -501,7 +501,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 .legend em.ult kbd { font-size: 9.5px; padding: 0 4px; }
 .foot { font-size: 11.5px; color: var(--paper-dim); margin: 0; line-height: 1.5; }
 .touch-only { display: none; }
-@media (pointer: coarse) { .touch-only { display: grid; } .desk-only { display: none; } }
+.touchui .touch-only { display: grid; } .touchui .desk-only { display: none; }
 .live { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); font-size: 12px; font-weight: 700; background: var(--ink-glass); padding: 6px 12px; border-radius: 999px; }
 .live::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--tomato); margin-right: 8px; animation: blink 1.2s infinite; }
 @keyframes blink { 50% { opacity: 0.3; } }
@@ -663,14 +663,14 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.40 · Smarter pot raids</p>
+      <p class="eyebrow">Prototype 0.41 · Mobile or PC</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in, or smash the other teams' pots in Cooking Pot Wars.</p>
       <nav class="homenav" aria-label="Main menu">
         <button id="play" class="navbtn main" type="button" data-go="play"><b>Play vs bots</b><span>Classic, Chef's Choice or Cooking Pot Wars · Solo, Duos, Trios or Squads</span></button>
         <button id="online-open" class="navbtn" type="button" data-go="online"><b>Play online</b><span>Your friends, a room code, every mode and team size</span></button>
         <button id="locker-open" class="navbtn" type="button" data-go="locker"><b>Locker</b><span>Pick your skin</span><em id="home-coins" class="coinpill"></em></button>
-        <button id="gfx-open" class="navbtn" type="button" data-go="settings"><b>Settings</b><span>Graphics, ray tracing, resolution</span></button>
+        <button id="gfx-open" class="navbtn" type="button" data-go="settings"><b>Settings</b><span>Controls (mobile or PC), graphics, resolution</span></button>
         <button id="help-open" class="navbtn" type="button" data-go="help"><b>How to play</b><span>Controls, foods, utensils, the kitchen</span></button>
       </nav>
       <p id="menu-error" hidden></p>

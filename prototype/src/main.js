@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Game } from './game.js';
 import { HUD } from './hud.js';
-import { Input } from './input.js';
+import { Input, controlsDetected, controlsPref } from './input.js';
 import { Sfx } from './fx.js';
 import { FOODS, FOOD_IDS, makeFoodMesh, setFoodShadows } from './foods.js';
 import { SKINS, SKIN_BY_ID, RARITY, PACKS } from './skins.js';
@@ -897,6 +897,7 @@ function boot() {
   }
   // One settings panel is rendered into the menu and into the pause card; every copy stays in sync.
   const gfxPanel = (presetId) => `
+    <label class="field">Controls <select data-ctl><option value="auto">Auto (this device: ${controlsDetected() === 'mobile' ? 'Mobile' : 'PC'})</option><option value="mobile">Mobile (touch sticks and buttons)</option><option value="pc">PC (keyboard and mouse)</option></select></label>
     <label class="field" for="${presetId}">Preset <select id="${presetId}" data-gfx="preset"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
     <label class="field">Ray tracing <select data-gfx="rt">${Object.entries(RT_LABEL).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
     <label class="field">Resolution <select data-gfx="res"><option value="auto">Auto (keeps it smooth)</option><option value="50">50%</option><option value="75">75%</option><option value="100">100%</option><option value="125">125% (sharpest)</option></select></label>
@@ -904,6 +905,16 @@ function boot() {
     <p class="gfx-note">Ray tracing is heavy: it traces reflections and soft shadows on screen every frame. Best on a strong computer; on phones, try Reflections with Resolution at 75%.</p>`;
   $('gfx-menu').innerHTML = gfxPanel('quality');
   $('gfx-pause').innerHTML = gfxPanel('quality2');
+  // Controls (0.41): mobile or PC, whatever the device says; switching reloads the page (the touch dials and
+  // the layout are built at start)
+  for (const el of document.querySelectorAll('[data-ctl]')) el.value = controlsPref();
+  document.addEventListener('change', (e) => {
+    if (!e.target.matches?.('[data-ctl]')) return;
+    const v = e.target.value;
+    if (playing && !confirm('Switching controls restarts the game and leaves this match. Switch?')) { e.target.value = controlsPref(); return; }
+    try { if (v === 'auto') localStorage.removeItem('tt-controls'); else localStorage.setItem('tt-controls', v); } catch { /* storage blocked */ }
+    location.reload();
+  });
   const syncGfx = () => {
     for (const el of document.querySelectorAll('[data-gfx]')) el.value = el.dataset.gfx === 'preset' ? qKey : gfx[el.dataset.gfx];
   };

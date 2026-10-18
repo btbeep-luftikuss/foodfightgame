@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.41: a Mobile / PC switch** (`src/input.js`, `src/main.js`, `index.html`)
+
+- **Settings, Controls:** Auto (what the device says, shown in brackets), Mobile (touch sticks and buttons) or PC (keyboard and mouse). It's remembered, and a change reloads the page (mid-match it asks first, since that leaves the match). Useful on a touchscreen laptop or a tablet with a keyboard, where the guess can be wrong.
+- The touch layout in the page's styles now follows the chosen controls (a `touchui` class on the page) instead of the kind of pointer the device has.
+- Tests: on a PC, picking Mobile brings up the touch sticks, plates and buttons in a match; on a phone, picking PC hides them and shows the keyboard hotbar. No errors.
+
 **Version 0.40: distances up and down, bots that climb to a pot, fewer see-through things** (`src/highlights.js`, `src/bots.js`, `src/potwars.js`, `src/world.js`, `src/map-restaurant.js`, `src/map-backyard.js`)
 
 - **Highlight distances count up and down:** a throw's distance is now how far the food actually flew, along its arc: climbing, dropping off a counter, curving (a seeking chili). The counter ticks up with it all the way (before, it counted only progress across the floor) and the captions and the 30 m for a snipe use the same distance. For example, a chili that crossed 43.7 m of floor while dropping 13.5 m now counts 49.1 m.
