@@ -2,6 +2,8 @@
 
 A multiplayer 3D food-fight battle royale. You're frog-sized, the kitchen is enormous, and every weapon is food.
 
+**Play it in your browser:** https://btbeep-luftikuss.github.io/foodfightgame/play/ (the site's front page opens the game too, whichever folder GitHub Pages publishes from: the repository root or `/docs`).
+
 ## Documents
 
 - [Game Design Document](docs/GDD.md): core systems, the 30 foods and their balance, map layout, graphics and performance plan, technical architecture, and the implementation roadmap.
