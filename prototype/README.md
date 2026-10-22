@@ -63,6 +63,11 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.43: no stray name tags** (`src/hud.js`)
+
+- **A bot's name and health bar stuck on screen online:** starting an online room with no bots removed the bots fighting behind the menu, but their name tags stayed where they were last drawn, frozen on the screen (so they seemed to move with the camera). A name tag now goes when its Titan leaves the match (bots, or a player who leaves).
+- Tests: an online room with bots set to None, alone: before, the tags of two menu bots ("Tofu", "Dumpling") stayed on screen; now none. A match vs bots still shows the bots' tags. No errors.
+
 **Version 0.42: help for iPads, and no silent failures** (`index.html`, `src/main.js`)
 
 - **Shows why it didn't start:** a small script runs before the game's own code. Any error before the game is up, or no game after 20 s, puts a box on screen with the error, the browser and whether WebGL 2 is there (the game needs it: iPadOS 15 or newer), instead of an empty page.

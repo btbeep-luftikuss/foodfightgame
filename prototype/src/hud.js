@@ -316,6 +316,12 @@ export class HUD {
       el.style.setProperty('--c', a.color);
       el.classList.toggle('locked', a === game.lockCandidate);
     }
+    // (0.43) a plate whose Titan has left the match (the bots behind the menu when an online room starts with
+    // no bots, a player who left): gone too, or it stays frozen where it was last drawn
+    if (this.plates.size > game.actors.length) {
+      const here = new Set(game.actors);
+      for (const [a, el] of this.plates) if (!here.has(a)) { el.remove(); this.plates.delete(a); }
+    }
   }
 
   _floaters(cam, dt) {
