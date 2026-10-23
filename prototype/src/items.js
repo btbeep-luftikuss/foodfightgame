@@ -1,11 +1,17 @@
 // Floating food pickups (spawners, drops, loot piles, grocery drops), banana-peel traps and
 // stuck-in-the-wall decor.
 //
+// Online (0.44) the food on the floor is the same for everyone. The food spots refill from a seed
+// (room, round, spot, refill number), so every game knows what lies there; the host decides when a
+// spot refills and shares which spots hold food (spawnerCode). Any other food that lands on the floor
+// is dropped by one game (share: the owner's, or the host's) and sent to the room with a key, and a
+// pickup sends its key ('g'), so it goes for everyone.
+//
 // Performance: every pickup is drawn with InstancedMesh, one draw call per food part for the
 // whole map, instead of one mesh per pickup.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { G, groundHeight, resolveHorizontal, rand } from './core.js';
+import { G, groundHeight, resolveHorizontal, rand, withSeed } from './core.js';
 import { MAX_HP } from './actors.js';
 import { FOODS, FOOD_IDS, makeFoodMesh, foodParts, randomFoodId, pickupAmmo } from './foods.js';
 
@@ -15,7 +21,9 @@ const INST_IDS = [...FOOD_IDS, 'peel']; // everything that can lie on the ground
 const DRAW_IDS = [...INST_IDS, 'heal'];
 // Chef's Choice: food never heals there, so green heal crosses float on every third spawner instead.
 const HEAL_HP = 60, HEAL_RESPAWN = 20;
+const FALL_STEP = 1 / 60; // (0.44) tossed food flies in fixed steps: the same toss lands on the same spot in every game
 const PAD_USES = 6, PAD_LIFE = 45, PAD_BOOST = 30; // Jelly jump pads (0.31): 6 bounces, about 22 m up
+const r2 = (v) => Math.round(v * 100) / 100;
 const rr = (x, a, b, w, h, r) => (x.roundRect ? x.roundRect(a, b, w, h, r) : x.rect(a, b, w, h));
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _e = new THREE.Euler();
 
@@ -25,7 +33,9 @@ export class Items {
     this.list = []; this.traps = []; this.decor = []; this.tramps = [];
     const scene = game.scene;
 
-    this.spawners = game.world.spawnPoints.map((p) => ({ pos: p.clone(), item: null, respawnAt: 0 }));
+    this.setSpawners(game.world.spawnPoints);
+    this.gone = new Set(); // (online) keys of food someone took before it showed up here
+    this.took = new Set(); // ... and of food my Titans took (if the host still says it's there, it missed that)
 
     // instanced food: one InstancedMesh per merged part of every food
     this.inst = {};
@@ -55,7 +65,9 @@ export class Items {
     this.fill = {};
   }
 
-  // Loose food, e.g. a banana that hit a wall or a splatted Titan's inventory.
+  setSpawners(points) { this.spawners = points.map((p) => ({ pos: p.clone(), item: null, respawnAt: 0, gen: 0 })); }
+
+  // Loose food, e.g. a banana that hit a wall or a splatted Titan's inventory (here only: see share).
   drop(id, count, pos, vel = null, spawner = null) {
     if (this.game.mode === 'chef' && id !== 'heal') return null; // Chef's Choice: no food anywhere on the map
     const p = pos.clone();
@@ -68,16 +80,110 @@ export class Items {
   // Everything a bot might walk to for food.
   pickables() { return this.list.filter((it) => !it.vel); }
 
+  // (0.44) Food that lands on the floor for everyone (a splatted Titan's foods, a banana off a wall,
+  // grocery drops, pot spits). Online only the game in charge drops it: the owner's (a Titan's own
+  // game; the host's for its bots), or the host's when nobody owns it. It tells the room.
+  share(owner, id, count, pos, vel = null) {
+    const g = this.game;
+    if (!g.online) return this.drop(id, count, pos, vel);
+    if (!g.authFor(owner)) return null;
+    const r = (v) => v && new THREE.Vector3(r2(v.x), r2(v.y), r2(v.z)); // (as the room gets them)
+    const it = this.drop(id, count, r(pos), r(vel));
+    if (!it) return null;
+    it.key = g.net.newKey();
+    this._announce(it);
+    return it;
+  }
+  _announce(it) {
+    const g = this.game, q = (v) => [r2(v.x), r2(v.y), r2(v.z)];
+    g.net.event('it', g.round.id, it.key, it.id, it.count, ...q(it.pos), ...(it.vel ? q(it.vel) : []));
+  }
+  // Keys of the food lying around (not the food spots), and (from the host's list) drop what the host
+  // doesn't have: it was taken while this game wasn't listening. Not food just dropped here (the host
+  // may not have heard of it yet).
+  floorKeys() { return this.list.filter((x) => x.key && !x.spawner).map((x) => x.key); }
+  keepOnly(keys, mine = () => true) { // (mine: the keys this list covers)
+    const now = this.game.time;
+    this.list = this.list.filter((x) => !x.key || x.spawner || !mine(x.key) || keys.has(x.key) || now - x.born < 3);
+  }
+  // (host) Everything lying around (not the food spots: see spawnerCode), as the events that drop it.
+  announceList() {
+    const g = this.game, q = (v) => [r2(v.x), r2(v.y), r2(v.z)];
+    return this.list.filter((x) => x.key && !x.spawner).map((it) => ['it', g.round.id, it.key, it.id, it.count, ...q(it.pos), ...(it.vel ? q(it.vel) : [])]);
+  }
+  // Someone else's game dropped it (from the room).
+  remoteDrop(key, id, count, pos, vel) {
+    if (this.took.has(key) && this.game.net) this.game.net.event('g', this.game.round.id, key, count, 1); // (I took it: the host never heard)
+    if (this.gone.has(key) || this.list.some((x) => x.key === key)) return;
+    const it = this.drop(id, count, pos, vel);
+    if (it) it.key = key;
+  }
+  // Someone took n of it (from the room; emptied: none left). A food spot's key is "s<spot>.<refill mod 26>".
+  remoteTake(key, n, emptied) {
+    const m = /^s(\d+)\.(\d+)$/.exec(key);
+    if (m) {
+      const s = this.spawners[+m[1]];
+      if (!s || s.gen % 26 !== +m[2] || !s.item) return; // (that one went already, or isn't here yet: applySpawners)
+      if (s.item.id !== 'heal' && !emptied && n < s.item.count) { s.item.count -= n; return; }
+      this._take(s);
+      return;
+    }
+    const i = this.list.findIndex((x) => x.key === key);
+    if (i < 0) { if (emptied) this.gone.add(key); return; } // (it hasn't shown up here yet)
+    const it = this.list[i];
+    it.count -= n;
+    if (emptied || it.count <= 0 || it.id === 'heal') this.list.splice(i, 1);
+  }
+  // A food spot was emptied: it refills later with the next food of its seed. mine: my Titan took it.
+  _take(s, mine = false) {
+    this._clear(s);
+    s.gen++;
+    if (mine) { s.tookAt = this.game.time; s.resent = false; }
+    s.respawnAt = this.game.time + (this.game.mode === 'chef' ? HEAL_RESPAWN : RESPAWN);
+  }
+  _clear(s) {
+    if (s.item) { const k = this.list.indexOf(s.item); if (k >= 0) this.list.splice(k, 1); }
+    s.item = null;
+  }
+  // What a food spot holds: online the same on every game (room, round, spot, refill number).
+  _fill(i) {
+    const g = this.game, s = this.spawners[i];
+    if (g.mode === 'chef') { if (i % 3 === 0) s.item = this.drop('heal', 1, s.pos, null, s); } // Chef's Choice: heal crosses on every third
+    else {
+      const roll = () => { const id = randomFoodId(); return [id, pickupAmmo(id)]; };
+      const [id, n] = g.online ? withSeed(`${g.net.roomName}|${g.round.id}|${i}|${s.gen % 26}`, roll) : roll();
+      s.item = this.drop(id, n, s.pos, null, s);
+    }
+    if (s.item) s.item.key = `s${i}.${s.gen % 26}`;
+  }
+
   fillSpawners(now) {
-    const chef = this.game.mode === 'chef';
+    if (this.game.online && !this.game.net?.isHost) return; // online the host's spots count (applySpawners)
     for (let i = 0; i < this.spawners.length; i++) {
       const s = this.spawners[i];
-      if (chef && i % 3) continue;
-      if (!s.item && now >= s.respawnAt) {
-        if (chef) { s.item = this.drop('heal', 1, s.pos, null, s); continue; }
-        const id = randomFoodId();
-        s.item = this.drop(id, pickupAmmo(id), s.pos, null, s);
+      if (!s.item && now >= s.respawnAt) this._fill(i);
+    }
+  }
+  // The host's food spots, one letter each: the refill number (mod 26), lower case if food is there.
+  spawnerCode() { return this.spawners.map((s) => String.fromCharCode((s.item ? 97 : 65) + (s.gen % 26))).join(''); }
+  applySpawners(code) {
+    if (typeof code !== 'string') return;
+    const now = this.game.time;
+    for (let i = 0, n = Math.min(code.length, this.spawners.length); i < n; i++) {
+      const c = code.charCodeAt(i), filled = c >= 97 && c <= 122, hg = c - (filled ? 97 : 65);
+      if (hg < 0 || hg > 25) continue;
+      const s = this.spawners[i];
+      const diff = (hg - (s.gen % 26) + 26) % 26;
+      if (diff > 13 && now - (s.tookAt ?? -9) < 3) continue; // I just took it and the host hasn't heard yet
+      if (diff > 13 && now - (s.tookAt ?? -9) < 6 && !s.resent && this.game.net) { // 3 s and it still hasn't: say it again, once
+        this.game.net.event('g', this.game.round.id, `s${i}.${hg}`, 999, 1);
+        s.resent = true; s.tookAt = now;
+        continue;
       }
+      s.resent = false;
+      if (diff) { this._clear(s); s.gen += diff; } // (only ever forward: the same refill number, mod 26, as the host's)
+      if (filled && !s.item) this._fill(i);
+      else if (!filled && s.item) this._clear(s);
     }
   }
 
@@ -91,7 +197,14 @@ export class Items {
     this.game.scene.add(mesh);
     this.traps.push({ owner, pos: pos.clone(), mesh, until: this.game.time + 40 });
     const net = this.game.net;
-    if (net && (owner === this.game.player || (owner.isBot && !owner.isRemote && net.isHost))) net.event('p', +pos.x.toFixed(2), +pos.y.toFixed(2), +pos.z.toFixed(2), ...(owner.isBot ? [owner.id] : []));
+    const fx = this.game.utensils.trapFxOf(owner); // (0.44) the utensil's mark where it lands, on every game
+    if (net && (owner === this.game.player || (owner.isBot && !owner.isRemote && net.isHost))) net.event('p', +pos.x.toFixed(2), +pos.y.toFixed(2), +pos.z.toFixed(2), ...(owner.isBot || fx ? [owner.isBot ? owner.id : null] : []), ...(fx ? [fx] : []));
+  }
+  // Someone's Titan slipped on the peel here (from the room).
+  remoteTrapGone(x, z) {
+    let best = null, bd = 1.5;
+    for (const t of this.traps) { const d = Math.hypot(t.pos.x - x, t.pos.z - z); if (d < bd) { bd = d; best = t; } }
+    if (best) { this.game.fx.burst('banana', best.pos); this._removeTrap(best); }
   }
   _removeTrap(t) {
     this.game.scene.remove(t.mesh);
@@ -185,17 +298,22 @@ export class Items {
     const cam = game.camera.position;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const it = this.list[i];
-      if (it.vel) { // tossed loot and grocery drops settle onto the ground
-        it.vel.y -= G * dt;
-        it.pos.addScaledVector(it.vel, dt);
-        resolveHorizontal(it.pos, 0.4, 1);
-        const gy = groundHeight(it.pos.x, it.pos.z, it.pos.y + 0.6);
-        if (it.pos.y <= gy) { it.pos.y = gy; it.vel = null; }
+      if (it.vel) { // tossed loot and grocery drops settle onto the ground (in fixed steps)
+        it.acc = (it.acc || 0) + dt;
+        while (it.vel && it.acc >= FALL_STEP) {
+          it.acc -= FALL_STEP;
+          it.vel.y -= G * FALL_STEP;
+          it.pos.addScaledVector(it.vel, FALL_STEP);
+          resolveHorizontal(it.pos, 0.4, 1);
+          const gy = groundHeight(it.pos.x, it.pos.z, it.pos.y + 0.6);
+          if (it.pos.y <= gy) { it.pos.y = gy; it.vel = null; }
+        }
       }
       it.visible = it.pos.distanceToSquared(cam) < 110 * 110;
       if (it.vel || now - it.born < 0.4) continue;
+      const net = game.online ? game.net : null;
       for (const a of game.actors) {
-        if (!a.alive || a.isRemote) continue; // pickups are per player online
+        if (!a.alive || a.isRemote) continue; // (online every game picks up for its own Titans and tells the room)
         const dx = a.pos.x - it.pos.x, dz = a.pos.z - it.pos.z, dy = a.pos.y - it.pos.y;
         if (dx * dx + dz * dz > 2.3 * 2.3 || Math.abs(dy) > 2.2) continue;
         if (it.id === 'heal') {
@@ -205,18 +323,20 @@ export class Items {
           game.fx.burst('bubbles', it.pos);
           game.floatText(a, `+${HEAL_HP} HP`, 'heal');
           if (a === game.player) game.hud.toast(`Healed +${HEAL_HP}`);
-          if (it.spawner) { it.spawner.item = null; it.spawner.respawnAt = now + HEAL_RESPAWN; }
-          this.list.splice(i, 1);
+          if (net && it.key) net.event('g', game.round.id, it.key, 1, 1);
+          if (it.spawner) this._take(it.spawner, true);
+          else { this.list.splice(i, 1); if (it.key) { this.gone.add(it.key); this.took.add(it.key); } }
           break;
         }
         const got = a.give(it.id, it.count);
         if (!got) continue;
         it.count -= got;
+        if (net && it.key) net.event('g', game.round.id, it.key, got, it.count <= 0 ? 1 : 0);
         game.sfx.play('pickup', it.pos, a === game.player ? 1 : 0.4);
         if (a === game.player) game.hud.toast(`+${got} ${FOODS[it.id].name}`);
         if (it.count <= 0) {
-          if (it.spawner) { it.spawner.item = null; it.spawner.respawnAt = now + RESPAWN; }
-          this.list.splice(i, 1);
+          if (it.spawner) this._take(it.spawner, true);
+          else { this.list.splice(i, 1); if (it.key) { this.gone.add(it.key); this.took.add(it.key); } } // (a late copy of it from the room won't bring it back)
           break;
         }
       }
@@ -234,6 +354,7 @@ export class Items {
             game.fx.burst('banana', a.pos);
             game.floatText(a, 'SLIP!', 'slip');
           }
+          if (game.online) game.net.event('pt', r2(t.pos.x), r2(t.pos.z)); // (0.44) used up for everyone
           this._removeTrap(t);
           break;
         }
@@ -295,6 +416,7 @@ export class Items {
     for (const d of this.decor) this.game.projectiles.releaseMesh(d.food, d.mesh);
     for (const t of [...this.tramps]) this._removeTramp(t);
     this.list.length = 0; this.traps.length = 0; this.decor.length = 0; this.tramps.length = 0;
-    for (const sp of this.spawners) { sp.item = null; sp.respawnAt = 0; }
+    for (const sp of this.spawners) { sp.item = null; sp.respawnAt = 0; sp.gen = 0; sp.tookAt = null; }
+    this.gone.clear(); this.took.clear();
   }
 }

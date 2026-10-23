@@ -35,13 +35,19 @@
 // that have gone out the fewest times go first while they fit (each goes out several times: an
 // update can be missed). Receivers keep the numbers of the events they've had, so order doesn't matter.
 //
+// The floor (0.44): food and utensils lying around are the same for everyone. The food spots fill
+// from a seed, the host says which hold food (sp); anything else on the floor comes from the one game
+// that dropped it ('it' food, 'ut' a utensil, 'ub' a delivery box, each with a key) and taking it
+// goes out by its key ('g' food, 'ug' a utensil or a box). Each carries the round number: one for a
+// round that hasn't started here yet waits for it.
+//
 // Teams and Cooking Pot Wars (0.26): the room settings carry the mode and the team size; every
 // Titan's state carries its team and the pot on its back. Players pick their team (state), the host
 // fills the rest with bots. In Cooking Pot Wars the host owns the pots and shares them (pw); players
 // send their pot moves as events: set the pot down (pp), a ladle hit (lh), a pot carried home (pc);
 // the host announces who smashed a pot (ps). Turret shots carry their power (tm).
 import * as THREE from 'three';
-import { clamp, rand, FLOOR_BOUNDS } from './core.js';
+import { clamp, rand, FLOOR_BOUNDS, hashStr } from './core.js';
 import { FOODS, FOOD_IDS } from './foods.js';
 import { Actor } from './actors.js';
 import { UTENSIL_BY_ID, UTENSIL_IDS } from './utensils.js';
@@ -51,12 +57,17 @@ import { p2pLobby } from './p2p.js';
 const COLORS = ['#ff9a1f', '#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5', '#f2f2f2'];
 const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048, ladle: 4096, turret: 8192 };
 const SEND_EVERY = 1 / 30;
-const LOG_KEEP = 0.7;   // seconds an event stays in the rolling log (pot moves: 3 s)
+const LOG_KEEP = 1.5;   // seconds an event stays in the rolling log (pot moves: 3 s; 0.44: was 0.7, too short for a slow game)
 const LOG_MAX = 90;
 const MIN_SENT = 6;     // an event leaves the log once it went out this often and is past LOG_KEEP (pot moves: 5x)
 const BUDGET = 3900;    // bytes of one player's presence (the claude.ai room refuses over 4096)
 const THROW_DEFAULTS = { g: 1, r: 0.35, l: 6, c: 1 }; // what a receiver assumes for a throw field left out (others: 0)
 const POT_EVENTS = new Set(['pp', 'lh', 'pc', 'ps']);
+const FLOOR_EVENTS = new Set(['it', 'ut', 'ub', 'g', 'ug']); // (0.44)
+// A short check of what lies on the floor (keyed food, boxes, loose utensils): how many, and a sum of
+// their hashes (order doesn't matter). The host shares it; a game that disagrees for a while asks.
+const floorKeys = (g) => [...g.items.floorKeys(), ...g.utensils.floorKeys()];
+const digest = (keys) => { let h = 0; for (const k of keys) h = (h + hashStr(k)) >>> 0; return [keys.length, h]; };
 const MAPS_OK = ['kitchen', 'backyard', 'restaurant'], BOTS_OK = ['off', 'easy', 'medium', 'hard'];
 const MODES_OK = ['classic', 'chef', 'pots'];
 const cleanRS = (rs) => { // eslint-disable-line arrow-body-style
@@ -67,7 +78,10 @@ const cleanRS = (rs) => { // eslint-disable-line arrow-body-style
 const STATES = ['drop', 'play', 'over'];
 const cleanRD = (rd) => (Array.isArray(rd) ? [num(rd[0], 0, 1e6) | 0, STATES.includes(rd[1]) ? rd[1] : 'play',
   num(rd[2], -300, 300), num(rd[3], -300, 300), num(rd[4], 0, 400, 330), num(rd[5], 0, 10) | 0, rd[6] === 'shrink' ? 'shrink' : 'wait',
-  num(rd[7], 0, 120), cleanName(rd[8]).slice(0, 16), num(rd[9], 0, 1e4), num(rd[10], -300, 300), num(rd[11], -300, 300), num(rd[12], 0, 400), rd[13] === 1 ? 1 : 0] : null);
+  num(rd[7], 0, 120), typeof rd[8] === 'string' && rd[8] ? cleanName(rd[8]).slice(0, 16) : '', num(rd[9], 0, 1e4), num(rd[10], -300, 300), num(rd[11], -300, 300), num(rd[12], 0, 400), rd[13] === 1 ? 1 : 0] : null);
+// (0.44) An id from the room (a food, utensil, skin): plain lower-case words only, so never a name every
+// object has (toString, constructor...) that a table lookup would find.
+const safeId = (v) => (typeof v === 'string' && /^[a-z][a-z0-9-]{0,23}$/.test(v) && v !== 'constructor' ? v : '');
 const r2 = (v) => (Number.isFinite(v) ? Math.round(v * 100) / 100 : 0);
 const r1 = (v) => (Number.isFinite(v) ? Math.round(v * 10) / 10 : 0);
 const fin = (v) => (Number.isFinite(v) ? v : 0);
@@ -207,7 +221,10 @@ export class Net {
     this.hostSettings = null; this.hostRound = null; // the room's, from the host
     this.botProxies = new Map();  // `${hostPeer}|b${id}` -> proxy of one of the host's bots
     this.joinedAt = 0;
+    this.tag = Math.random().toString(36).slice(2, 6); this.keyN = 0; // (0.44) keys for what I drop on the floor
+    this.later = []; // floor events for a round that hasn't started here yet
   }
+  newKey() { return `${this.tag}${(++this.keyN).toString(36)}`; }
 
   roomSettings() { return this.hostSettings ? { ...this.hostSettings } : { ...this.settings }; }
 
@@ -294,6 +311,16 @@ export class Net {
     const msg = { n: this.name, c: this.color, k: this.game.playerSkin, w: this.ready ? 1 : 0, hl: g.highlights.playing?.live ? 1 : 0, s: this._stateOf(p, this.game.input.pitch), pm: null, rs: null, rd: null, b: null, pw: null, e: [] };
     if (g.mode === 'pots') msg.pm = (g.potMenu || []).map((id) => FOOD_IDS.indexOf(id).toString(36)).join(''); // my pick for my pot's menu
     if (this.isHost && g.pots.active) msg.pw = [Math.max(0, g.round.id), ...g.pots.state()]; // Cooking Pot Wars: the pots
+    msg.sp = this.isHost && g.round.id >= 0 ? [g.round.id, g.items.spawnerCode()] : null; // (0.44) which food spots hold food
+    msg.fh = this.isHost && g.round.id >= 0 ? [g.round.id, ...digest(floorKeys(g))] : null; // ... and a check of the rest of the floor
+    msg.fq = !this.isHost && this.floorAsk ? g.round.id : null; // my floor doesn't match the host's: tell me again
+    const H = g.world.honeys; // (0.44) honey pools: the host's levels; what my Titan took goes to the host
+    msg.hy = this.isHost && H.length ? H.map((h) => Math.round(h.cap)) : null;
+    msg.lm = this.isHost ? (g.world.landmark?.alive ? 1 : 0) : null; // (0.44) is the giant tomato standing (the host's says)
+    if (!this.isHost && t > (this.honeyT || 0)) {
+      this.honeyT = t + 0.5;
+      H.forEach((h, i) => { if (h.owed >= 1) { this.event('hd', i, Math.round(h.owed)); h.sent = (h.sent || 0) + h.owed; h.sentAt = t; h.owed = 0; } });
+    }
     if (this.isHost) {
       const R = g.round, T = g.tide, to = T.to || { x: T.x, z: T.z, r: T.r };
       msg.rs = { ...this.roomSettings(), since: this.hostSince };
@@ -306,7 +333,7 @@ export class Net {
     const potEv = (ev) => POT_EVENTS.has(ev.type);
     this.log = this.log.filter((ev) => {
       const age = t - ev.t, pot = potEv(ev);
-      return age < (pot ? 6 : 2.5) && (ev.sent < MIN_SENT * (pot ? 5 : 1) || age < (pot ? 3 : LOG_KEEP));
+      return age < (pot ? 6 : 4) && (ev.sent < MIN_SENT * (pot ? 5 : 1) || age < (pot ? 3 : LOG_KEEP));
     }).slice(-LOG_MAX);
     let space = this.budget() - utf8(JSON.stringify(msg));
     const out = [];
@@ -353,6 +380,14 @@ export class Net {
   tick(dt) {
     if (!this.room) return;
     const now = this.game.time;
+    // (0.44) a host whose game stopped for a while (a tab in the background) and finds someone else took
+    // over meanwhile steps down at once, before it says it hosts again (else both would give way)
+    const wall = performance.now();
+    if (this.isHost && this.tickAt && wall - this.tickAt > 2500
+      && this.room.peers().some((p) => !p.sameTab && p.kind === 'viewer' && cleanRS(p.presence?.rs))) {
+      this.isHost = false; this.game.round.id = -1;
+    }
+    this.tickAt = wall;
     this.sendT += dt;
     if (this.sendT >= SEND_EVERY && this.game.player) { this.sendT = 0; this._sendState(); }
 
@@ -370,6 +405,17 @@ export class Net {
     }
     for (const peer of [...this.proxies.keys()]) if (!seen.has(peer)) this._drop(peer);
     this._elect(list);
+    let told = false;
+    for (const pr of this.proxies.values()) { // (0.44) someone new, or whose floor disagrees: the host goes over it
+      if (pr.presence?.fq === this.game.round.id && pr.floorAt == null && now > (pr.floorTold || 0) + (pr.floorWait || 4)) {
+        pr.floorAt = now; pr.floorWait = Math.min(30, (pr.floorWait || 2) * 2); // (asking again and again: less often)
+      } else if (pr.presence?.fq == null) pr.floorWait = 0;
+      if (pr.floorAt == null || now < pr.floorAt || told) continue;
+      const asked = pr.presence?.fq != null;
+      pr.floorAt = null; pr.floorTold = now;
+      if (this.isHost && this.game.round.id >= 0) { this._tellFloor(asked); told = true; } // (once per update)
+    }
+    if (this.floorQueue?.length) for (const e of this.floorQueue.splice(0, 3)) this.event(...e);
 
     // smooth remote Titans toward where they are now (extrapolated a little)
     for (const pr of [...this.proxies.values(), ...this.botProxies.values()]) {
@@ -390,10 +436,12 @@ export class Net {
     for (const peer of list) {
       if (peer.sameTab || peer.kind !== 'viewer' || !this.proxies.has(peer.peer)) continue;
       const rs = cleanRS(peer.presence?.rs);
-      if (rs) hosts.push([peer.peer, rs.since, peer.presence, rs]);
+      if (rs) hosts.push([peer.peer, rs.since, peer.presence, rs, num(peer.presence.rd?.[0], -1, 1e6, -1)]);
     }
-    if (this.isHost && this.myPeer) hosts.push([this.myPeer, this.hostSince, null, null]);
-    hosts.sort((a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : 1));
+    if (this.isHost && this.myPeer) hosts.push([this.myPeer, this.hostSince, null, null, this.game.round.id]);
+    // (0.44) two hosts: the one on the later round (a host whose game stopped for a while, while someone
+    // else took over and started a new round, steps down); on the same round, whoever hosted first
+    hosts.sort((a, b) => b[4] - a[4] || a[1] - b[1] || (a[0] < b[0] ? -1 : 1));
     const top = hosts[0];
     if (top && top[0] !== this.myPeer) {
       if (this.isHost) { this.isHost = false; this.game.round.id = -1; } // someone hosted first: follow them
@@ -403,6 +451,24 @@ export class Net {
       this._syncBots(top[0], top[2].b);
       const pw = top[2].pw; // Cooking Pot Wars: the host's pots (for this round only)
       if (Array.isArray(pw) && pw[0] === this.game.round.id) this.game.pots.applyState(pw.slice(1), num);
+      const sp = top[2].sp; // (0.44) the host's food spots (this round's)
+      if (Array.isArray(sp) && sp[0] === this.game.round.id && typeof sp[1] === 'string' && sp[1].length <= 400) this.game.items.applySpawners(sp[1]);
+      const L = this.game.world.landmark, lm = top[2].lm; // (0.44) the giant tomato: as the host's (a burst here waits 2 s for the host's)
+      if (L && lm === 0 && L.alive) this.game.burstLandmark(null);
+      else if (L && lm === 1 && !L.alive && this.game.time - (L.burstAt ?? -9) > 2) L.regrowAt = 0;
+      const hy = top[2].hy, H = this.game.world.honeys; // (0.44) the honey pools
+      if (Array.isArray(hy) && hy.length === H.length) H.forEach((h, i) => { // (what I took and sent counts here until the host's level surely has it)
+        if (h.sent && this.game.time - h.sentAt > 1) h.sent = 0;
+        h.cap = Math.max(0, num(hy[i], 0, h.max, h.cap) - (h.owed || 0) - (h.sent || 0));
+      });
+      const fh = top[2].fh; // ... and the check of the rest of the floor: ask again if mine disagrees for 3 s
+      if (Array.isArray(fh) && fh[0] === this.game.round.id) {
+        const [n, h] = digest(floorKeys(this.game));
+        if (n === fh[1] && h === fh[2]) { this.floorOff = null; this.floorAsk = false; } else {
+          this.floorOff ??= this.game.time;
+          if (this.game.time - this.floorOff > 3) this.floorAsk = true;
+        }
+      }
     } else if (!top && this.myPeer && performance.now() - this.joinedAt > 1500) {
       let lowest = this.myPeer;
       for (const peer of this.proxies.keys()) if (peer < lowest) lowest = peer;
@@ -411,7 +477,7 @@ export class Net {
         this.isHost = true; this.hostSince = Date.now(); this.hostPeer = this.myPeer;
         for (const key of [...this.botProxies.keys()]) this._dropBot(key);
         if (takeover) { // their bots left with them: a fresh round (with my bots) in 3 s
-          Object.assign(this.game.round, { state: 'over', t: 3, winner: '' });
+          Object.assign(this.game.round, { state: 'over', t: 3, winner: '', fresh: true }); // (fresh: nobody won it)
           this.game.state = 'over';
           this.game.hud.banner('The host left', 'You host the room now · new round in 3 s', 3);
         } else this.game.hud.toast('You are hosting this room');
@@ -433,7 +499,7 @@ export class Net {
           if (!meta) continue; // a new bot: it shows up once its name comes round
           const actor = new Actor(this.game, { id: 200 + this.botProxies.size, name: cleanName(meta[0]), color: /^#[0-9a-f]{6}$/i.test(meta[1]) ? meta[1] : '#f2f2f2', isBot: false });
           actor.isRemote = true; actor.isBotProxy = true; actor.gliding = false;
-          actor.applySkin(typeof meta[2] === 'string' ? meta[2] : 'chef');
+          actor.applySkin(safeId(meta[2]) || 'chef');
           pr = { actor, lastSeq: 0, presence: null, recvAt: this.game.time, target: new THREE.Vector3(), netVel: new THREE.Vector3(), throws: [] };
           this.botProxies.set(key, pr);
           this.game.actors.push(actor);
@@ -442,7 +508,7 @@ export class Net {
         if (meta) {
           pr.actor.name = cleanName(meta[0]);
           if (/^#[0-9a-f]{6}$/i.test(meta[1])) pr.actor.ownColor = meta[1];
-          if (typeof meta[2] === 'string' && meta[2] !== pr.actor.skinId) pr.actor.applySkin(meta[2]);
+          if (safeId(meta[2]) && meta[2] !== pr.actor.skinId) pr.actor.applySkin(meta[2]);
         }
         this._applyState(pr, e.slice(2));
       }
@@ -465,8 +531,9 @@ export class Net {
     const actor = new Actor(game, { id: 100 + this.proxies.size, name: cleanName(pres.n), color: /^#[0-9a-f]{6}$/i.test(pres.c) ? pres.c : '#f2f2f2', isBot: false });
     actor.isRemote = true;
     actor.gliding = false;
-    actor.applySkin(typeof pres.k === 'string' ? pres.k : 'chef'); // unknown ids fall back to the chef
+    actor.applySkin(safeId(pres.k) || 'chef'); // unknown ids fall back to the chef
     const pr = { actor, lastSeq: null, presence: null, recvAt: game.time, target: new THREE.Vector3(), netVel: new THREE.Vector3(), throws: [] };
+    pr.floorAt = game.time + 1; // (0.44) the host tells them what's on the floor, once they hear it
     this.proxies.set(peer, pr);
     game.actors.push(actor);
     game.hud.toast(`${actor.name} joined`);
@@ -498,7 +565,11 @@ export class Net {
     // events we haven't seen yet (0.33: they may come in any order: each is numbered, and we keep the
     // numbers we've had; everything at or below lastSeq counts as had)
     const ev = (Array.isArray(pres.e) ? pres.e : []).filter((e) => Array.isArray(e) && typeof e[0] === 'number');
-    if (pr.lastSeq === null) { pr.lastSeq = ev.reduce((m, e) => Math.max(m, e[0]), 0); pr.seen = new Set(); return; } // first sight: skip history
+    if (pr.lastSeq === null) { // first sight: skip history (but what's on the floor is safe to go over again)
+      pr.lastSeq = ev.reduce((m, e) => Math.max(m, e[0]), 0); pr.seen = new Set();
+      for (const e of ev) if (FLOOR_EVENTS.has(e[1])) this._event(pr, e[1], e.slice(2), peer, e[0]);
+      return;
+    }
     for (const e of ev) {
       if (e[0] <= pr.lastSeq || pr.seen.has(e[0])) continue;
       pr.seen.add(e[0]);
@@ -523,7 +594,12 @@ export class Net {
     a.hp = num(s[8], 0, 200, 200);
     a.glaze = num(s[9], 0, 100);
     const alive = s[10] === 1;
-    if (a.alive && !alive) { // knocked out
+    if (!pr.placed) { // (0.44) first sight: just where they are, as they are (they were made at the map's middle, standing)
+      pr.placed = true;
+      a.pos.copy(pr.target);
+      a.alive = alive;
+      if (alive) a.root.visible = true; else a.hide();
+    } else if (a.alive && !alive) { // knocked out
       a.alive = false;
       game.fx.burst('splat-out', a.center(new THREE.Vector3()));
       game.sfx.play('splatout', a.pos);
@@ -532,7 +608,7 @@ export class Net {
       a.alive = true; a.root.visible = true;
       a.pos.copy(pr.target);
     }
-    const held = typeof s[11] === 'string' && FOODS[s[11]] && !FOODS[s[11]].hidden ? s[11] : null;
+    const held = FOOD_IDS.includes(s[11]) && !FOODS[s[11]].hidden ? s[11] : null;
     if ((a.inv[0]?.id || null) !== held) { a.inv[0] = held ? { id: held, count: 1 } : null; a.sel = 0; a._refreshHeld(); }
     const f = num(s[12], 0, 1 << 16) | 0;
     const soon = now + 0.3;
@@ -550,7 +626,7 @@ export class Net {
     a.eat = f & FLAG.eating ? (a.eat || { end: Infinity, done: () => {}, dmg: 0 }) : null;
     a.kills = num(s[13], 0, 9999) | 0;
     a.noiseAt = now - num(s[14], 0, 99, 99);
-    a.utensil = typeof s[15] === 'string' && UTENSIL_BY_ID[s[15]] ? s[15] : null; // drawn in their left hand
+    a.utensil = UTENSIL_IDS.includes(s[15]) ? s[15] : null; // drawn in their left hand
     a.netInv = readInv(s[16]); // what they carry (shown to spectators)
     a.netKit = readKit(s[17]);
     // teams: their team (its colour on the HUD), and a smashed pot on their back (Cooking Pot Wars)
@@ -570,7 +646,7 @@ export class Net {
     const botOf = (id) => (peer === this.hostPeer && id !== undefined ? this.botProxies.get(`${peer}|b${num(+id, 1, 11) | 0}`)?.actor : null);
     if (type === 'bd') { // one of the host's bots was knocked out
       const victim = botOf(d[0]);
-      if (victim) game.remoteKnockout(victim, typeof d[1] === 'string' ? this._actorOf(d[1]) : null, typeof d[2] === 'string' ? d[2] : '');
+      if (victim) game.remoteKnockout(victim, typeof d[1] === 'string' ? this._actorOf(d[1]) : null, safeId(d[2]));
       return;
     }
     let a = pr.actor;
@@ -578,7 +654,7 @@ export class Net {
       const o = d[0];
       if (!o || typeof o !== 'object') return;
       if (o.ow !== undefined) { a = botOf(o.ow); if (!a) return; }
-      const food = FOODS[o.f];
+      const food = safeId(o.f) && FOODS[o.f];
       if (!food || !food.impact) return;
       const now = game.time;
       a.netThrows = (a.netThrows || []).filter((t) => now - t < 1);
@@ -597,9 +673,17 @@ export class Net {
       });
       a.armT = 0.3;
     } else if (type === 'p' || type === 'r') {
-      if (d[3] !== undefined) { a = botOf(d[3]); if (!a) return; }
+      if (d[3] != null) { a = botOf(d[3]); if (!a) return; }
       const at = new THREE.Vector3(num(d[0], -300, 300), num(d[1], -40, 120), num(d[2], -300, 300));
-      if (type === 'p') game.items.addTrap(a, at); else game.items.addTrampoline(a, at);
+      if (type === 'p') {
+        game.items.addTrap(a, at);
+        if (typeof d[4] === 'string') game.utensils.remoteTrapFx(d[4], a, at); // (0.44) the peel's utensil mark
+      } else game.items.addTrampoline(a, at);
+    } else if (type === 'hd') { // (0.44) their Titan took glaze from a honey pool (the host keeps the pools)
+      const h = this.isHost ? game.world.honeys[num(d[0], 0, 20) | 0] : null;
+      if (h) h.cap = Math.max(0, h.cap - num(d[1], 0, 200));
+    } else if (type === 'pt') { // (0.44) someone slipped on a peel: it's used up
+      game.items.remoteTrapGone(num(d[0], -300, 300), num(d[1], -300, 300));
     } else if (type === 'pp' || type === 'lh' || type === 'pc') { // Cooking Pot Wars: the host handles pot moves
       if (!this.isHost || !game.pots.active) return;
       if (pr.target && !pr.actor.isBotProxy) a.pos.copy(pr.target); // where they are now (their Titan on my screen trails a little)
@@ -612,12 +696,59 @@ export class Net {
       if (d[2] !== undefined) { a = botOf(d[2]); if (!a) return; }
       if (typeof d[0] !== 'string' || d[0].length > 3) return;
       game.abilities.remote(a, d[0], Array.isArray(d[1]) ? d[1].slice(0, 6) : []);
+    } else if (type === 'it' || type === 'ut' || type === 'ub' || type === 'g' || type === 'ug') { // (0.44) the floor
+      this._floor(type, d);
+    } else if (type === 'fl') { // (0.44) the host's whole floor (see _tellFloor)
+      // each piece: every key the host has whose hash falls in piece b of n
+      if (peer !== this.hostPeer || this.isHost || (num(d[0], -1, 1e6, -1) | 0) !== game.round.id || typeof d[3] !== 'string') return;
+      const n = num(d[2], 1, 400, 1) | 0, b = num(d[1], 0, n - 1) | 0;
+      const keys = new Set(d[3].split(' ').filter(Boolean)), mine = (k) => hashStr(k) % n === b;
+      game.items.keepOnly(keys, mine); game.utensils.keepOnly(keys, mine);
     } else if (type === 'jb') { // someone bounced on a jelly jump pad (wears it down)
       game.items.remoteBounce(new THREE.Vector3(num(d[0], -300, 300), num(d[1], -40, 120), num(d[2], -300, 300)));
     } else if (type === 'd') { // this player was knocked out
       const killer = typeof d[0] === 'string' ? this._actorOf(d[0]) : null;
-      const food = typeof d[1] === 'string' ? d[1] : '';
+      const food = safeId(d[1]);
       game.remoteKnockout(a, killer, food);
     }
+  }
+
+  // (0.44) Food or a utensil on the floor: dropped, taken (see the top). d[0] is the round.
+  _floor(type, d) {
+    const game = this.game, rid = num(d[0], -1, 1e6, -1) | 0;
+    if (rid !== game.round?.id) { // not this round: an older one's is stale, a newer one's waits for it
+      if (rid > (game.round?.id ?? -1)) { this.later.push([type, d]); if (this.later.length > 300) this.later.shift(); }
+      return;
+    }
+    const key = typeof d[1] === 'string' && d[1].length <= 24 ? d[1] : null;
+    if (!key) return;
+    const v3 = (i) => new THREE.Vector3(num(d[i], -300, 300), num(d[i + 1], -60, 200), num(d[i + 2], -300, 300));
+    if (type === 'it') {
+      const id = d[2];
+      if (!FOOD_IDS.includes(id) && id !== 'heal' && id !== 'peel') return;
+      game.items.remoteDrop(key, id, num(d[3], 1, 999, 1) | 0, v3(4), d.length >= 10 ? v3(7) : null);
+    } else if (type === 'g') game.items.remoteTake(key, num(d[2], 1, 999, 999) | 0, d[3] === 1);
+    else if (type === 'ug') game.utensils.remoteTake(key);
+    else if (UTENSIL_IDS.includes(d[2])) {
+      if (type === 'ut') game.utensils.remoteDrop(key, d[2], v3(3));
+      else game.utensils.remoteBox(key, d[2], v3(3), d[6] === 1);
+    }
+  }
+  // (host) What lies on the floor, for everyone: every key ('fl': whatever else a game has went), then
+  // each thing again.
+  // They go out a few per update (floorQueue), so they don't push other events out of the log. A list too
+  // long for one event goes without the keys (nothing is taken off then).
+  _tellFloor(withKeys) {
+    const g = this.game, keys = floorKeys(g);
+    const n = Math.max(1, Math.ceil(keys.join(' ').length / 240)); // pieces of about 240 characters (the host's updates are full)
+    const parts = Array.from({ length: n }, () => []);
+    for (const k of keys) parts[hashStr(k) % n].push(k);
+    this.floorQueue = [...(withKeys ? parts.map((p, b) => ['fl', g.round.id, b, n, p.join(' ')]) : []), ...g.items.announceList(), ...g.utensils.announceList()];
+  }
+  // A new round started here: what came for it early.
+  flushLater() {
+    const l = this.later.filter(([, d]) => (num(d[0], -1, 1e6, -1) | 0) >= this.game.round.id);
+    this.later = [];
+    for (const [type, d] of l) this._floor(type, d);
   }
 }

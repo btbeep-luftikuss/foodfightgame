@@ -55,7 +55,7 @@ export function emptiest(counts, n) {
 export function sidesLeft(game) {
   const set = new Set();
   for (const a of game.actors) if (a.alive) set.add(game.teamSize > 1 && a.team != null ? `t${a.team}` : a);
-  if (game.pots.active) for (const p of game.pots.pots) if (p.alive) set.add(`t${p.team}`);
+  if (game.pots.active) for (const p of game.pots.pots) if (p.alive || p.carried) set.add(`t${p.team}`); // (0.44: a pot being carried off can still come home)
   return set.size;
 }
 // The team still standing at the end (or null).

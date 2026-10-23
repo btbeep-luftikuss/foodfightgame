@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { G, COUNTER, FLOOR_Y, addBox, addCyl, clearColliders, groundHeight, rand, clamp } from './core.js';
+import { G, COUNTER, FLOOR_Y, addBox, addCyl, clearColliders, groundHeight, rand, clamp, withSeed } from './core.js';
 import { Stains } from './stains.js';
 import { buildBackyard, BACKYARD_REGIONS } from './map-backyard.js';
 import { buildRestaurant, RESTAURANT_REGIONS } from './map-restaurant.js';
@@ -225,6 +225,16 @@ export class World {
     this.burners = []; this.waters = []; this.honeys = []; this.pads = [];
     this.slickSpots = []; // permanent slippery patches (the egg white), re-stamped by the game
     this.shadowDirty = true;
+    // (0.44) built from a fixed seed: online every player gets the same crumbs, food spots and burner
+    // timings (they used to be random per computer, so obstacles stood in different places)
+    withSeed(`map:${this.mapId}`, () => this._build(renderer));
+    this.drawCallsBefore = this._countMeshes();
+    this._mergeStatic();
+    // food stains on every surface (built after all colliders exist)
+    this.stains = new Stains(this.scene, this.quality, { minX: -245, maxX: 245, minZ: -178, maxZ: 170, floorY: F, wallTop: F + 110 });
+  }
+
+  _build(renderer) {
     if (this.mapId === 'backyard') {
       this.regions = BACKYARD_REGIONS; this.playerRegion = 'table';
       buildBackyard(this);
@@ -251,10 +261,6 @@ export class World {
     // where a spectator camera may go: inside the walls (or the fence) and under the kitchen ceiling
     this.camBox = this.mapId === 'backyard' ? { minX: -239, maxX: 239, minZ: -175, maxZ: 165, maxY: F + 220 }
       : { minX: -242, maxX: 242, minZ: -175, maxZ: 167, maxY: F + 104 };
-    this.drawCallsBefore = this._countMeshes();
-    this._mergeStatic();
-    // food stains on every surface (built after all colliders exist)
-    this.stains = new Stains(this.scene, this.quality, { minX: -245, maxX: 245, minZ: -178, maxZ: 170, floorY: F, wallTop: F + 110 });
   }
 
   // ------------------------------------------------------------------ lighting and materials
@@ -986,7 +992,7 @@ export class World {
       light.position.set(x, y + 3, z);
       this.scene.add(light);
     }
-    this.burners.push({ x, y, z, r, coilMat, light, state: 'off', t: rand(4, 12) });
+    this.burners.push({ x, y, z, r, coilMat, light, state: 'off', first: rand(4, 12), off: rand(9, 13) }); // (0.44) a fixed timetable: see update
   }
   // ------------------------------------------------------------------ (0.35) solid shapes that match what you see
   // A Titan is under a metre wide, so a solid box a metre or two bigger than the thing drawn is an
@@ -1317,13 +1323,16 @@ export class World {
   }
 
   // ------------------------------------------------------------------ per-frame
-  update(dt, now, fx, sfx) {
+  // clock: seconds into the round (online the host's round clock, so every game's burners agree)
+  update(dt, now, fx, sfx, clock = null) {
+    this.clock = clock ?? (this.clock || 0) + dt;
     for (const b of this.burners) {
-      b.t -= dt;
-      if (b.t <= 0) {
-        if (b.state === 'off') { b.state = 'warn'; b.t = 2; }
-        else if (b.state === 'warn') { b.state = 'on'; b.t = 8; sfx.play('sizzle', new THREE.Vector3(b.x, b.y + 1, b.z), 1.4); }
-        else { b.state = 'off'; b.t = rand(9, 13); }
+      // (0.44) each burner keeps a timetable from the round's start: off, 2 s warning, 8 s on, off again
+      let st = 'off';
+      if (this.clock >= b.first) { const u = (this.clock - b.first) % (b.off + 10); st = u < 2 ? 'warn' : u < 10 ? 'on' : 'off'; }
+      if (st !== b.state) {
+        b.state = st;
+        if (st === 'on') sfx.play('sizzle', new THREE.Vector3(b.x, b.y + 1, b.z), 1.4);
       }
       b.hot = b.state === 'on';
       const target = b.state === 'on' ? 2.6 : b.state === 'warn' ? 0.6 + 0.6 * Math.sin(now * 16) : 0;
@@ -1373,7 +1382,8 @@ export class World {
     Object.assign(L, { alive: true, hp: L.maxHp, growT: 1 });
     L.group.visible = true; L.group.scale.setScalar(1); L.collider.enabled = true;
     for (const h of this.honeys) h.cap = h.max;
-    for (const b of this.burners) { b.state = 'off'; b.t = rand(4, 12); }
+    for (const b of this.burners) b.state = 'off';
+    this.clock = 0;
     this.shadowDirty = true;
   }
 

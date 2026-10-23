@@ -376,6 +376,7 @@ export class Actor {
     if (honey && honey.cap > 0) {
       const gain = Math.min(30 * dt, 100 - this.glaze, honey.cap);
       this.glaze += gain; honey.cap -= gain;
+      if (g.online && !g.net?.isHost) honey.owed = (honey.owed || 0) + gain; // (0.44) the host keeps the pools: tell it
       if (now > this.honeySfxAt) { g.sfx.play('glaze', this.pos, 0.6); this.honeySfxAt = now + 0.4; g.fx.burst('honey', this.center(_v)); }
     }
     const tide = g.tide;

@@ -489,7 +489,7 @@ export class PotWars {
       if (now >= p.spitAt) {
         p.spitAt = now + SPIT_EVERY / (1 + 0.6 * p.captures);
         const id = p.menu[(Math.random() * p.menu.length) | 0] || 'tomato', a = rand(0, Math.PI * 2); // from the team's menu
-        g.items.drop(id, pickupAmmo(id), _v.set(p.pos.x, p.pos.y + POT_H + 0.5, p.pos.z), _p.set(Math.cos(a) * 5, 9, Math.sin(a) * 5));
+        g.items.share(null, id, pickupAmmo(id), _v.set(p.pos.x, p.pos.y + POT_H + 0.5, p.pos.z), _p.set(Math.cos(a) * 5, 9, Math.sin(a) * 5)); // (online: the host's)
         g.fx.burst('steam', _v.set(p.pos.x, p.pos.y + POT_H, p.pos.z), 0.6);
       }
       p.flash = Math.max(0, p.flash - dt * 5);

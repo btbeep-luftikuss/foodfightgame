@@ -97,7 +97,7 @@ export class Projectiles {
     const game = this.game, food = FOODS[p.food];
     p.life += dt;
     if (p.life > p.maxLife) {
-      if (p.food === 'banana') game.items.drop('banana', 1, p.pos);
+      if (p.food === 'banana') game.items.share(p.owner, 'banana', 1, p.pos);
       this._scaled(p, () => { if (food.expire) food.expire(p, game); if (p.u) game.utensils.expire(p); });
       return this._end(p);
     }
@@ -189,7 +189,7 @@ export class Projectiles {
       if (p.life % 0.3 < dt) this.game.sfx.play('whirr', p.pos, 0.5);
       return false;
     }
-    if (!o.alive) { this.game.items.drop('banana', 1, p.pos); this._end(p); return true; }
+    if (!o.alive) { this.game.items.share(p.owner, 'banana', 1, p.pos); this._end(p); return true; }
     o.handPos(_h);
     _t.subVectors(_h, p.pos);
     const d = _t.length();
@@ -199,7 +199,7 @@ export class Projectiles {
         if (o.give('banana', 1)) {
           const s = o.inv.find((x) => x && x.id === 'banana');
           if (s && !s.inf) s.bruise = Math.max(s.bruise || 0, p.bruise + 1);
-        } else this.game.items.drop('banana', 1, o.pos);
+        } else this.game.items.share(o, 'banana', 1, o.pos);
         this.game.sfx.play('pickup', o.pos, 0.8);
       } else {
         this.game.fx.burst('banana', p.pos);
@@ -270,7 +270,7 @@ export class Projectiles {
       _c.copy(a.pos).addScaledVector(_f, 1.45).setY(a.pos.y + 1.0);
       if (segPointDist2(_prev, p.pos, _c) < (1.5 + rad) ** 2 && (p.vel.x * _f.x + p.vel.z * _f.z) < 0) {
         game.damageShield(a, food.dmg || 25, p.owner);
-        if (p.food === 'banana') { game.items.drop('banana', 1, p.pos); return true; }
+        if (p.food === 'banana') { game.items.share(p.owner, 'banana', 1, p.pos); return true; }
         return this._impact(p, food, { point: p.pos.clone(), blockedBy: a, world: false });
       }
     }
@@ -293,7 +293,7 @@ export class Projectiles {
       if (!food.pierce) return true;
     }
     // 3) the landmark tomato (and utensil delivery boxes, which any food bursts open)
-    if (game.utensils.boxes.length) game.utensils.hitBox(_prev, p.pos, rad);
+    if (game.utensils.boxes.length) game.utensils.hitBox(_prev, p.pos, rad, p.owner);
     const L = game.world.landmark;
     // 3a) any thrown food knocks enemy cookies out of the air (GDD Cookie counterplay)
     if (!p.shootable) {
@@ -310,7 +310,7 @@ export class Projectiles {
       _c.set(L.x, L.y * L.group.scale.y, L.z);
       if (p.pos.distanceTo(_c) < L.r * L.group.scale.x * 0.95 + rad) {
         game.hitLandmark(food.dmg || 20, p.owner, p.pos);
-        if (p.food === 'banana') { game.items.drop('banana', 1, p.pos); return true; }
+        if (p.food === 'banana') { game.items.share(p.owner, 'banana', 1, p.pos); return true; }
         this._impact(p, food, { point: p.pos.clone(), world: true, top: false });
         return !(p.stuck || p.attached);
       }

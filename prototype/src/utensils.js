@@ -20,6 +20,8 @@
 //  - peel:   the banana-peel trap. A few utensils change where it lands or what it leaves.
 import * as THREE from 'three';
 import { G, groundHeight, rand, clamp, forwardOf, raycastWorld, segPointDist2 } from './core.js';
+
+const r2 = (v) => Math.round(v * 100) / 100;
 import { FOODS, makeFoodMesh } from './foods.js';
 import { UTENSIL_ART } from './utensil-art.js';
 import { makeUtensilMesh } from './utensil-models.js';
@@ -207,6 +209,8 @@ function arcTo(from, tgt, grav) {
 //  pre(p, hit, U): before the food's impact (return true to skip the food's own impact)
 //  post(p, hit, U): after it; step(p, dt, U): every frame; expire(p, U): flight or roll ended
 //  trap(a, pos, U): a banana peel is being dropped; may return a new spot for it
+//  trapFx(a, pos, U): what the peel leaves where it lands (an ice patch, a vortex...): online it runs on
+//    every game (the peel's 'p' event names the utensil)
 const RULES = {
   knife: {
     cost: 1, rec: 0.8,
@@ -235,7 +239,7 @@ const RULES = {
       U.once(p, 'ice', () => U.icePatch(hit.point, p.owner, 5));
     },
     expire(p, U) { if (p.roll && !p.x.nf) U.once(p, 'ice', () => U.icePatch(p.pos, p.owner, 5)); },
-    trap(a, pos, U) { U.icePatch(pos, a, 8); return pos; },
+    trapFx(a, pos, U) { U.icePatch(pos, a, 8); },
   },
   spoon: {
     cost: 1,
@@ -268,7 +272,7 @@ const RULES = {
     launch: (o, a, rel, I) => [lead({ ...clone(o), vel: o.vel.clone().multiplyScalar(0.78), x: {} }, I)],
     post(p, hit, U) { if (!p.x.nf) U.once(p, 'vortex', () => U.addZone('vortex', hit.point, p, 3, 5.5)); },
     expire(p, U) { if (p.roll && !p.x.nf) U.once(p, 'vortex', () => U.addZone('vortex', p.pos, p, 3, 5.5)); },
-    trap(a, pos, U) { U.addZone('vortex', pos, { owner: a, food: 'banana' }, 3.5, 6.5); return pos; },
+    trapFx(a, pos, U) { U.addZone('vortex', pos, { owner: a, food: 'banana' }, 3.5, 6.5); },
   },
   blender: {
     cost: 1,
@@ -333,11 +337,10 @@ const RULES = {
       if (!p.x.ns) U.once(p, 'fire', () => U.fireSlick(hit.point, p));
     },
     expire(p, U) { if (p.roll) U.once(p, 'fire', () => U.fireSlick(p.pos, p)); },
-    trap(a, pos, U) {
+    trapFx(a, pos, U) {
       if (U.stampGround(pos, 3.2, 'slick', 8) !== false) U.game.world.paintSplat(pos.x, pos.y, pos.z, 2.8, 'cheese');
       U.game.fx.spray('blobs', pos, 10, { speed: 3, up: 3, colors: [col('#ffc23a'), col('#ffe08a')], size: 0.12, life: 0.5 });
       U.game.sfx.play('sizzle', pos, 0.7);
-      return pos;
     },
   },
   'mortar-and-pestle': {
@@ -412,7 +415,7 @@ const RULES = {
       U.once(p, 'web', () => U.addZone('web', hit.point, p, 5.5, 3.2));
     },
     expire(p, U) { if (p.roll && !p.x.nf) U.once(p, 'web', () => U.addZone('web', p.pos, p, 5.5, 3.2)); },
-    trap(a, pos, U) { U.addZone('web', pos, { owner: a, food: 'banana' }, 8, 3.4); return pos; },
+    trapFx(a, pos, U) { U.addZone('web', pos, { owner: a, food: 'banana' }, 8, 3.4); },
   },
   'popcorn-popper': {
     launch(o, a, rel, I) {
@@ -749,12 +752,35 @@ export class Utensils {
     const id = a.utensil;
     if (!id || !UTENSIL_BY_ID[id].works.includes('peel')) return pos;
     const R = RULES[id];
-    return (R.trap && R.trap(a, pos, this)) || pos;
+    const at = (R.trap && R.trap(a, pos, this)) || pos;
+    R.trapFx?.(a, at, this);
+    return at;
+  }
+  // Which utensil leaves something where this Titan's peel lands (for the room), and (from the room) leave it.
+  trapFxOf(a) { const id = a.utensil; return id && UTENSIL_BY_ID[id].works.includes('peel') && RULES[id].trapFx ? id : null; }
+  remoteTrapFx(id, a, pos) { if (UTENSIL_IDS.includes(id) && RULES[id].trapFx) RULES[id].trapFx(a, pos, this); }
+
+  // The Pan slam's shockwave: 12 damage and a shove within 4 m. From the room (remote) it hits this
+  // game's own Titans (their games decide hits on theirs).
+  panShock(a, at, food, remote = false) {
+    const g = this.game;
+    for (const b of g.actors) {
+      if (!b.alive || b === a || (remote && b.isRemote)) continue;
+      _v.subVectors(b.pos, at).setY(0);
+      const d = _v.length();
+      if (d > 4 || Math.abs(b.pos.y - at.y) > 2.5) continue;
+      g.damage(b, 12, a, Object.hasOwn(FOODS, food) ? food : 'tomato');
+      b.knock(_v.normalize().multiplyScalar(9).setY(4));
+    }
+    g.fx.burst('jump', at, 1.5); g.fx.burst('dust', at, 1.5);
+    g.fx.spray('blobs', _v.copy(at).setY(at.y + 0.2), 14, { speed: 9, up: 1, colors: [col('#a49bc4'), col('#fff6a8')], size: 0.1, life: 0.4 });
+    g.sfx.play('thud', at, 1.4); g.sfx.play('boom', at, 0.4);
+    g.fx.shake(a === g.player ? 0.25 : 0);
   }
 
   // Remote throws: only accept what we would send.
   sanitize(u, x) {
-    if (!UTENSIL_BY_ID[u] || !x || typeof x !== 'object') return null;
+    if (!UTENSIL_IDS.includes(u) || !x || typeof x !== 'object') return null;
     const n = (v, lo, hi) => (typeof v === 'number' && Number.isFinite(v) ? clamp(v, lo, hi) : undefined);
     const out = {};
     if (x.m !== undefined) out.m = n(x.m, 0.1, 3);
@@ -1040,19 +1066,8 @@ export class Utensils {
     }
     s.cdUntil = t + 7;
     a.rootedUntil = Math.max(a.rootedUntil, t + 0.7);
-    // shockwave
-    for (const b of g.actors) {
-      if (!b.alive || b === a) continue;
-      _v.subVectors(b.pos, a.pos).setY(0);
-      const d = _v.length();
-      if (d > 4 || Math.abs(b.pos.y - a.pos.y) > 2.5) continue;
-      g.damage(b, 12, a, slot.id);
-      b.knock(_v.normalize().multiplyScalar(9).setY(4));
-    }
-    g.fx.burst('jump', a.pos, 1.5); g.fx.burst('dust', a.pos, 1.5);
-    g.fx.spray('blobs', _v.copy(a.pos).setY(a.pos.y + 0.2), 14, { speed: 9, up: 1, colors: [col('#a49bc4'), col('#fff6a8')], size: 0.1, life: 0.4 });
-    g.sfx.play('thud', a.pos, 1.4); g.sfx.play('boom', a.pos, 0.4);
-    g.fx.shake(a === g.player ? 0.25 : 0);
+    this.panShock(a, a.pos, slot.id);
+    g.abilities.send(a, 'pn', [r2(a.pos.x), r2(a.pos.y), r2(a.pos.z), slot.id]); // (0.44) every game's Titans feel it
     if (a === g.player) g.hud.toast(`Pan slam! ${food.altName || 'Alt'} fired`);
     return true;
   }
@@ -1077,15 +1092,19 @@ export class Utensils {
   // Utensils arrive in cardboard delivery boxes that parachute into the kitchen. Walk into a
   // box to open it and take the utensil, or splat it open with food from range: then the
   // utensil lies on the floor for whoever gets there first.
-  _deliver(landed) {
+  // (0.44) Online the host delivers the boxes and tells the room ('ub'); the others get them from
+  // there (given: its key, utensil and spot). Opening one tells the room too ('ug').
+  _deliver(landed, given = null) {
     const g = this.game;
-    let pos = null;
+    if (!given && g.online && !g.net?.isHost) return;
+    let pos = given ? given.pos : null;
     for (let k = 0; k < 12 && !pos; k++) {
       const p = g.world.randomOpenSpot(null, 6);
       if (this.boxes.every((b) => Math.hypot(b.pos.x - p.x, b.pos.z - p.z) > 30)) pos = p;
     }
     if (!pos) return;
-    const id = randomUtensilId();
+    if (!given && g.online) pos.set(r2(pos.x), r2(pos.y), r2(pos.z)); // (as the room gets it)
+    const id = given ? given.id : randomUtensilId();
     BOX_GEO ||= new THREE.BoxGeometry(BOX_W, BOX_H, BOX_W);
     const side = boxSide(id), top = boxTop();
     const grp = new THREE.Group();
@@ -1114,7 +1133,9 @@ export class Utensils {
     grp.position.set(pos.x, y + BOX_H / 2, pos.z);
     grp.rotation.y = rand(0, Math.PI * 2);
     g.scene.add(grp, ring, beam);
-    this.boxes.push({ id, pos, y, grp, box, chute, ring, beam, falling: !landed, sway: rand(0, 6), wob: rand(1.5, 4), wig: 0 });
+    const b = { id, pos, y, grp, box, chute, ring, beam, falling: !landed, sway: rand(0, 6), wob: rand(1.5, 4), wig: 0, key: given?.key || null, born: g.time };
+    this.boxes.push(b);
+    if (!given && g.online) { b.key = g.net.newKey(); g.net.event('ub', g.round.id, b.key, id, r2(pos.x), r2(pos.y), r2(pos.z), landed ? 1 : 0); }
     if (!landed && g.player?.alive && g.state !== 'menu') g.hud.toast('A utensil delivery is parachuting in');
   }
 
@@ -1125,15 +1146,18 @@ export class Utensils {
   }
 
   // Open a box: the opener takes the utensil (null: it was splatted open and lands on the floor).
-  openBox(b, a = null) {
+  // remote: someone else's game opened it (from the room): it only goes.
+  openBox(b, a = null, remote = false) {
     const g = this.game, i = this.boxes.indexOf(b);
     if (i < 0) return;
     this.boxes.splice(i, 1);
     this._removeBox(b);
+    if (!remote && g.online && b.key) { g.net.event('ug', g.round.id, b.key); this.gone.add(b.key); this.took.add(b.key); } // (gone: a late copy from the room won't bring it back)
     const c = _c.set(b.pos.x, b.y + BOX_H / 2, b.pos.z);
     g.fx.spray('chunks', c, 18, { speed: 7, up: 6, colors: [col('#c8955a'), col('#a87240'), col('#e8c48a')], size: 0.35, life: 0.9 });
     g.fx.spray('puffs', c, 10, { speed: 4, up: 3, colors: [col(UTENSIL_BY_ID[b.id].color), col('#ffffff')], size: 0.5, life: 0.6, grav: 0.2, grow: 1 });
     g.sfx.play('thud', c, a === g.player ? 1 : 0.5);
+    if (remote) return;
     const got = a ? this.give(a, b.id) : false;
     if (got === false) this.drop(b.id, c, a); // splatted open, or the opener already carries one
     else {
@@ -1142,8 +1166,10 @@ export class Utensils {
     }
   }
 
-  // A thrown food bursts open any box it passes through (the food keeps flying).
-  hitBox(from, to, rad) {
+  // A thrown food bursts open any box it passes through (the food keeps flying). Online the
+  // thrower's game decides (and tells the room).
+  hitBox(from, to, rad, owner = null) {
+    if (!this.game.authFor(owner)) return false;
     for (const b of this.boxes) {
       _w.set(b.pos.x, b.y + BOX_H / 2, b.pos.z);
       if (segPointDist2(from, to, _w) < (1.5 + rad) ** 2) { this.openBox(b, null); return true; }
@@ -1215,9 +1241,13 @@ export class Utensils {
     this.boxes.length = 0;
     for (let i = 0; i < 3; i++) this._deliver(true); // a few boxes are already waiting
     this.nextDrop = g.time + rand(7, 10);
+    this.gone = new Set(); // (online) keys of utensils or boxes someone took before they showed up here
+    this.took = new Set(); // ... and of those my Titans took or opened (if the host still has one, it missed that)
   }
 
-  drop(id, pos, from = null) {
+  // A loose utensil on the floor. Online whoever drops it tells the room ('ut'), unless it came from
+  // there (key given).
+  drop(id, pos, from = null, key = null) {
     const g = this.game;
     const model = makeUtensilMesh(id); // the real thing, big enough to spot, spinning over its ring
     model.scale.setScalar(2.2);
@@ -1225,11 +1255,49 @@ export class Utensils {
       new THREE.MeshBasicMaterial({ color: UTENSIL_BY_ID[id].color, transparent: true, opacity: 0.9, depthWrite: false }));
     const p = pos.clone();
     p.y = groundHeight(p.x, p.z, p.y + 1);
+    if (!key && g.online) p.set(r2(p.x), r2(p.y), r2(p.z)); // (as the room gets it)
     ring.position.copy(p).setY(p.y + 0.07);
     g.scene.add(model, ring);
-    const it = { id, pos: p, model, ring, phase: rand(0, 6), noPick: from, noPickUntil: g.time + 4 };
+    const it = { id, pos: p, model, ring, phase: rand(0, 6), noPick: from, noPickUntil: g.time + 4, key, born: g.time };
     this.pickups.push(it);
+    if (!key && g.online && g.net) { it.key = g.net.newKey(); g.net.event('ut', g.round.id, it.key, id, r2(p.x), r2(p.y), r2(p.z)); }
     return it;
+  }
+  // From the room: someone dropped a utensil, a box came down, or someone took one or opened one.
+  remoteDrop(key, id, pos) {
+    if (this.took?.has(key)) this.game.net?.event('ug', this.game.round.id, key); // (I took it: the host never heard)
+    if (this.gone?.has(key) || this.pickups.some((x) => x.key === key)) return;
+    this.drop(id, pos, null, key);
+  }
+  remoteBox(key, id, pos, landed) {
+    if (this.took?.has(key)) this.game.net?.event('ug', this.game.round.id, key); // (I opened it: the host never heard)
+    if (this.gone?.has(key) || this.boxes.some((x) => x.key === key)) return;
+    this._deliver(landed, { key, id, pos });
+  }
+  floorKeys() { return [...this.boxes, ...this.pickups].filter((x) => x.key).map((x) => x.key); }
+  keepOnly(keys, mine = () => true) { // (mine: the keys this list covers)
+    const now = this.game.time;
+    for (const b of [...this.boxes]) if (b.key && mine(b.key) && !keys.has(b.key) && now - (b.born ?? 0) > 3) this.openBox(b, null, true);
+    for (const it of [...this.pickups]) if (it.key && mine(it.key) && !keys.has(it.key) && now - (it.born ?? 0) > 3) this.remoteTake(it.key);
+  }
+  // (host) The boxes and loose utensils, as the events that drop them.
+  announceList() {
+    const rid = this.game.round.id;
+    return [
+      ...this.boxes.filter((b) => b.key).map((b) => ['ub', rid, b.key, b.id, r2(b.pos.x), r2(b.pos.y), r2(b.pos.z), b.falling ? 0 : 1]),
+      ...this.pickups.filter((it) => it.key).map((it) => ['ut', rid, it.key, it.id, r2(it.pos.x), r2(it.pos.y), r2(it.pos.z)]),
+    ];
+  }
+  remoteTake(key) {
+    const b = this.boxes.find((x) => x.key === key);
+    if (b) { this.openBox(b, null, true); return; }
+    const i = this.pickups.findIndex((x) => x.key === key);
+    if (i < 0) { this.gone?.add(key); return; }
+    const it = this.pickups[i];
+    this.game.scene.remove(it.model, it.ring);
+    it.ring.geometry.dispose(); it.ring.material.dispose();
+    this.pickups.splice(i, 1);
+    this.game.fx.spray('puffs', _v.copy(it.pos).setY(it.pos.y + 1.4), 8, { speed: 3, up: 2, colors: [col(UTENSIL_BY_ID[it.id].color), col('#ffffff')], size: 0.4, life: 0.4, grav: 0, grow: 1 });
   }
 
   // A knocked-out Titan drops the utensil they carried.
@@ -1264,6 +1332,7 @@ export class Utensils {
         g.scene.remove(it.model, it.ring);
         it.ring.geometry.dispose(); it.ring.material.dispose();
         this.pickups.splice(i, 1);
+        if (g.online && it.key) { g.net.event('ug', g.round.id, it.key); this.gone.add(it.key); this.took.add(it.key); }
         const old = this.give(a, it.id);
         if (old) this.drop(old, a.pos, a); // all slots full: leave the one in hand behind
         g.sfx.play('pickup', it.pos, a === g.player ? 1.1 : 0.4);

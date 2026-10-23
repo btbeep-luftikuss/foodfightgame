@@ -34,6 +34,10 @@ const TIDE_PHASES = [
   { wait: 15, r: 0, shrink: 20, dps: 16 },
 ];
 const ENV = new Set(['burner', 'burning', 'tide']);
+// (0.44) The tide's damage per second at a phase: it goes up as each shrink starts (online followers
+// work it out from the host's phase, as the host's own tide does).
+const tideDps = (phase, mode) => (mode === 'shrink' ? TIDE_PHASES[Math.min(phase, TIDE_PHASES.length - 1)].dps
+  : phase > 0 ? TIDE_PHASES[Math.min(phase - 1, TIDE_PHASES.length - 1)].dps : 2);
 const BOT_LEVELS_ONLINE = ['easy', 'medium', 'hard'];
 const LATE_JOIN = 25; // online: seconds into a round you can still drop in
 const OVER_FOR = 6;   // online: seconds between rounds
@@ -130,7 +134,7 @@ export class Game {
     this.player.alive = false; this.player.hide(); // until a round starts and you're ready
     const sp = this.world.randomOpenSpot(this.world.playerRegion);
     this.player.pos.set(sp.x, sp.y + 8, sp.z);
-    Object.assign(this.tide, { x: 0, z: 0, r: 330, phase: TIDE_PHASES.length, mode: 'wait', t: 0 });
+    Object.assign(this.tide, { x: 0, z: 0, r: 330, dps: 2, phase: TIDE_PHASES.length, mode: 'wait', t: 0, to: null });
     this.world.setTide(0, 0, 330);
     this.round = { id: -1, state: 'lobby', t: 0, started: 0, winner: '', joined: false };
     this.state = 'lobby'; this.stateT = 0;
@@ -166,11 +170,11 @@ export class Game {
     this.mode = rs.mode === 'chef' || rs.mode === 'pots' ? rs.mode : 'classic';
     this.teamSize = cleanSize(rs.team, this.mode);
     const nT = teamCount(this.teamSize);
+    this.round = { id, state: 'drop', t: 0, started: 0, winner: '', joined: false, fresh: false, idle: 0 }; // (first: what the resets share goes out as this round's)
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear(); this.abilities.reset();
     this.world.resetRound(); this.utensils.reset(); this.slickAt = 0;
     for (const z of this.spikes) this.scene.remove(z.group);
     this.spikes.length = 0;
-    this.round = { id, state: 'drop', t: 0, started: 0, winner: '', joined: false, fresh: false, idle: 0 };
     this.state = 'drop'; this.stateT = 0; this.winner = null;
     // host: tide from the start, bots (they fill the room up to 10 Titans with the players who play)
     this.brains.clear();
@@ -211,6 +215,7 @@ export class Game {
     if (this.mode === 'pots') this.pots.start(); else this.pots.clear();
     this.spectator.newRound();
     this.highlights.start(); // (0.38) the round's highlight reel
+    this.net.flushLater(); // (0.44) floor food and utensils for this round that came before it started here
     this.onMatchEvent?.('start');
   }
   // Foods and a utensil for a Titan dropping into an online round. Classic: a stack of each food
@@ -360,8 +365,13 @@ export class Game {
     const [id, st, tx, tz, tr, phase, mode, t, winner, rt, toX, toZ, toR, fresh] = rd;
     if (id !== this.round.id) this.beginRound(id, rs);
     const prevMode = this.tide.mode;
-    Object.assign(this.tide, { x: tx, z: tz, r: tr, phase, mode, t });
-    if (prevMode === 'wait' && mode === 'shrink' && toR !== undefined) { this._groceryDrop({ x: toX, z: toZ, r: toR }); this.sfx.play('tide', null, 0.7); }
+    Object.assign(this.tide, { x: tx, z: tz, r: tr, phase, mode, t, dps: tideDps(phase, mode) }); // (0.44: its damage rate too)
+    if (toR !== undefined) this.tide.to = { x: toX, z: toZ, r: toR }; // (where it's heading: the spectator map)
+    if (prevMode === 'wait' && mode === 'shrink' && toR !== undefined) {
+      this._groceryDrop({ x: toX, z: toZ, r: toR }); // (the host's drops come from the room; this is the notice)
+      this.sfx.play('tide', null, 0.7);
+      if (this.player?.alive) this.hud.banner('The Soap Tide is rising', 'Get inside the circle', 2);
+    }
     this.world.setTide(tx, tz, tr);
     const R = this.round;
     R.t = rt;
@@ -380,9 +390,17 @@ export class Game {
     this.spikes.length = 0;
     this.world.dispose();
     this.world = new World(this.scene, this.renderer, this.quality, id);
-    this.items.spawners = this.world.spawnPoints.map((p) => ({ pos: p.clone(), item: null, respawnAt: 0 }));
+    this.items.setSpawners(this.world.spawnPoints);
     this.onMapChange?.(id);
     return true;
+  }
+
+  // (0.44) Is this game in charge of what happens to (or is dropped by) this Titan? Offline always;
+  // online a Titan's own game, the host for its bots and for what nobody owns.
+  authFor(a) {
+    if (!this.online) return true;
+    if (!a) return !!this.net?.isHost;
+    return !a.isRemote && (a === this.player || !!this.net?.isHost);
   }
 
   async stopOnline() {
@@ -678,8 +696,14 @@ export class Game {
     if (!L.alive) return;
     L.hp -= amount; L.flash = 1;
     if (L.hp > 0) return;
-    // burst: harvest the giant tomato (GDD 2.3 landmark foods)
-    L.alive = false; L.group.visible = false; L.collider.enabled = false; L.regrowAt = this.time + 40;
+    this.burstLandmark(attacker);
+  }
+  // The giant tomato bursts (GDD 2.3 landmark foods). Online the host's says when (see net.js 'lm').
+  burstLandmark(attacker) {
+    const L = this.world.landmark;
+    if (!L.alive) return;
+    L.alive = false; L.group.visible = false; L.collider.enabled = false; L.burstAt = this.time;
+    L.regrowAt = this.online && !this.net?.isHost ? Infinity : this.time + 40; // (online the host's says when it's back)
     this.world.shadowDirty = true;
     const c = _c.set(L.x, L.y, L.z);
     for (let i = 0; i < 3; i++) this.fx.burst('tomato', _o.copy(c).add(_v.set(rand(-3, 3), rand(-2, 3), rand(-3, 3))), 2);
@@ -689,7 +713,7 @@ export class Game {
     this.fx.shake(0.3);
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2 + rand(-0.3, 0.3);
-      this.items.drop('tomato', rollAmmo(), _o.set(L.x, 3, L.z), _v.set(Math.cos(a) * 8, 10, Math.sin(a) * 8));
+      this.items.share(null, 'tomato', rollAmmo(), _o.set(L.x, 3, L.z), _v.set(Math.cos(a) * 8, 10, Math.sin(a) * 8)); // (online: the host's)
     }
     if (attacker === this.player && this.mode !== 'chef') this.hud.toast('Giant Tomato harvested: 4 piles of tomatoes dropped');
   }
@@ -710,7 +734,7 @@ export class Game {
     victim.inv.forEach((s) => {
       if (!s) return;
       const a = rand(0, Math.PI * 2);
-      this.items.drop(s.id, s.count, c, _v.set(Math.cos(a) * 5, 8, Math.sin(a) * 5));
+      this.items.share(victim, s.id, s.count, c, _v.set(Math.cos(a) * 5, 8, Math.sin(a) * 5));
     });
     victim.inv = [null, null, null, null, null];
     this.utensils.dropFrom(victim);
@@ -769,6 +793,7 @@ export class Game {
   // Another player's game says they were knocked out (online).
   remoteKnockout(victim, killer, food) {
     if (victim.alive) { victim.alive = false; victim.hide(); }
+    if (killer && killer !== this.player && killer.isBot && !killer.isRemote && this.net?.isHost) killer.kills++; // (0.44) one of my bots did it
     this.highlights.onKill(victim, killer, food, 1.5); // (it comes a moment after the hit showed here)
     victim.koBy = killer;
     this._feed(victim, killer, food);
@@ -786,7 +811,7 @@ export class Game {
       const kName = `<b style="color:${killer.color}">${esc(killer.name)}</b>`;
       if (food === 'burner') html = `${kName} cooked ${vName} on the burner`;
       else if (food === 'tide') html = `${kName} sent ${vName} into the Soap Tide`;
-      else html = `${kName} <em>${FEED_VERB[food] || 'splatted'}</em> ${vName}`;
+      else html = `${kName} <em>${Object.hasOwn(FEED_VERB, food) ? FEED_VERB[food] : 'splatted'}</em> ${vName}`;
     } else {
       html = food === 'burner' ? `${vName} got cooked on the burner`
         : food === 'tide' ? `${vName} ${victim === this.player && !this.online ? 'were' : 'was'} washed away by the Soap Tide` : `${vName} splatted out`;
@@ -883,7 +908,7 @@ export class Game {
     }
     this.surface.update(dt, this.time);
     this._spikeStep(dt);
-    this.world.update(dt, this.time, this.fx, this.sfx);
+    this.world.update(dt, this.time, this.fx, this.sfx, this.online && this.round?.id >= 0 ? this.round.t : null); // (online: the host's round clock)
     if (!this.highlights.playing?.live) this.fx.update(dt); // (under an online reel the particles are the reel's, at its speed)
     if (this.state === 'play' && !this.pots.active && Math.random() < dt * 30) this._tideBubbles();
     this.highlights.step();
@@ -928,7 +953,7 @@ export class Game {
       const floorish = groundHeight(x, z, top + 0.1);
       if (top > floorish + 1) continue; // landed on something tall: skip this one
       const id = randomFoodId();
-      this.items.drop(id, pickupAmmo(id), _o.set(x, top + 45 + rand(0, 15), z), _v.set(0, -6, 0));
+      this.items.share(null, id, pickupAmmo(id), _o.set(x, top + 45 + rand(0, 15), z), _v.set(0, -6, 0)); // (online: the host's, for everyone)
     }
     if (this.player) this.hud.toast('Grocery drop inside the circle');
   }

@@ -403,7 +403,7 @@ export const FOODS = {
         return false;
       }
       // hit a wall: drop to the ground as a pickup anyone can grab
-      game.items.drop('banana', 1, hit.point);
+      game.items.share(p.owner, 'banana', 1, hit.point);
       game.sfx.play('thud', hit.point, 0.6);
       return true;
     },

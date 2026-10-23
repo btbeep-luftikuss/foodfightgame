@@ -216,7 +216,10 @@ export class Abilities {
     const bx = n ? n.x : -T.dir.x, bz = n ? n.z : -T.dir.z; // bounce back off it
     a.vel.set(bx * 7, 7, bz * 7); a.onGround = false; a.knockUntil = g.time + 0.35;
     if (!this.take(a, 'tomato', 1)) { // no second tomato: just a bump
-      if (target) { g.damage(target, 8, a, 'tomato'); target.knock(_v.set(T.dir.x * 8, 4, T.dir.z * 8)); }
+      if (target) {
+        g.damage(target, 8, a, 'tomato'); target.knock(_v.set(T.dir.x * 8, 4, T.dir.z * 8));
+        if (target.isRemote && g.net) this.send(a, 'tb', [g.net._peerOf(target), r2(T.dir.x), r2(T.dir.z)]); // (0.44) their game decides
+      }
       g.sfx.play('thud', point, 1.2);
       this._no(a, 'Out of tomatoes: no splat');
       return;
@@ -740,6 +743,12 @@ export class Abilities {
       case 'cf': this.startFlamer(a); break;
       case 'tc': this.trail(a, 'tp', 1.6); g.sfx.play('tpcharge', a.pos, 0.8); break;
       case 'tx': this.trail(a, 'tp', 0); break;
+      case 'pn': g.utensils.panShock(a, P(), typeof d[3] === 'string' ? d[3] : 'tomato', true); break; // (0.44) a Pan slam
+      case 'tb': { // (0.44) a tomato dash bumped one of my Titans (no second tomato: no splat)
+        const t = typeof d[0] === 'string' ? g.net?._actorOf(d[0]) : null;
+        if (t && !t.isRemote && t.alive) { const v = D(1); g.damage(t, 8, a, 'tomato'); t.knock(v.set(v.x * 8, 4, v.z * 8)); }
+        break;
+      }
       default: break;
     }
   }

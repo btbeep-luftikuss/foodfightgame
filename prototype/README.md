@@ -63,6 +63,28 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.44: online, everyone sees the same floor, and a round of online fixes** (`src/net.js`, `src/items.js`, `src/utensils.js`, `src/game.js`, `src/world.js`, `src/core.js`, `src/abilities.js`, `src/actors.js`, `src/teams.js`, `src/foods.js`, `src/projectiles.js`, `src/potwars.js`)
+
+- **The same food on the floor for everyone.** Online, every player's game used to put its own random food on the food spots, and picking food up only happened on your own screen (and the same went for the utensil delivery boxes and loose utensils). Now:
+  - **Food spots** fill from a seed (the room, the round, the spot and how often it has refilled), so every game puts the same food there. The host decides when a spot refills and shares which spots hold food.
+  - **Everything else that lands on the floor** is dropped by one game and sent to the room with a name: a splatted Titan's foods (by their own game), a banana off a wall (by the thrower's), grocery drops, pot spits and the giant tomato's piles (by the host's), utensil boxes (the host's) and loose utensils (whoever dropped them). Picking something up, or opening a box, takes it off every screen.
+  - **Tossed food lands on the same spot** on every screen (it falls in fixed steps).
+  - **Late joiners and missed messages.** Someone who joins mid-round gets told what lies around. The host also shares a short check of the floor, and a game that disagrees for 3 s (say a tab was in the background and missed some messages) asks for it again and gets put right.
+- **The same map for everyone.** The kitchen's crumbs, every map's food spots and the burners' timings were random per computer, so obstacles stood in different places for different players. Maps are now built from a fixed seed, and the burners follow a timetable from the round's start.
+- **Other online fixes:**
+  - **The Soap Tide hurt non-hosts at the wrong rate.** It now hurts every player at the host's rate; before, a player who came from the menu took 2 per second to the end, so they could outlast everyone. Non-hosts also get "The Soap Tide is rising".
+  - **A host whose game stopped for a while** (a tab in the background) came back and took the room back, restarting the new round. Now it follows whoever took over.
+  - **When the host left, nobody "wins" any more.** Before, a player called "Titan" could get "Chef's Kiss!" and winner coins.
+  - **Banana peels:** used up for everyone when someone slips, and a peel's utensil mark (ice patch, whisk vortex, fryer slick, cotton candy web) shows and works on every screen.
+  - **The Pan slam's shockwave** and a tomato dash's bump (with no tomato left) now hurt and push other players, not just look like it.
+  - **Splats by the host's bots** count on the scoreboard.
+  - **No more "ghost splat"** in the middle of the map when someone who's out (watching, or a splatted bot) is first seen.
+  - **Honey pools and the giant tomato** are the same for everyone (the host's).
+  - **Cooking Pot Wars:** a round doesn't end while a pot is being carried off (it can still come home).
+  - **Safer messages:** names from the room can't be built-in property names that would crash a game.
+  - **Messages last longer:** each update's news (a throw, a splat, a pickup, a bounce on a jelly pad) stays in a player's updates for 1.5 s (was 0.7 s), so a slow game that reads the room only every few hundred milliseconds still gets it; a pickup the host missed is said again.
+- Tests (two or three players in a stand-in room, plus a real peer-to-peer room with a local matchmaking server): the floor compared item by item between players on all three maps and in all three modes, at the start, after pickups, a box opened, a splat, the bots playing, two 3.5 s stalls of one game, and into the next round; a third player joining mid-round, after food spots had refilled 30+ times; the tide's rate, a peel used up with its ice patch, a Pan slam, the host's game stopping for 7 s and the host leaving; the earlier online tests (Cooking Pot Wars, Duos, ultimate alts, utensils, rounds, highlight reels); and Play vs bots on every map in Classic and Chef's Choice. No errors.
+
 **Version 0.43: no stray name tags** (`src/hud.js`)
 
 - **A bot's name and health bar stuck on screen online:** starting an online room with no bots removed the bots fighting behind the menu, but their name tags stayed where they were last drawn, frozen on the screen (so they seemed to move with the camera). A name tag now goes when its Titan leaves the match (bots, or a player who leaves).
@@ -429,7 +451,7 @@ npm run dev          # http://localhost:5173
 
 | File | What it does |
 |---|---|
-| `src/core.js` | Constants, collision (boxes and cylinders), ground queries, raycasts, lob solver |
+| `src/core.js` | Constants, collision (boxes and cylinders), ground queries, raycasts, lob solver, repeatable (seeded) randomness |
 | `src/world.js` | The kitchen, countertop props, giant foods and fallen chairs, hazards, launch pads, landmark tomato, Soap Tide wall; helpers that fit solid shapes to round and slanted things, bowls with insides, glass rims |
 | `src/foods.js` | All food data and behaviour: meshes, throw, impact, alt actions (and the ability foods: the storm ball, the juice ball, the teleport carrot) |
 | `src/abilities.js` | The ultimate alts: dashes, whirlwinds, smashes, mega jumps, juice puddles, spike lines, teleports, berry spirals, flamethrowers and ground fires; shockwave rings and call-outs; their online events |
@@ -438,13 +460,13 @@ npm run dev          # http://localhost:5173
 | `src/skins.js` | Skins: rarity, clothing palettes, costume pieces on the head, chest and hip bones; skin packs |
 | `src/coins.js` | Coins: match rewards, skin and pack prices, the wallet (kept on this device) |
 | `src/stains.js` | Food stains on every surface: decals cut from the scenery triangles, one atlas, one draw call |
-| `src/net.js`, `src/viewmodel.js` | Online rooms (hosting, shared rounds and bots); first-person arm and held food |
+| `src/net.js`, `src/viewmodel.js` | Online rooms (hosting, shared rounds and bots, the shared floor and its check); first-person arm and held food |
 | `src/highlights.js` | Highlight reels: records the match or online round (and every throw's flight), scores splats, snipes and dodges, directs the reels (riding along with long throws in slow motion, wide shots of the whole play, bullet-time dodges, impact freezes, hero shots); online, plays them over the live match |
 | `src/p2p.js` | Public peer-to-peer rooms (PeerJS): a hub per room code, hand-over when the hub leaves; STUN and TURN servers |
 | `src/map-backyard.js` | The Backyard BBQ map |
 | `src/map-restaurant.js` | Chez Titan, the Restaurant map |
 | `src/projectiles.js` | Projectile flight, boomerang steering, rolling, hit detection (body capsule and head) |
-| `src/items.js` | Pickups and spawners, peel traps, stuck carrots |
+| `src/items.js` | Pickups and spawners (online: the same for everyone), peel traps, stuck carrots |
 | `src/utensils.js`, `src/utensil-models.js`, `src/utensil-art.js` | The 20 support utensils: throw rewrites for every food, impact effects, zones, delivery boxes, loose utensils; their 3D models; the flat design-sheet art (generated by `docs/utensils/build.mjs`, used only if the 3D icons can't be rendered) |
 | `src/surface.js` | Surface State Grid and zone visuals |
 | `src/bots.js` | Bot AI |
