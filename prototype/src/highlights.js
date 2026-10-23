@@ -938,6 +938,9 @@ class Reel {
         if (h.bs - at > 0.25) push('setup', h.bs, b);
         push('bullet', Math.min(h.ti + 0.14, lim), b);
         push('reveal', Math.min(last + 1.0, lim), b);
+      } else if ((h.dist || 0) >= 16 && h.ti - at > 0.7) { // (0.47) a far play with no flight to ride
+        push('setup', h.ti - 0.3, b);
+        push('reveal', Math.min(last + 1.0, lim), b);
       } else push('two', Math.min(last + 0.95, lim), b);
     });
     const end = Math.max(at + 0.6, c.t1), hl = this.hl;
@@ -1245,6 +1248,9 @@ class Reel {
     s.dist = d.length();
     if (s.dist < 0.05) forwardOf(hl.yawAt(c.a, kt), d); else d.divideScalar(s.dist);
     s.dist = Math.max(1, s.dist); s.d = d; s.B = B; s.sg = this.lastSg;
+    // (0.47) the line itself, up and down included: a throw off a shelf or up to one is framed along it
+    s.d3 = new THREE.Vector3().subVectors(B, A); s.dist3 = Math.max(1, s.d3.length()); s.d3.divideScalar(s.dist3);
+    if (Math.abs(s.d3.y) > 0.97) s.d3.addScaledVector(d, 0.25).normalize(); // (straight down: still a little ahead)
     const alpha = Math.atan2(d.z, d.x);
     // the first of these camera spots with a clear view of `at` (else the clearest), as [sg, ...]
     const pick = (at, list) => {
@@ -1283,7 +1289,7 @@ class Reel {
       for (const [off, el] of [[0.55, 0.3], [0.9, 0.42], [0.3, 0.62]]) for (const sg of [this.lastSg, -this.lastSg]) list.push([[sg, off, el], B.clone().addScaledVector(dirOf(alpha + sg * off, el, _w), 7.5)]);
       [s.sg, s.off, s.el] = pick(B, list);
     } else if (s.type === 'setup') { // behind the star, looking down the line at the other one
-      s.sg = pick(A, both((sg) => A.clone().addScaledVector(d, -3.9).addScaledVector(_s.set(-d.z, 0, d.x), this._side * sg).addScaledVector(UP, 0.8)));
+      s.sg = pick(A, both((sg) => A.clone().addScaledVector(s.d3, -3.9).addScaledVector(_s.set(-d.z, 0, d.x), this._side * sg).addScaledVector(UP, 0.8)));
       this.lastSg = s.sg;
     } else if (s.type === 'hero') { // in front of the star, low, a little to one side
       s.fw = forwardOf(hl.yawAt(c.a, s.from), new THREE.Vector3());
@@ -1341,10 +1347,9 @@ class Reel {
       from = B;
     } else if (s.type === 'setup') { // over the star's shoulder, down the line at the other one (the throw going out, or coming in)
       const side = _g.set(-s.d.z, 0, s.d.x).multiplyScalar(s.sg);
-      pos.copy(star).addScaledVector(s.d, -3.9 + Math.min(0.6, rt * 0.3)).addScaledVector(side, this._side).addScaledVector(UP, 0.8);
-      const k = Math.min(0.42, 15 / s.dist);
-      look.copy(star).addScaledVector(s.d, s.dist * k);
-      look.y = star.y + clamp((s.B.y - star.y) * k, -2.5, 2.5) + 0.4; // (from up on a shelf: still them in the shot)
+      pos.copy(star).addScaledVector(s.d3, -3.9 + Math.min(0.6, rt * 0.3)).addScaledVector(side, this._side).addScaledVector(UP, 0.8);
+      // (0.47) down the real line, up or down included (a target far below is in the shot), the star still in it
+      look.copy(star).addScaledVector(s.d3, Math.min(s.dist3 * 0.42, 15)).addScaledVector(UP, 0.4);
       fov = 50;
     } else if (s.type === 'bullet') { // riding along behind the food, the target ahead; the last metres it flies alone
       const P = h.path;
@@ -1370,14 +1375,20 @@ class Reel {
       s.hs.forEach((x, i) => { const v = hl.posAt(x.b, Math.min(t, x.tk), (this._vs[i] ||= new THREE.Vector3())); pts.push(v); _c.add(v); });
       _c.divideScalar(s.hs.length); // (the ones it hit, where it hit them)
       look.copy(star).lerp(_c, 0.5 + 0.12 * smooth((t - h.ti) / 0.5)).addScaledVector(UP, 0.1);
-      dirOf(s.az - s.sg * Math.min(0.42, rt * 0.07), s.el, _w);
-      const D = clamp(this._fitD(look, _w, pts, 1.3, this._lens(fov)) * (1 - Math.min(0.1, rt * 0.02)), 4.5, 30);
+      // (0.47) if the view is blocked (a wall, a cupboard), up higher over it, not in close (which loses them both)
+      let D = 0;
+      for (const lift of [0, 0.35, 0.7, 1.05]) {
+        dirOf(s.az - s.sg * Math.min(0.42, rt * 0.07), Math.min(1.35, s.el + (s.lift || 0) + lift), _w);
+        D = clamp(this._fitD(look, _w, pts, 1.3, this._lens(fov)) * (1 - Math.min(0.1, rt * 0.02)), 4.5, 42);
+        if (this._clear(look, _w, D + 0.4) >= D * 0.9 || lift === 1.05) { if (lift) s.lift = (s.lift || 0) + lift; break; }
+      }
       pos.copy(look).addScaledVector(_w, D);
       from = look;
     } else if (s.type === 'reveal') { // the reverse angle: beyond the one it hit, back along the arc to the thrower
       const Bv = hl.posAt(h.b, this.kos.has(h.b) ? Math.min(t, h.tk) : t, _c); // (knocked out: where it happened; else after them)
       pos.copy(Bv).addScaledVector(dirOf(Math.atan2(s.d.z, s.d.x) + s.sg * (s.off + Math.min(0.25, rt * 0.05)), s.el, _w), lerp(7.5, 6.6, smooth(rt / 2)));
-      look.copy(Bv).lerp(star, Math.min(0.3, 7 / s.dist)).addScaledVector(UP, 0.3);
+      look.copy(Bv).lerp(star, Math.min(0.3, 7 / s.dist3)).addScaledVector(UP, 0.3);
+      look.y = clamp(look.y, Bv.y - 1.6, Bv.y + 2.2); // (0.47: the thrower way up or down: the one it hit stays in the shot)
       fov = 56;
       from = Bv;
     } else if (s.type === 'matrix') { // bullet time: circling the dodger as it goes by
@@ -1416,7 +1427,7 @@ class Reel {
     if (cut) {
       this.cam.pos.copy(pos); this.cam.look.copy(look); this.cam.fov = fov; this.cam.roll = roll;
     } else {
-      const r = s.type === 'bullet' ? 18 : s.type === 'hero' ? 12 : s.type === 'matrix' || (s.type === 'reveal' && !this.kos.has(h.b)) ? 10 : 6;
+      const r = s.type === 'bullet' ? 18 : s.type === 'hero' || s.type === 'setup' ? 12 : s.type === 'matrix' || (s.type === 'reveal' && !this.kos.has(h.b)) ? 10 : 6; // (0.47: over the shoulder keeps up with a dashing thrower)
       this.cam.pos.set(damp(this.cam.pos.x, pos.x, r, dt), damp(this.cam.pos.y, pos.y, r, dt), damp(this.cam.pos.z, pos.z, r, dt));
       this.cam.look.set(damp(this.cam.look.x, look.x, r, dt), damp(this.cam.look.y, look.y, r, dt), damp(this.cam.look.z, look.z, r, dt));
       this.cam.fov = damp(this.cam.fov, fov, 4, dt);

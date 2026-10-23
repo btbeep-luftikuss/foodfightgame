@@ -63,6 +63,15 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.47: the play in the shot, and snipes up and down** (`src/highlights.js`)
+
+- **The play stays in the shot.** Three things lost it:
+  - The wide shot of thrower and target couldn't back off past 30 m, so with the two far apart (a far hit with no flight to ride, such as a splash or an ability) the thrower fell out of the frame. A far play like that is now filmed like a long throw (over the thrower's shoulder, then the reverse angle from behind the one it hit), and the wide shot backs off to 42 m if it must.
+  - When something stood between the wide shot and the play, the camera was pulled in close to the middle of it, losing both of them. Now it rises over whatever is in the way instead.
+  - The over-the-shoulder shot looked level (at most 2.5 m up or down), and the reverse angle leaned back by the distance across the floor only. A throw from up high or up at a shelf missed its target, or its thrower. Both now go along the real line of the throw, up and down included, and the over-the-shoulder camera keeps up with a dashing or jumping thrower.
+- **Snipes up and down:** a throw's distance has counted its climbs and drops since 0.40 (a carrot from 46 m up at someone 4 m across is a 45 m snipe); now those plays are also shot along that line, so you see the drop.
+- Tests: bot matches on all three maps, every shot of their reels checked for who's in it. Frames that miss the one they're about went from 24 of about 106 (the wide shot alone: 16 of 32) to 11 of 110 (the wide shot: 1 of 12), and after the over-the-shoulder camera kept up, 0 on a restaurant match (54 frames). A snipe splat thrown down from 46 m and one thrown up 46 m: a 48 m snipe splat each, thrower and target both in the over-the-shoulder shot and the target in the reverse angle. No errors.
+
 **Version 0.46: splats show what wore them down** (`src/highlights.js`, `index.html`)
 
 - **A lead-up before every splat in a highlight reel:** up to 3 of the foods that hit the splatted Titan in the 8 s before it, the biggest of them (a stream of blueberries counts as one hit, its biggest), shown in order in quick cuts at full speed: each one close beside them as the food flies in across the shot and bursts, with the damage it did ("-45", "Headshot -30") and a small splash ring, then the next. Then the splat itself, as before (riding a long throw, the big food-coloured explosion).
