@@ -63,6 +63,17 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.48: carrots hit online, clearer pot meters, and online fixes** (`src/net.js`, `src/game.js`, `src/foods.js`, `src/projectiles.js`, `src/actors.js`, `src/potwars.js`, `index.html`)
+
+- **Carrots (and blueberries and grapes) hit online.** Online, each player's own game decides the hits on them, against where they really are; a thrower aims at where they see their target, a moment behind. For a slow lob that hardly matters; a carrot flies at up to 210 m/s and is 0.18 m wide, so against anyone moving it nearly always missed on the target's screen. Now, for those three foods, the thrower's game decides whether the food itself hit, and sends the hit (its damage, up to 400, and what else it did: a freeze, a burn, a slow, a shove); the target's game applies it. Its own copy of the shot only splashes. Zones and blasts made from them (a Whisk vortex, a Mortar cloud) are still decided by the target's game. Checks: the hit must name one of their own Titans, the thrower within 300 m, at most 60 hits a second on each Titan.
+- **Pot meters:** the team bar under the top pill wraps into rows instead of running across the scoreboard; its pot meters are bigger, outlined, and slide as a pot takes hits. The label over each pot shows its health as a number and a bigger, outlined meter (not to be mixed up with a Titan's).
+- **Other fixes:**
+  - **Pot turrets kept a spread as one line:** all 8 grapes from a turret flew along one line and hit the same Titan (about 90, enough to splat anyone in Cooking Pot Wars); spoon and knife spreads too. Each piece now keeps its own direction (a turret grape shot spreads 10.9°, by hand 10.3°).
+  - **One gunner per turret, online too:** a bot or a second player could climb into a turret someone on another screen already sat in.
+  - **A carried pot stuck "carried":** if its carrier's game dropped it, or the delivery got lost, the pot never came back and its team waited forever. The host now puts it back after 3 s.
+  - **Other players flash** when they're hit (they never did on your screen).
+- Tests: online, Alice throwing at Bob running side to side 25 m away (8 throws each): carrots, before 0 damage (2 hits on her screen), now every hit she saw counts (3 hits, 165); blueberries the same; an Ice Cream Machine carrot that hurts Bob and freezes him on his screen; pot meters on both screens while Bob smashes a pot; the Cooking Pot Wars online test (smash, carry home, turret level, turret power) twice; turret grape spread; the floor, abilities, utensils and earlier online-fix tests. No errors.
+
 **Version 0.47: the play in the shot, and snipes up and down** (`src/highlights.js`)
 
 - **The play stays in the shot.** Three things lost it:

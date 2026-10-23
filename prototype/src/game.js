@@ -19,7 +19,7 @@ import { Highlights } from './highlights.js';
 import { PotWars, POT_SETUP } from './potwars.js';
 import { TEAMS, teamCount, teamHome, assignTeams, emptiest, cleanSize, sidesLeft, winningTeam, renderTeamBar } from './teams.js';
 import { randomSkinId } from './skins.js';
-import { FOODS, FOOD_IDS, FEED_VERB, lobSpeed, lobDir, randomFoodId, rollAmmo, pickupAmmo } from './foods.js';
+import { FOODS, FOOD_IDS, FEED_VERB, SHOOTER_DECIDES, lobSpeed, lobDir, randomFoodId, rollAmmo, pickupAmmo } from './foods.js';
 import { UTENSIL_BY_ID } from './utensils.js';
 
 const PLAYER_COLOR = '#ff9a1f';
@@ -585,7 +585,12 @@ export class Game {
   damage(target, amount, attacker, foodId, opts = {}) {
     if (!target.alive || amount <= 0 || this.state === 'over') return 0;
     if (this.teammates(target, attacker) || (this.pots.active && this.pots.setup)) return 0; // never your own team; nobody before the pots are down
-    amount *= this.dmgScale;
+    if (!opts.claimed) amount *= this.dmgScale;
+    // (0.48) a carrot, a berry, a grape online: the thrower's game decides the hit (see SHOOTER_DECIDES)
+    if (this.online && attacker && !opts.claimed && opts.shot && SHOOTER_DECIDES.has(foodId)) { // (the food itself hitting: a zone or blast from it is decided as usual)
+      if (attacker.isRemote && !target.isRemote) return 0; // (their copy of it here: their game says if it hit me)
+      if (target.isRemote && this.authFor(attacker)) this.net.claimHit(target, attacker, foodId, amount, opts.head);
+    }
     this._action(target, attacker);
     if (target.isRemote) { // online: that player's own game decides; we only show our hit
       this.highlights.onDamage(target, attacker, amount, foodId, opts); // (as it showed here, for the highlights)

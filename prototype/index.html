@@ -353,7 +353,7 @@ button { font: inherit; color: inherit; }
 /* Cooking Pot Wars: the four teams under the top pill, and the labels over the pots */
 .pots { position: absolute; left: 50%; top: calc(88px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: grid; justify-items: center; gap: 4px; pointer-events: none; }
 .pots p { margin: 0; font-size: 13px; font-weight: 800; color: var(--butter); background: var(--ink-glass); padding: 3px 12px; border-radius: 999px; }
-.pots ul { margin: 0; padding: 4px 6px; list-style: none; display: flex; gap: 10px; background: var(--ink-glass); border-radius: 12px; }
+.pots ul { margin: 0; padding: 4px 8px; list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px; max-width: max(300px, calc(100vw - 380px)); background: var(--ink-glass); border-radius: 12px; } /* (0.48: wraps instead of running into the scoreboard) */
 .pots li { display: flex; align-items: center; gap: 5px; font-size: 12px; }
 .pots li > i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1.5px var(--ink); }
 .pots li b { color: var(--c); }
@@ -361,10 +361,12 @@ button { font: inherit; color: inherit; }
 .pots li.out { opacity: 0.4; } .pots li.out b { text-decoration: line-through; }
 .pots em { font-style: normal; color: var(--paper-dim); }
 .pots small { color: var(--paper-dim); font-weight: 700; }
-.php { width: 46px; height: 6px; border-radius: 3px; background: rgba(34,20,42,0.9); overflow: hidden; }
-.php i { display: block; height: 100%; background: var(--c); }
+.php { width: 50px; height: 8px; border-radius: 4px; background: rgba(34,20,42,0.9); box-shadow: 0 0 0 1.5px rgba(255,255,255,0.55); overflow: hidden; }
+.php i { display: block; height: 100%; background: var(--c); transition: width 0.25s; }
 .plate.potplate .name { color: var(--c); font-size: 13px; }
-.plate.potplate .mini { width: 70px; height: 7px; }
+.plate.potplate .name b { color: var(--paper); font-variant-numeric: tabular-nums; margin-left: 5px; }
+.plate.potplate .mini { width: 92px; height: 10px; border-radius: 5px; box-shadow: 0 0 0 2px rgba(255,255,255,0.7); } /* (0.48: a pot's meter, not a Titan's) */
+.plate.potplate .h { transition: width 0.25s; }
 .tbtn.turretb { width: 50px; height: 50px; right: calc(170px + var(--sr)); bottom: calc(262px + var(--sb)); background: #9fd3f2; font-size: 10px; }
 @media (max-width: 560px) { .touchui .tbtn.turretb { width: 46px; height: 46px; right: calc(160px + var(--sr)); bottom: calc(318px + var(--sb)); } }
 .tbtn.ladle { width: 54px; height: 54px; right: calc(170px + var(--sr)); bottom: calc(196px + var(--sb)); background: #f3c89a; font-size: 10px; }
@@ -697,7 +699,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.47 · The play in the shot</p>
+      <p class="eyebrow">Prototype 0.48 · Carrots hit online</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in, or smash the other teams' pots in Cooking Pot Wars.</p>
       <nav class="homenav" aria-label="Main menu">

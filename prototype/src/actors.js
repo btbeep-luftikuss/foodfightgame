@@ -250,20 +250,20 @@ export class Actor {
   }
   heal(n) { this.hp = Math.min(this.maxHp, this.hp + n); }
   addSticky(amt, dur) {
-    if (this.isRemote) return false; // remote Titans are moved by their own player's game
+    if (this.isRemote) { this.game.net?.noteStatus(this, { s: [amt, dur] }); return false; } if (this.game.inertHit) return false; // remote Titans are moved by their own player's game
     if (this.isWet()) return;
     this.sticky.push({ amt, until: this.game.time + dur });
   }
-  juice(dur) { if (this.isRemote) return false; if (!this.isWet()) this.juicedUntil = Math.max(this.juicedUntil, this.game.time + dur); }
+  juice(dur) { if (this.isRemote) { this.game.net?.noteStatus(this, { j: dur }); return false; } if (this.game.inertHit) return false; if (!this.isWet()) this.juicedUntil = Math.max(this.juicedUntil, this.game.time + dur); }
   setWet(dur) {
-    if (this.isRemote) return false; // remote Titans are moved by their own player's game
+    if (this.isRemote) { this.game.net?.noteStatus(this, { w: dur }); return false; } if (this.game.inertHit) return false; // remote Titans are moved by their own player's game
     const t = this.game.time;
     this.wetUntil = Math.max(this.wetUntil, t + dur);
     this.sticky.length = 0; this.juicedUntil = 0; this.burnUntil = 0; this.surfaceSlowUntil = 0;
   }
-  burn(dur) { if (this.isRemote) return false; if (!this.isWet()) this.burnUntil = Math.max(this.burnUntil, this.game.time + dur); }
+  burn(dur) { if (this.isRemote) { this.game.net?.noteStatus(this, { b: dur }); return false; } if (this.game.inertHit) return false; if (!this.isWet()) this.burnUntil = Math.max(this.burnUntil, this.game.time + dur); }
   knock(v) {
-    if (this.isRemote) return false; // remote Titans are moved by their own player's game
+    if (this.isRemote) { this.game.net?.noteStatus(this, { k: [v.x, v.y, v.z] }); return false; } if (this.game.inertHit) return false; // remote Titans are moved by their own player's game
     this.vel.add(v);
     if (v.y > 0) this.onGround = false;
     this.knockUntil = this.game.time + 0.45;
@@ -272,7 +272,7 @@ export class Actor {
   // Hard CC with shared diminishing returns: 2nd within 6 s is halved, 3rd is immune,
   // and no more than 2.5 s of hard CC in any 6 s window (GDD 5.4).
   applyHardCC(kind, dur) {
-    if (this.isRemote) return false; // remote Titans are moved by their own player's game
+    if (this.isRemote) { this.game.net?.noteStatus(this, { cc: [kind, dur] }); return false; } if (this.game.inertHit) return false; // remote Titans are moved by their own player's game
     const t = this.game.time;
     this.ccLog = this.ccLog.filter((e) => t - e.t < 6);
     const n = this.ccLog.length;

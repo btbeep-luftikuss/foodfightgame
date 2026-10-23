@@ -332,10 +332,13 @@ export class PotWars {
     if (this.setup || !p || !p.alive || !p.placed) { if (a === g.player) g.hud.toast(this.setup ? 'The turrets open when the pots are down' : 'Your pot is gone: no turret'); return; }
     if (Math.hypot(a.pos.x - p.pos.x, a.pos.z - p.pos.z) > POT_R + TURRET_REACH || Math.abs(a.pos.y - p.pos.y) > 3) { if (a === g.player) g.hud.toast('Go to your pot to get in its turret'); return; }
     if (p.gunner && p.gunner !== a && p.gunner.alive && p.gunner.inTurret === p) { if (a === g.player) g.hud.toast(`${p.gunner.name} is in the turret`); return; }
+    const other = this._remoteGunner(p); // (0.48: someone on another screen sits in it)
+    if (other && other !== a) { if (a === g.player) g.hud.toast(`${other.name} is in the turret`); return; }
     p.gunner = a; a.inTurret = p;
     a.pos.set(p.pos.x, p.pos.y + POT_H, p.pos.z); a.vel.set(0, 0, 0);
     if (a === g.player) g.hud.banner('In the turret', `Aim and throw: ${(1.6 + 0.4 * p.captures).toFixed(1)}× damage · T to climb out`, 2.6);
   }
+  _remoteGunner(p) { return this.game.actors.find((x) => x.isRemote && x.alive && x.netTurret && x.team === p.team) || null; }
   _leaveTurret(a) {
     if (!a || !a.inTurret) return;
     const p = a.inTurret;
@@ -496,7 +499,9 @@ export class PotWars {
       p.mesh.userData.body.material.emissive?.setRGB(p.flash * 0.6, p.flash * 0.2, 0);
     }
     if (this.auth) for (const p of this.pots) {
-      if (p.carried && (!p.carrier || !p.carrier.alive || !g.actors.includes(p.carrier))) this._restore(p); // its carrier fell
+      // its carrier fell (0.48: or for 3 s hasn't been carrying it: their game dropped it, or its delivery got lost)
+      const lost = p.carrier && (p.carrier.carry ?? null) !== p.team ? (p.lostAt ??= g.time) : (p.lostAt = null);
+      if (p.carried && (!p.carrier || !p.carrier.alive || !g.actors.includes(p.carrier) || (lost != null && g.time - lost > 3))) { p.lostAt = null; this._restore(p); }
     }
     const P = g.player, sp = g.spectator;
     if (P && !P.alive && P.waiting) { // my pot is on someone's back: watch them
@@ -518,7 +523,7 @@ export class PotWars {
         const p = a.inTurret;
         if (!a.alive || !p.alive) this._leaveTurret(a);
         else { a.pos.x = p.pos.x; a.pos.z = p.pos.z; a.vel.x = a.vel.z = 0; }
-      } else if (a.isBot && a.alive && a.potRole === 'guard' && mine.alive && mine.placed && !mine.gunner?.inTurret && Math.hypot(a.pos.x - mine.pos.x, a.pos.z - mine.pos.z) < POT_R + 3) {
+      } else if (a.isBot && a.alive && a.potRole === 'guard' && mine.alive && mine.placed && !mine.gunner?.inTurret && !this._remoteGunner(mine) && Math.hypot(a.pos.x - mine.pos.x, a.pos.z - mine.pos.z) < POT_R + 3) {
         this.toggleTurret(a); // a guarding bot mans the turret
       }
       // a pot carried home
@@ -548,9 +553,9 @@ export class PotWars {
       if (!s) { p.label.style.display = 'none'; continue; }
       p.label.style.display = '';
       p.label.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -100%)`;
-      const txt = `${p.short} pot${p.captures ? ` · turret ${1 + p.captures}` : ''}`;
+      const txt = `${p.short} pot${p.captures ? ` · turret ${1 + p.captures}` : ''}`, hp = String(Math.max(0, Math.ceil(p.hp)));
       const n = p.label.firstChild;
-      if (n.textContent !== txt) n.textContent = txt;
+      if (n.dataset.t !== txt + hp) { n.dataset.t = txt + hp; n.textContent = txt; const b = document.createElement('b'); b.textContent = hp; n.appendChild(b); } // (0.48: its health, as a number too)
       p.label.querySelector('.h').style.width = `${Math.max(0, p.hp) / p.maxHp * 100}%`;
     }
     // ladle swings: in the right hand of whoever swings (and in front of your eyes in first person)

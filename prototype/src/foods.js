@@ -449,7 +449,7 @@ export const FOODS = {
     impact(p, hit, game) {
       if (hit.actor) {
         const dmg = Math.round(55 * (0.6 + 0.4 * p.charge) * (hit.head ? 1.75 : 1));
-        game.damage(hit.actor, dmg, p.owner, 'carrot', { head: hit.head });
+        game.damage(hit.actor, dmg, p.owner, 'carrot', { head: hit.head, shot: true });
         game.fx.burst('carrot', hit.point);
         game.sfx.play('crunch', hit.point);
         return true;
@@ -597,7 +597,7 @@ export const FOODS = {
     name: 'Blueberry', hidden: true, profile: 'line', radius: 0.13, dmg: 5, verb: 'berry-blasted',
     impact(p, hit, game) {
       if (hit.actor) {
-        game.damage(hit.actor, 5, p.owner, 'blueberry', { head: hit.head });
+        game.damage(hit.actor, 5, p.owner, 'blueberry', { head: hit.head, shot: true });
         game.fx.burst('berry', hit.point, 0.5);
         return true;
       }
@@ -631,7 +631,7 @@ export const FOODS = {
     name: 'Grape', hidden: true, profile: 'spray', radius: 0.16, dmg: 7, verb: 'grape-shot',
     impact(p, hit, game) {
       if (hit.actor) {
-        game.damage(hit.actor, 7, p.owner, 'grapes');
+        game.damage(hit.actor, 7, p.owner, 'grapes', { shot: true });
         if (hit.actor.slowAmount() < 0.3) hit.actor.addSticky(0.1, 1.5); // grape splats stack to 30%
         game.fx.burst('grape', hit.point, 0.4);
         game.sfx.play('hit', hit.point, 0.3);
@@ -948,6 +948,12 @@ export function makeFoodMesh(id) {
 }
 
 for (const id of FOOD_IDS) FOODS[id].maxStack = id === 'blueberry' ? 600 : STACK_MAX;
+
+// (0.48) Online, the thrower's game decides whether these hit: they're fast and thin (a carrot flies at
+// up to 210 m/s, 0.18 m wide), so judged where the target really was (a moment ahead of where the thrower
+// saw them) they would nearly always miss someone moving. Its game sends the hit; the target's applies it.
+export const SHOOTER_DECIDES = new Set(['carrot', 'blueberry', 'grapes']);
+export const SHOOTER_SHOTS = new Set(['carrot', 'berry', 'grape']); // (the same, as the food that flies)
 
 export function randomFoodId() {
   let total = 0;

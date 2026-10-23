@@ -55,7 +55,7 @@
 // the host announces who smashed a pot (ps). Turret shots carry their power (tm).
 import * as THREE from 'three';
 import { clamp, rand, FLOOR_BOUNDS, hashStr } from './core.js';
-import { FOODS, FOOD_IDS } from './foods.js';
+import { FOODS, FOOD_IDS, SHOOTER_DECIDES } from './foods.js';
 import { Actor } from './actors.js';
 import { UTENSIL_BY_ID, UTENSIL_IDS } from './utensils.js';
 import { TEAMS, cleanSize } from './teams.js';
@@ -306,6 +306,30 @@ export class Net {
     if (o.owner && o.owner !== this.game.player) t.ow = o.owner.id; // one of my bots threw it
     if (o.turret) t.tm = r2(o.turret); // fired from a pot's turret
     this.event('t', t);
+  }
+
+  // (0.48) My throw hit them (a carrot, a berry, a grape: see SHOOTER_DECIDES): their game takes the damage.
+  // What it does to them besides the damage (a freeze, a burn, a slow, a shove) goes with it: the status
+  // calls on their Titan here land in noteStatus (before or after this, in the same instant).
+  claimHit(target, attacker, food, amount, head) {
+    const to = this._peerOf(target), t = this.game.time;
+    if (!to) return;
+    const st = this.stBuf && this.stBuf.actor === target && this.stBuf.t === t ? this.stBuf.st : {};
+    this.event('hc', to, food, Math.round(amount * 10) / 10, head ? 1 : 0, attacker !== this.game.player ? attacker.id : null, st);
+    this.claim = { target, t, st, ev: this.log.at(-1) };
+  }
+  noteStatus(actor, s) {
+    const t = this.game.time;
+    if (s.cc) s = { cc: [...(this.claim?.st?.cc || []), s.cc].slice(-3) };
+    if (s.k) s = { k: s.k.map((v) => Math.round(v * 10) / 10) };
+    if (this.claim && this.claim.target === actor && this.claim.t === t) { // (after the hit: into its event, if not sent yet)
+      Object.assign(this.claim.st, s);
+      const ev = this.claim.ev;
+      if (ev && !ev.sent) { ev.arr = JSON.parse(JSON.stringify([...ev.arr.slice(0, -1), this.claim.st])); ev.bytes = utf8(JSON.stringify(ev.arr)) + 1; }
+      return;
+    }
+    if (!this.stBuf || this.stBuf.actor !== actor || this.stBuf.t !== t) this.stBuf = { actor, t, st: {} };
+    Object.assign(this.stBuf.st, s);
   }
 
   _peerOf(actor) {
@@ -618,7 +642,9 @@ export class Net {
     pr.netVel.set(num(s[3], -80, 80), num(s[4], -80, 80), num(s[5], -80, 80));
     a.yaw = num(s[6], -1e3, 1e3);
     a.lookPitch = num(s[7], -1.6, 1.6); // their Titan looks up and down where they aim
-    a.hp = num(s[8], 0, 200, 200);
+    const hp = num(s[8], 0, 200, 200);
+    if (a.alive && hp < a.hp - 0.5) a.hitFlash = 1; // (0.48: hit: a flash, as on their own screen)
+    a.hp = hp;
     a.glaze = num(s[9], 0, 100);
     const alive = s[10] === 1;
     if (!pr.placed) { // (0.44) first sight: just where they are, as they are (they were made at the map's middle, standing)
@@ -706,6 +732,25 @@ export class Net {
         game.items.addTrap(a, at);
         if (typeof d[4] === 'string') game.utensils.remoteTrapFx(d[4], a, at); // (0.44) the peel's utensil mark
       } else game.items.addTrampoline(a, at);
+    } else if (type === 'hc') { // (0.48) their throw hit one of my Titans (they decide carrots, berries, grapes)
+      if (d[4] != null) { a = botOf(d[4]); if (!a) return; }
+      const t = typeof d[0] === 'string' ? this._actorOf(d[0]) : null, food = safeId(d[1]);
+      if (!t || t.isRemote || !t.alive || !SHOOTER_DECIDES.has(food) || a.pos.distanceTo(t.pos) > 300) return;
+      const now = game.time; // (no more than a knife-diced grape burst's worth a second, on each of my Titans)
+      const log = (a.netClaims ||= new Map()), list = (log.get(t) || []).filter((x) => now - x < 1);
+      if (list.length >= 60) return;
+      list.push(now); log.set(t, list);
+      game.damage(t, num(d[2], 0, 400), a, food, { head: d[3] === 1, claimed: true });
+      const st = d[5] && typeof d[5] === 'object' ? d[5] : null; // what else it did to them
+      if (st && t.alive) {
+        const n = (v, hi) => num(v, 0, hi);
+        if (Array.isArray(st.s)) t.addSticky(n(st.s[0], 1), n(st.s[1], 8));
+        if (st.b) t.burn(n(st.b, 8));
+        if (st.w) t.setWet(n(st.w, 8));
+        if (st.j) t.juice(n(st.j, 8));
+        if (Array.isArray(st.cc)) for (const c of st.cc.slice(0, 3)) if (Array.isArray(c) && ['frozen', 'rooted', 'tripped', 'stunned'].includes(c[0])) t.applyHardCC(c[0], n(c[1], 4));
+        if (Array.isArray(st.k)) t.knock(new THREE.Vector3(num(st.k[0], -40, 40), num(st.k[1], -40, 40), num(st.k[2], -40, 40)));
+      }
     } else if (type === 'hd') { // (0.44) their Titan took glaze from a honey pool (the host keeps the pools)
       const h = this.isHost ? game.world.honeys[num(d[0], 0, 20) | 0] : null;
       if (h) h.cap = Math.max(0, h.cap - num(d[1], 0, 200));

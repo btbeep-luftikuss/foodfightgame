@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import {
   G, FLOOR_BOUNDS, clamp, solidAt, groundHeight, resolveHorizontal, segSegDist2, segPointDist2, forwardOf,
 } from './core.js';
-import { FOODS, makeFoodMesh } from './foods.js';
+import { FOODS, makeFoodMesh, SHOOTER_SHOTS } from './foods.js';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _h = new THREE.Vector3(), _c = new THREE.Vector3();
 const _prev = new THREE.Vector3(), _f = new THREE.Vector3(), _t = new THREE.Vector3();
@@ -56,8 +56,13 @@ export class Projectiles {
     const tur = !o.remote && !o.local && this.game.pots?.turretFor(o.owner);
     if (tur) {
       const speed = o.vel.length() * tur.speed;
-      const vel = food.profile === 'lob' || food.profile === 'roll' ? o.vel.clone().multiplyScalar(tur.speed)
-        : o.owner.aimPoint.clone().sub(tur.muzzle).normalize().multiplyScalar(speed);
+      // (0.48) aimed from the muzzle at the same point, each piece turned the same way (a spread stays one)
+      let vel;
+      if (food.profile === 'lob' || food.profile === 'roll') vel = o.vel.clone().multiplyScalar(tur.speed);
+      else {
+        const was = o.owner.aimPoint.clone().sub(o.pos).normalize(), now = o.owner.aimPoint.clone().sub(tur.muzzle).normalize();
+        vel = o.vel.clone().applyQuaternion(new THREE.Quaternion().setFromUnitVectors(was, now)).setLength(speed);
+      }
       o = { ...o, pos: tur.muzzle, vel, turret: tur.mult };
       this.game.fx.burst('dust', tur.muzzle, 0.4);
     }
@@ -247,6 +252,13 @@ export class Projectiles {
   // A food's impact, with the thrower's utensil before and after it. Damage dealt inside is
   // scaled by the projectile's utensil multiplier (and crits / peel layers).
   _impact(p, food, hit) {
+    // (0.48) someone else's carrot, berry or grape hitting one of my Titans: just the splash here (their
+    // game decides the hit, its damage and what it does to them: see SHOOTER_DECIDES)
+    const inert = p.remote && SHOOTER_SHOTS.has(p.food) && hit.actor && !hit.actor.isRemote;
+    if (inert) { this.game.inertHit = true; try { return this._impact0(p, food, hit); } finally { this.game.inertHit = false; } }
+    return this._impact0(p, food, hit);
+  }
+  _impact0(p, food, hit) {
     if (!p.u && !p.turret) return food.impact(p, hit, this.game);
     const game = this.game, U = game.utensils;
     if (!p.u) { game.dmgScale = p.turret; try { return food.impact(p, hit, game); } finally { game.dmgScale = 1; } }
@@ -266,6 +278,7 @@ export class Projectiles {
     // 1) cheese shields block projectiles from the front
     for (const a of game.actors) {
       if (!a.alive || !a.shieldUp || a === p.owner || p.roll || p.u === 'oven-mitt') continue; // a power throw goes straight through
+      if (p.remote && SHOOTER_SHOTS.has(p.food) && !a.isRemote) continue; // (0.48: their game decides shield or body)
       forwardOf(a.yaw, _f);
       _c.copy(a.pos).addScaledVector(_f, 1.45).setY(a.pos.y + 1.0);
       if (segPointDist2(_prev, p.pos, _c) < (1.5 + rad) ** 2 && (p.vel.x * _f.x + p.vel.z * _f.z) < 0) {
