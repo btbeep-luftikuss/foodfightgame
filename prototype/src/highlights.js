@@ -23,6 +23,9 @@
 //   - every impact: a freeze, a flash, a shockwave, a punch of the lens, a boom and a big word; then
 //     a low "hero" shot of whoever made the play, looking past them at what they did (the winning
 //     splat craning up over the arena).
+// A splat (0.46) opens with the hits that wore them down: up to 3 of the foods that hit them in the
+// 8 s before, in quick cuts close on them as each one flies in and bursts (the damage it did on
+// screen), then the splat itself.
 // Letterbox bars, a caption per play, a title card before the best play. Two reels: the whole match
 // ("Match highlights"), and only your own plays ("Your highlights"). While a reel plays the match is
 // frozen; afterwards everything is put back.
@@ -49,6 +52,8 @@ const HELD = [...FOOD_IDS, 'peel'];
 const MAX_MOMENTS = 90;
 const PATH_MAX = 4 * 240;     // numbers kept per flight path: its last 8 s
 const TRAIL_N = 150;          // points along a trail
+const PRE_N = 3, PRE_BACK = 8, PRE_GAP = 0.6, PRE_MIN = 4; // (0.46) the lead-up: at most 3 hits, from the last 8 s, 0.6 s apart, 4 damage or more
+const PRE_IN = 0.5, PRE_OUT = 0.32; // ... each shown from this long before it lands to this long after
 const KO_HOLD = 0.22;         // seconds a splatted Titan stays in the replay after the hit (squashing flat), so you see it land
 const UP = new THREE.Vector3(0, 1, 0), WHITE = new THREE.Color('#ffffff'), RING = new THREE.Color('#fff1c2'), _col = new THREE.Color();
 
@@ -142,6 +147,7 @@ export class Highlights {
     this.actors = []; this.idx = new Map(); this.meta = [];
     this.nextPid = 1; this.sampleAt = 0; this.pruneAt = 0; this.lastStep = 0;
     this.lastHit = new Map();   // victim -> the last hit on them
+    this.hitLog = new Map();    // (0.46) victim -> their latest hits (for a splat's lead-up)
     this.pending = null;        // the throw hitting someone this instant (its damage follows)
     // every burst and sound, so a replay looks and sounds like the match
     const fx = game.fx, sfx = game.sfx;
@@ -169,7 +175,7 @@ export class Highlights {
     this.stop();
     const g = this.game;
     this.frames = []; this.events = []; this.moments = [];
-    this.lastHit.clear(); this.pending = null;
+    this.lastHit.clear(); this.hitLog.clear(); this.pending = null;
     this.on = !!g.player;
     this.actors = [...g.actors];
     this.idx = new Map(this.actors.map((a, i) => [a, i]));
@@ -236,6 +242,7 @@ export class Highlights {
     this.pruneAt = t + 1;
     const from = t - KEEP;
     const wins = this.moments.map((m) => [m.t0 - 0.7, m.t1 + 0.7]);
+    for (const m of this.moments) for (const p of m.pre || []) wins.push([p.ti - PRE_IN - 0.4, p.ti + PRE_OUT + 0.4]); // (a splat's lead-up)
     for (const c of this.playing?.clips || []) wins.push([c.t0 - 1, c.t1 + 2]); // (online, the reel playing over the match)
     this.actors.forEach((a, i) => { this.meta[i].name = a.name; this.meta[i].color = a.color; });
     const keep = (x) => x >= from || wins.some(([a, b]) => x >= a && x <= b);
@@ -276,6 +283,9 @@ export class Highlights {
     const pend = this.pending && this.pending.victim === target && this.pending.by === attacker && this.pending.t === g.time ? this.pending : null;
     const rec = pend ? { ...pend, amt } : { victim: target, by: attacker, t: g.time, launchT: null, dist: attacker.pos.distanceTo(target.pos), pid: 0, head: !!opts.head, food: foodId, amt, path: null, ti: g.time };
     this.lastHit.set(target, rec);
+    const log = this.hitLog.get(target) || [];
+    log.push(rec); if (log.length > 12) log.shift();
+    this.hitLog.set(target, log);
     if (pend && rec.dist >= SNIPE && amt >= 14) this._snipe(rec); // (not a stray berry or grape)
     else if (attacker === g.player && (amt >= 30 || rec.head)) this._bigHit(rec);
   }
@@ -315,7 +325,7 @@ export class Highlights {
     const bonus = Math.min(40, dist * 0.8) + (link?.head ? 15 : 0) + (air ? 10 : 0);
     // a snipe that knocked them out: a snipe splat
     const snipe = link?.pid ? this.moments.find((m) => m.kind === 'snipe' && m.pid === link.pid && m.hits[0].b === b) : null;
-    if (snipe) { snipe.ko = true; snipe.score += 45; snipe.t1 = Math.max(snipe.t1, hit.tk + 2.2); return; }
+    if (snipe) { snipe.ko = true; snipe.score += 45; snipe.t1 = Math.max(snipe.t1, hit.tk + 2.2); snipe.pre = this._pre(victim, hit.tk); return; }
     // a double, a triple ...: the same Titan splatted someone a moment ago
     const prev = this.moments.find((m) => m.ko && m.a === a && t - m.hits.at(-1).tk < 4.5);
     if (prev) {
@@ -327,8 +337,21 @@ export class Highlights {
     // (a big hit that was the same throw becomes this splat)
     const big = this.moments.findIndex((m) => m.kind === 'hit' && m.a === a && Math.abs(m.hits[0].tk - t) < 0.3);
     if (big >= 0) this.moments.splice(big, 1);
-    this._add({ kind: 'splat', a, hits: [hit], pid: hit.pid, dist, food: link?.food || foodId, head: !!link?.head, ko: true, count: 1, score: 48 + bonus });
+    this._add({ kind: 'splat', a, hits: [hit], pid: hit.pid, dist, food: link?.food || foodId, head: !!link?.head, ko: true, count: 1, score: 48 + bonus, pre: this._pre(victim, hit.tk) });
   }
+
+  // (0.46) The hits that wore a Titan down before the one that splatted them: from the last PRE_BACK s,
+  // at least PRE_GAP s apart (a stream of berries is one: the biggest of them), the PRE_N biggest, in order.
+  _pre(victim, tk) {
+    const all = [];
+    for (const r of this.hitLog.get(victim) || []) {
+      if (r.t >= tk - 0.2 || tk - r.t > PRE_BACK || !(r.amt >= PRE_MIN) || !this.idx.has(r.by)) continue;
+      const near = all.find((p) => Math.abs(p.ti - (r.ti ?? r.t)) < PRE_GAP);
+      if (near) { if (r.amt > near.amt) Object.assign(near, this._preHit(r)); } else all.push(this._preHit(r));
+    }
+    return all.sort((p, q) => q.amt - p.amt || q.ti - p.ti).slice(0, PRE_N).sort((p, q) => p.ti - q.ti);
+  }
+  _preHit(r) { return { ti: r.ti ?? r.t, tk: r.t, a: this.idx.get(r.by), b: this.idx.get(r.victim), food: r.food, amt: r.amt, head: !!r.head, pid: r.pid, path: r.path?.s?.length >= 8 ? r.path : null }; }
 
   // The match is over: the last splat won it (and its clip runs on, for the crane up and away).
   onOver() {
@@ -420,7 +443,7 @@ export class Highlights {
       if (out.some((o) => Math.min(o.t1, m.t1) - Math.max(o.t0, m.t0) > 0.4 * Math.min(o.t1 - o.t0, m.t1 - m.t0))) continue; // overlaps a chosen one
       if (m.kind === 'dodge' ? kinds.dodge >= 1 : !m.ko && (kinds[m.kind] || 0) >= 3) continue; // (splats can fill a reel)
       kinds[m.kind] = (kinds[m.kind] || 0) + 1;
-      out.push({ ...m, hits: m.hits.map((h) => ({ ...h })), t0: Math.max(m.t0, first), t1: Math.min(m.t1, last) });
+      out.push({ ...m, hits: m.hits.map((h) => ({ ...h })), pre: (m.pre || []).filter((p) => p.ti - PRE_IN >= first).map((p) => ({ ...p })), t0: Math.max(m.t0, first), t1: Math.min(m.t1, last) });
     }
     out.sort((p, q) => rank(q) - rank(p) || p.score - q.score); // best last: a splat closes the reel when there is one
     return out;
@@ -669,6 +692,7 @@ class Reel {
     for (const [pid, P] of this.paths) {
       if (i >= this.trails.length) break;
       const h = c.hits.find((x) => x.pid === pid), dodge = c.kind === 'dodge';
+      if (!h) continue; // (a lead-up hit's throw: no trail, it's a quick cut)
       const col = vivid(this.hl.meta[dodge ? h.b : c.a]?.color);
       const s = P.s, t1 = pathEnd(P);
       const t0 = Math.min(t1, Math.max(s[0], c.t0 - 0.5));
@@ -810,7 +834,13 @@ class Reel {
     const c = this.clips[i];
     this.clip = c;
     this._prepare(c);
-    this.shots = this._plan(c);
+    this.shots = this._plan(c); this.mainShots = null;
+    // (0.46) a splat's lead-up: each earlier hit a quick cut, close on whoever it hit (not one the play shows anyway)
+    this.pre = (c.ko ? c.pre || [] : []).filter((p) => p.ti + PRE_OUT < c.t0 - 0.1 && p.ti - PRE_IN - 0.25 >= this.hl.frames[0].t && this.hl._aliveAt(p.b, p.ti)).map((p, k) => {
+      if (p.path) this.paths.set(p.pid, p.path);
+      const from = p.ti - PRE_IN - (k ? 0 : 0.25); // (the first a little longer: the clip fades in over it)
+      return { ...p, from, to: p.ti + PRE_OUT, shot: { type: 'flash', from, to: p.ti + PRE_OUT, h: p, hs: [p], init: true, sg: k % 2 ? -1 : 1 } };
+    });
     c.tEnd = Math.min(Math.max(c.t1, this.shots.at(-1).to), this.hl.frames.at(-1).t);
     // a long play (several throws or dodges, each in slow motion): quicken the slow parts to keep it short
     const best = i === this.clips.length - 1 && this.clips.length > 1, most = best ? 11 : c.kind === 'dodge' ? 8.5 : 9.5;
@@ -834,7 +864,7 @@ class Reel {
       this.stage = 'card'; this.st = 0;
       this.el('reel-cap').classList.remove('on');
       this._title(this.mode === 'me' ? 'Your best play' : 'Play of the match', '');
-    } else { this.stage = 'play'; this.st = 0; this._caption(c); }
+    } else this._startPlay();
     this.el('reel-fade').classList.remove('on'); void this.el('reel-fade').offsetWidth; this.el('reel-fade').classList.add('on');
   }
 
@@ -948,10 +978,11 @@ class Reel {
     }
     if (this.stage === 'intro' || this.stage === 'card') { // the opening frame, held under the title
       this._frame(0, dt);
-      if (this.st > 1.9) { this.stage = 'play'; this.st = 0; this._caption(this.clip); }
+      if (this.st > 1.9) this._startPlay();
       return;
     }
     const c = this.clip;
+    if (this.stage === 'pre') { this._preFrame(dt); return; }
     let sp = Math.min(1, this._speed(this.t) * c.boost);
     if (this.freeze > 0) { this.freeze -= dt; sp = 0.02; } // (the frame it lands, held)
     const step = dt * sp;
@@ -966,6 +997,57 @@ class Reel {
     const k = clamp((this.t - c.t0) / (c.tEnd - c.t0), 0, 1);
     this.el('reel-prog').style.width = `${((this.ci + k) / this.clips.length) * 100}%`;
     if (this.t >= c.tEnd) this._enterClip(this.ci + 1);
+  }
+
+  // The play starts (its caption up): with its lead-up first, if it has one.
+  _startPlay() {
+    this.st = 0;
+    this._caption(this.clip);
+    if (this.pre.length) { this.stage = 'pre'; this.pi = -1; this._nextPre(); } else this.stage = 'play';
+  }
+  // (0.46) The next hit of the lead-up (a cut to it), or on to the play itself.
+  _nextPre() {
+    this.pi++;
+    const c = this.clip;
+    this.cam.shot = -1; // (a cut)
+    if (this.pi >= this.pre.length) { // the play
+      this.stage = 'play';
+      this.shots = this.mainShots; this.mainShots = null;
+      this.t = c.t0; this.evT = c.t0; this.freeze = 0;
+      for (const m of this.ghosts.values()) this.g.projectiles.releaseMesh(m.userData.food, m);
+      this.ghosts.clear();
+      return;
+    }
+    const p = this.pre[this.pi];
+    this.mainShots ||= this.shots;
+    this.shots = [p.shot];
+    this.t = p.from; this.evT = p.from; p.popped = false;
+  }
+  _preFrame(dt) {
+    const p = this.pre[this.pi];
+    let sp = 1; // (at full speed: quick cuts, one after another)
+    if (this.freeze > 0) { this.freeze -= dt; sp = 0.02; }
+    const step = dt * sp;
+    this.fxStep = step;
+    this.t += step;
+    if (!p.popped && this.t >= p.ti) { p.popped = true; this._preImpact(p); }
+    const upTo = p.popped ? this.t : Math.min(this.t, p.ti - 1e-4);
+    if (upTo > this.evT) { this._events(this.evT, upTo); this.evT = upTo; }
+    this._frame(step, dt);
+    this.root.classList.remove('slow', 'bullet');
+    this.el('reel-prog').style.width = `${(this.ci / this.clips.length) * 100}%`;
+    if (this.t >= p.to) this._nextPre();
+  }
+  // One of the lead-up's hits lands: a smaller pop than the play's, with what it took off them.
+  _preImpact(p) {
+    const g = this.g, at = p.path ? pathAt(p.path, Math.min(p.ti, pathEnd(p.path)), _h) : this.hl.posAt(p.b, p.ti, _h);
+    this._events(this.evT, p.ti); this.evT = Math.max(this.evT, p.ti);
+    const kind = BURST[p.food] || 'tomato';
+    this.emitting = true; g.fx.burst(kind, at, 1.3); this.emitting = false;
+    this._pop(`${p.head ? 'Headshot ' : ''}-${Math.round(p.amt)}`, 'pre', 0.1);
+    this.freeze = 0.09; this.punch = 0.45; this.shake = Math.min(1, this.shake + 0.25);
+    this._ring(at, 1.3, 0, 0.35, (PALETTE[kind] || PALETTE.tomato)[0]); // (small: the camera is close)
+    this._sfx('thud', at, 0.75);
   }
 
   // The instant a throw lands (or whizzes past a dodger): freeze, flash, shockwave, lens punch, boom.
@@ -1245,7 +1327,19 @@ class Reel {
     if (!s.init) this._initShot(s);
     const rt = this.cam.rt, pos = _e, look = _f, star = hl.posAt(c.a, t, _a);
     let fov = 50, from = star, roll = 0;
-    if (s.type === 'setup') { // over the star's shoulder, down the line at the other one (the throw going out, or coming in)
+    if (s.type === 'flash') { // (0.46) a lead-up hit: close beside whoever it hits, the food coming in across the shot
+      const B = hl.posAt(h.b, t, _c);
+      if (h.path) pathAt(h.path, Math.max(h.path.s[0], h.ti - 0.15), _p); else hl.posAt(h.a, h.ti, _p);
+      _d.subVectors(_p, B).setY(0);
+      if (_d.lengthSq() < 1e-4) forwardOf(hl.yawAt(h.b, t), _d);
+      _d.normalize(); // (the way it comes from)
+      _s.set(-_d.z, 0, _d.x).multiplyScalar(s.sg);
+      const k = smooth((t - s.from) / (s.to - s.from));
+      pos.copy(B).addScaledVector(_s, 3.6 - 0.8 * k).addScaledVector(_d, 1.5).addScaledVector(UP, 0.85);
+      look.copy(B).addScaledVector(_d, 0.8).addScaledVector(UP, 0.3);
+      fov = lerp(54, 45, k);
+      from = B;
+    } else if (s.type === 'setup') { // over the star's shoulder, down the line at the other one (the throw going out, or coming in)
       const side = _g.set(-s.d.z, 0, s.d.x).multiplyScalar(s.sg);
       pos.copy(star).addScaledVector(s.d, -3.9 + Math.min(0.6, rt * 0.3)).addScaledVector(side, this._side).addScaledVector(UP, 0.8);
       const k = Math.min(0.42, 15 / s.dist);
@@ -1315,7 +1409,7 @@ class Reel {
       if (len < 0.01) continue;
       _d.divideScalar(len);
       const hit = this._clear(o, _d, len + 0.3);
-      if (hit < len) pos.copy(o).addScaledVector(_d, s.type === 'bullet' ? Math.max(0.4, hit - 0.25) : Math.max(1.2, hit - 0.35));
+      if (hit < len) pos.copy(o).addScaledVector(_d, s.type === 'bullet' ? Math.max(0.4, hit - 0.25) : Math.max(s.type === 'flash' ? 1.8 : 1.2, hit - 0.35));
     }
     if (pos.y < FLOOR_Y + 0.4) pos.y = FLOOR_Y + 0.4;
     // a cut between shots, smooth within one

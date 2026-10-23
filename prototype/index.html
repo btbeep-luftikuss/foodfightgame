@@ -593,6 +593,7 @@ kbd { font-family: var(--body); font-weight: 700; font-size: 11px; background: v
 .reel-pop { position: absolute; left: 0; right: 0; top: 24%; text-align: center; font-family: var(--display); font-size: clamp(48px, 11vw, 120px); color: var(--paper); text-shadow: 5px 6px 0 var(--tomato), 0 0 30px rgba(0,0,0,0.5); opacity: 0; text-transform: uppercase; }
 .reel-pop.on { animation: reelPop 1.4s ease-out; }
 .reel-pop.ko { color: var(--butter); font-size: clamp(52px, 11.5vw, 124px); }
+.reel-pop.pre { top: 30%; font-size: clamp(30px, 6.5vw, 66px); color: #ffe4d6; text-shadow: 3px 4px 0 var(--tomato), 0 0 22px rgba(0,0,0,0.55); } /* (0.46) a lead-up hit's damage: smaller than the splat */
 .reel-pop.dodge { color: #e6f7ff; text-shadow: 5px 6px 0 #2f8fd8, 0 0 30px rgba(0,0,0,0.5); }
 @keyframes reelPop { 0% { opacity: 0; transform: scale(2.2) rotate(-6deg); } 12% { opacity: 1; transform: scale(1) rotate(-4deg); } 70% { opacity: 1; transform: scale(1.05) rotate(-4deg); } 100% { opacity: 0; transform: scale(1.12) rotate(-4deg); } }
 .reel-slow { position: absolute; right: max(16px, 4vw); top: calc(11vh + 14px); font-weight: 900; font-size: 11px; letter-spacing: 0.3em; color: var(--paper); opacity: 0; transition: opacity 0.25s; }
@@ -696,7 +697,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.45 · Low internet mode</p>
+      <p class="eyebrow">Prototype 0.46 · Splat lead-ups</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in, or smash the other teams' pots in Cooking Pot Wars.</p>
       <nav class="homenav" aria-label="Main menu">

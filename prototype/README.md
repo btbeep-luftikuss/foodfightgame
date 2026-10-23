@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.46: splats show what wore them down** (`src/highlights.js`, `index.html`)
+
+- **A lead-up before every splat in a highlight reel:** up to 3 of the foods that hit the splatted Titan in the 8 s before it, the biggest of them (a stream of blueberries counts as one hit, its biggest), shown in order in quick cuts at full speed: each one close beside them as the food flies in across the shot and bursts, with the damage it did ("-45", "Headshot -30") and a small splash ring, then the next. Then the splat itself, as before (riding a long throw, the big food-coloured explosion).
+- Any thrower's hits count, not just the one who splatted them, and ability hits too (a tomato slam). A hit the splat's own clip already shows isn't repeated; a splat with no earlier hits starts straight away. Online round reels get the same.
+- Tests: bot matches on the kitchen, the restaurant and the backyard, their reels stepped through: which splats got a lead-up and which hits (a carrot for 45, a cookie for 18, a carrot for 55, then the snipe splat), a screenshot of every lead-up hit landing (the one it hit in the shot each time) and of each splat; the online round reel test. No errors.
+
 **Version 0.45: online on a slow connection** (`src/net.js`, `src/p2p.js`, `src/main.js`)
 
 - **Settings, Online connection:** Auto (the default), Normal or Low internet. It takes effect at once, also in the middle of a round.
