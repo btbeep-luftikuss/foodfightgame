@@ -10,6 +10,13 @@
 // player's presence on to everyone. If the hub leaves, the others race to claim the id; the winner
 // becomes the new hub and the rest reconnect. A player keeps their own id through all of that.
 //
+// Slow lines (0.45): an update never waits behind older ones. A line still busy sending (more than
+// BACKLOG bytes waiting) skips the update (the next one carries everything: presence is the whole
+// state), and the hub keeps only the latest update of each player for that line, sent when it's free.
+// A player on Low internet says so in its keep-alive; the hub passes the others' updates to it 10
+// times a second (only the latest of each), and a hub on Low does that for everyone.
+// congested(): how many updates were held back in the last 5 s (Auto low internet goes by it).
+//
 // Everything that arrives is untrusted: the hub ties each connection to one player id, drops
 // oversized or malformed messages, and net.js checks every value it reads.
 import { Peer } from 'peerjs';
@@ -21,6 +28,9 @@ const hubIdFor = (name) => PREFIX + String(name).toLowerCase().replace(/[^a-z0-9
 const STALE_MS = 5000;     // a player not heard from in this long has gone
 const HUB_LOST_MS = 3500;  // the hub (or a player's line to it) silent this long: it's gone (a closed tab doesn't always say so)
 const MAX_BYTES = 15500;   // one message (PeerJS refuses JSON messages over about 16 KB)
+const BACKLOG = 48000;     // (0.45) bytes waiting on a line before it skips updates
+const LOW_EVERY = 100;     // (0.45) ms between the hub's batches to a Low player (or from a Low hub)
+const busy = (c) => (c?.dataChannel?.bufferedAmount || 0) > BACKLOG;
 // A connection error that isn't the connection going: a message too big, or sent a moment early.
 const harmless = (e) => e && (e.type === 'message-too-big' || e.type === 'not-open-yet');
 // Finding a way between two browsers (0.33): STUN servers tell a browser its public address (several, in
@@ -47,7 +57,11 @@ class P2PRoom {
     this.ok = false; this.closed = false;
     this.snap = this._snapshot();
     this.sweep = setInterval(() => this._sweep(), 1000); // also the keep-alive both ways
+    this.low = false; this.held = []; // (0.45) Low internet; when updates were held back
+    this.pump = setInterval(() => this._flush(), LOW_EVERY / 2);
   }
+  setLow(v) { this.low = !!v; }
+  congested() { const t = Date.now() - 5000; this.held = this.held.filter((x) => x > t); return this.held.length; }
 
   // ------------------------------------------------------------------ the room interface
   async presence(patch) {
@@ -56,7 +70,10 @@ class P2PRoom {
     this.mine = Object.freeze(next);
     const msg = { t: 'p', id: this.me, p: this.mine };
     if (this.isHub) this._broadcast(msg, null);
-    else if (this.conn?.open) try { this.conn.send(msg); } catch { /* dropped: the next one follows */ }
+    else if (this.conn?.open) {
+      if (busy(this.conn)) { this.held.push(Date.now()); return; } // (the line is still sending older ones: skip this one)
+      try { this.conn.send(msg); } catch { /* dropped: the next one follows */ }
+    }
   }
   peers() { return this.snap; }
   onPeers(h) { this.peerHandlers.add(h); queueMicrotask(() => h({ peers: this.snap, joined: this.snap, left: [], updated: [] })); return () => this.peerHandlers.delete(h); }
@@ -66,7 +83,7 @@ class P2PRoom {
   on() { return () => {}; }
   async leave() {
     this.closed = true;
-    clearInterval(this.sweep);
+    clearInterval(this.sweep); clearInterval(this.pump);
     const bye = { t: 'bye', id: this.me };
     try { if (this.isHub) this._broadcast(bye, null); else if (this.conn?.open) this.conn.send(bye); } catch { /* gone anyway */ }
     await wait(60);
@@ -190,7 +207,7 @@ class P2PRoom {
       const bound = this.links.get(c);
       if (bound && bound !== m.id) return; // one player per connection: no speaking for others
       if (!bound) { if (m.id === this.me) return; this.links.set(c, m.id); }
-      if (m.t === 'k') return; // keep-alive
+      if (m.t === 'k') { c.slow = m.lo === 1; return; } // keep-alive (lo: they're on Low internet)
       try { if (JSON.stringify(m).length > MAX_BYTES) return; } catch { return; }
       this._take(m);
       this._broadcast(m, c);
@@ -203,7 +220,29 @@ class P2PRoom {
     c.on('close', c.gone); c.on('error', (e) => { if (!harmless(e)) c.gone(); });
   }
   _broadcast(m, except) {
-    for (const c of this.heard.keys()) if (c !== except && c.open) try { c.send(m); } catch { /* a slow line drops one */ }
+    for (const c of this.heard.keys()) {
+      if (c === except || !c.open) continue;
+      if (m.t === 'bye') c.pend?.delete(m.id); // (a held-back update of theirs mustn't bring them back)
+      // (0.45) an update for a Low line (or from a Low hub), or a line still busy: keep only the latest per player
+      if (m.t === 'p' && (this.low || c.slow || busy(c))) {
+        if (busy(c)) this.held.push(Date.now());
+        (c.pend ||= new Map()).set(m.id, m);
+        continue;
+      }
+      try { c.send(m); } catch { /* a slow line drops one */ }
+    }
+  }
+  // (hub) the held-back updates go out: to a free line, at most every LOW_EVERY ms for a Low one
+  _flush() {
+    if (!this.isHub) return;
+    const now = Date.now();
+    for (const c of this.heard.keys()) {
+      if (!c.pend?.size || !c.open || busy(c)) continue;
+      if ((this.low || c.slow) && now - (c.sentAt || 0) < LOW_EVERY) continue;
+      c.sentAt = now;
+      for (const m of c.pend.values()) try { c.send(m); } catch { /* the next one follows */ }
+      c.pend.clear();
+    }
   }
   _sweep() {
     const now = Date.now();
@@ -212,7 +251,7 @@ class P2PRoom {
       this._broadcast({ t: 'k' }, null);
       for (const [c, t] of this.heard) if (now - t > STALE_MS) { c.gone(); try { c.close(); } catch { /* already */ } }
     } else if (this.conn) {
-      try { this.conn.send({ t: 'k', id: this.me }); } catch { /* the check below decides */ }
+      try { this.conn.send({ t: 'k', id: this.me, lo: this.low ? 1 : 0 }); } catch { /* the check below decides */ }
       if (now - this.hubSeen > HUB_LOST_MS) { const c = this.conn; try { c.close(); } catch { /* already */ } this._hubGone(c); }
     }
     let gone = false;

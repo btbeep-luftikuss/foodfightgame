@@ -41,6 +41,13 @@
 // goes out by its key ('g' food, 'ug' a utensil or a box). Each carries the round number: one for a
 // round that hasn't started here yet waits for it.
 //
+// Low internet (0.45): Settings, Online connection: Normal, Low internet or Auto (Low when the device
+// says its connection is slow or saves data, or the room's line can't keep up). Low sends an update
+// 10 times a second instead of 30, each event goes out at least 3 times instead of 6 (they stay in
+// the log just as long), and in a peer-to-peer room the hub passes the others' updates on to a
+// Low player 10 times a second too (only the latest of each). Remote Titans are drawn a little
+// further ahead when updates come less often.
+//
 // Teams and Cooking Pot Wars (0.26): the room settings carry the mode and the team size; every
 // Titan's state carries its team and the pot on its back. Players pick their team (state), the host
 // fills the rest with bots. In Cooking Pot Wars the host owns the pots and shares them (pw); players
@@ -56,7 +63,15 @@ import { p2pLobby } from './p2p.js';
 
 const COLORS = ['#ff9a1f', '#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5', '#f2f2f2'];
 const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048, ladle: 4096, turret: 8192 };
-const SEND_EVERY = 1 / 30;
+const SEND_EVERY = 1 / 30, SEND_LOW = 1 / 10; // (0.45: Low internet)
+// The Online connection setting (0.45), remembered: 'auto', 'normal' or 'low'.
+export function netPref() {
+  try { const v = localStorage.getItem('tt-net'); if (v === 'normal' || v === 'low') return v; } catch { /* storage blocked */ }
+  return 'auto';
+}
+export function setNetPref(v) { try { if (v === 'normal' || v === 'low') localStorage.setItem('tt-net', v); else localStorage.removeItem('tt-net'); } catch { /* storage blocked */ } }
+// What the device says about its connection (Chrome and Android tell; Safari doesn't).
+const slowDevice = () => { const c = navigator.connection; return !!c && (c.saveData || ['slow-2g', '2g', '3g'].includes(c.effectiveType)); };
 const LOG_KEEP = 1.5;   // seconds an event stays in the rolling log (pot moves: 3 s; 0.44: was 0.7, too short for a slow game)
 const LOG_MAX = 90;
 const MIN_SENT = 6;     // an event leaves the log once it went out this often and is past LOG_KEEP (pot moves: 5x)
@@ -223,7 +238,10 @@ export class Net {
     this.joinedAt = 0;
     this.tag = Math.random().toString(36).slice(2, 6); this.keyN = 0; // (0.44) keys for what I drop on the floor
     this.later = []; // floor events for a round that hasn't started here yet
+    this.autoLow = false; this.autoLowUntil = 0; // (0.45) Auto found the line too slow (for a while at least)
   }
+  // Low internet now? (the setting; on Auto, the device or the line says so)
+  get low() { const m = netPref(); return m === 'low' || (m === 'auto' && (this.autoLow || slowDevice())); }
   newKey() { return `${this.tag}${(++this.keyN).toString(36)}`; }
 
   roomSettings() { return this.hostSettings ? { ...this.hostSettings } : { ...this.settings }; }
@@ -330,10 +348,10 @@ export class Net {
     }
     // the events: drop the stale ones, then pack the rest, those sent the fewest times first (a pot move
     // counts a fifth: it goes out five times as often), then the oldest first, while they fit
-    const potEv = (ev) => POT_EVENTS.has(ev.type);
+    const potEv = (ev) => POT_EVENTS.has(ev.type), minSent = this.low ? 3 : MIN_SENT; // (Low: fewer updates, each event in fewer)
     this.log = this.log.filter((ev) => {
       const age = t - ev.t, pot = potEv(ev);
-      return age < (pot ? 6 : 4) && (ev.sent < MIN_SENT * (pot ? 5 : 1) || age < (pot ? 3 : LOG_KEEP));
+      return age < (pot ? 6 : 4) && (ev.sent < minSent * (pot ? 5 : 1) || age < (pot ? 3 : LOG_KEEP));
     }).slice(-LOG_MAX);
     let space = this.budget() - utf8(JSON.stringify(msg));
     const out = [];
@@ -388,8 +406,15 @@ export class Net {
       this.isHost = false; this.game.round.id = -1;
     }
     this.tickAt = wall;
+    // (0.45) Auto: the room's line couldn't keep up (updates held back): Low for at least 30 s
+    const jam = this.room.congested?.() || 0;
+    if (jam >= 5) { if (!this.autoLow && netPref() === 'auto') this.game.hud.toast('Slow connection: low internet mode is on'); this.autoLow = true; this.autoLowUntil = wall + 30000; }
+    else if (this.autoLow && wall > this.autoLowUntil) this.autoLow = false;
+    const low = this.low;
+    this.room.setLow?.(low); // (peer-to-peer: the hub sends me the others' updates less often)
     this.sendT += dt;
-    if (this.sendT >= SEND_EVERY && this.game.player) { this.sendT = 0; this._sendState(); }
+    const every = low ? SEND_LOW : SEND_EVERY;
+    if (this.sendT >= every && this.game.player) { this.sendT = Math.min(this.sendT - every, every); this._sendState(); } // (the remainder carries over: 30 or 10 a second exactly)
 
     const list = this.room.peers();
     const seen = new Set();
@@ -421,7 +446,8 @@ export class Net {
     for (const pr of [...this.proxies.values(), ...this.botProxies.values()]) {
       const a = pr.actor;
       if (!a.alive) continue;
-      const lead = Math.min(0.25, now - pr.recvAt);
+      pr.gap = pr.gap == null ? 0.1 : pr.gap; // (how often their updates come: further ahead when it's seldom)
+      const lead = Math.min(Math.max(0.25, pr.gap * 1.6), 0.45, now - pr.recvAt);
       const tx = pr.target.x + pr.netVel.x * lead, ty = pr.target.y + pr.netVel.y * lead, tz = pr.target.z + pr.netVel.z * lead;
       const k = 1 - Math.exp(-15 * dt);
       if (Math.hypot(tx - a.pos.x, tz - a.pos.z) > 10) a.pos.set(tx, ty, tz);
@@ -585,6 +611,7 @@ export class Net {
   // A Titan's shared state (a player's or one of the host's bots).
   _applyState(pr, s) {
     const game = this.game, a = pr.actor, now = game.time;
+    if (pr.recvAt != null && now > pr.recvAt) pr.gap = (pr.gap ?? 0.1) * 0.8 + Math.min(1, now - pr.recvAt) * 0.2;
     pr.recvAt = now;
     const B = FLOOR_BOUNDS;
     pr.target.set(num(s[0], B.minX, B.maxX), num(s[1], -40, 120), num(s[2], B.minZ, B.maxZ));

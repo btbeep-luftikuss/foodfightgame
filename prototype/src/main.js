@@ -13,7 +13,7 @@ import { TITANS } from './game.js';
 import { BOT_LEVELS } from './bots.js';
 import { MAPS } from './world.js';
 import { TEAMS, TEAM_LABEL, teamCount, cleanSize } from './teams.js';
-import { Net, roomAvailable, cleanRoom } from './net.js';
+import { Net, roomAvailable, cleanRoom, netPref, setNetPref } from './net.js';
 import { colliders } from './core.js';
 
 const PUBLIC_URL = 'https://btbeep-luftikuss.github.io/foodfightgame/play/';
@@ -904,6 +904,7 @@ function boot() {
   }
   // One settings panel is rendered into the menu and into the pause card; every copy stays in sync.
   const gfxPanel = (presetId) => `
+    <label class="field">Online connection <select data-netmode><option value="auto">Auto (Low when slow)</option><option value="normal">Normal (smoothest)</option><option value="low">Low internet (less data)</option></select></label>
     <label class="field">Controls <select data-ctl><option value="auto">Auto (this device: ${controlsDetected() === 'mobile' ? 'Mobile' : 'PC'})</option><option value="mobile">Mobile (touch sticks and buttons)</option><option value="pc">PC (keyboard and mouse)</option></select></label>
     <label class="field" for="${presetId}">Preset <select id="${presetId}" data-gfx="preset"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
     <label class="field">Ray tracing <select data-gfx="rt">${Object.entries(RT_LABEL).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
@@ -915,6 +916,14 @@ function boot() {
   // Controls (0.41): mobile or PC, whatever the device says; switching reloads the page (the touch dials and
   // the layout are built at start)
   for (const el of document.querySelectorAll('[data-ctl]')) el.value = controlsPref();
+  // Online connection (0.45): takes effect at once, also in a room
+  for (const el of document.querySelectorAll('[data-netmode]')) el.value = netPref();
+  document.addEventListener('change', (e) => {
+    if (!e.target.matches?.('[data-netmode]')) return;
+    setNetPref(e.target.value);
+    for (const el of document.querySelectorAll('[data-netmode]')) el.value = netPref();
+    if (game.net) game.hud.toast(game.net.low ? 'Low internet mode: fewer updates, less data' : 'Normal connection: every update');
+  });
   document.addEventListener('change', (e) => {
     if (!e.target.matches?.('[data-ctl]')) return;
     const v = e.target.value;

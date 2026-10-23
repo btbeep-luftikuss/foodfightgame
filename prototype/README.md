@@ -63,6 +63,15 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.45: online on a slow connection** (`src/net.js`, `src/p2p.js`, `src/main.js`)
+
+- **Settings, Online connection:** Auto (the default), Normal or Low internet. It takes effect at once, also in the middle of a round.
+  - **Low internet** sends your update 10 times a second instead of 30, so it uses a quarter to a third of the data. The host of a room with 9 bots goes from about 90-110 KB/s to about 25 KB/s; a player from about 7 KB/s to 2 KB/s. Each piece of news (a throw, a splat, a pickup) still goes out at least 3 times. In a public (peer-to-peer) room the player whose browser connects everyone passes the others' updates to a Low player 10 times a second too (only the latest of each), so it downloads less as well.
+  - **Auto** turns Low on when the device says its connection is slow or set to save data (Chrome and Android tell), or when the line can't keep up (updates had to be held back, 5 in 5 s). It says so ("Slow connection: low internet mode is on") and goes back to Normal after 30 s without trouble.
+- **For everyone, on any connection:** an update never waits behind older ones. When a line is still busy sending, the update is skipped (the next one carries everything) and the connecting player keeps only the latest update of each player for that line. Before, a slow line queued every update, and the game fell further and further behind (lag that kept growing).
+- **Smoother on few updates:** other Titans are drawn ahead along their path by up to about one and a half update gaps (at most 0.45 s), so they glide instead of jumping between updates.
+- Tests: updates per second and data per second on a steady 60 frames a second, Normal against Low, for the host with 9 bots and for a player; the connecting player passing 3 players' updates on to a Normal line, a Low line and a busy line; Auto switching to Low on a jammed line; the shared-floor test and the ultimate alts test with everyone on Low (same floor; hits land). No errors.
+
 **Version 0.44: online, everyone sees the same floor, and a round of online fixes** (`src/net.js`, `src/items.js`, `src/utensils.js`, `src/game.js`, `src/world.js`, `src/core.js`, `src/abilities.js`, `src/actors.js`, `src/teams.js`, `src/foods.js`, `src/projectiles.js`, `src/potwars.js`)
 
 - **The same food on the floor for everyone.** Online, every player's game used to put its own random food on the food spots, and picking food up only happened on your own screen (and the same went for the utensil delivery boxes and loose utensils). Now:
@@ -460,9 +469,9 @@ npm run dev          # http://localhost:5173
 | `src/skins.js` | Skins: rarity, clothing palettes, costume pieces on the head, chest and hip bones; skin packs |
 | `src/coins.js` | Coins: match rewards, skin and pack prices, the wallet (kept on this device) |
 | `src/stains.js` | Food stains on every surface: decals cut from the scenery triangles, one atlas, one draw call |
-| `src/net.js`, `src/viewmodel.js` | Online rooms (hosting, shared rounds and bots, the shared floor and its check); first-person arm and held food |
+| `src/net.js`, `src/viewmodel.js` | Online rooms (hosting, shared rounds and bots, the shared floor and its check, low internet); first-person arm and held food |
 | `src/highlights.js` | Highlight reels: records the match or online round (and every throw's flight), scores splats, snipes and dodges, directs the reels (riding along with long throws in slow motion, wide shots of the whole play, bullet-time dodges, impact freezes, hero shots); online, plays them over the live match |
-| `src/p2p.js` | Public peer-to-peer rooms (PeerJS): a hub per room code, hand-over when the hub leaves; STUN and TURN servers |
+| `src/p2p.js` | Public peer-to-peer rooms (PeerJS): a hub per room code, hand-over when the hub leaves; STUN and TURN servers; slow lines skip updates, Low lines get them in batches |
 | `src/map-backyard.js` | The Backyard BBQ map |
 | `src/map-restaurant.js` | Chez Titan, the Restaurant map |
 | `src/projectiles.js` | Projectile flight, boomerang steering, rolling, hit detection (body capsule and head) |
