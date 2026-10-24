@@ -2,7 +2,7 @@
 // Soda Can and Cheese Wheel. Values follow the GDD's Fresh-tier numbers.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { G, groundHeight, rand, forwardOf } from './core.js';
+import { G, groundHeight, rand, forwardOf, raycastWorld, solidAt } from './core.js';
 
 // ---------------------------------------------------------------------------
 // Meshes (shared geometry and materials, one Object3D per use).
@@ -316,7 +316,24 @@ const MAKERS = {
 
 // ---------------------------------------------------------------------------
 const UP_BIAS = new THREE.Vector3(0, 0.1, 0);
-const _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
+const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _s = new THREE.Vector3();
+
+// (0.49) A carrot that hits a wall, a table or the floor sinks its tip in where it really met the
+// surface (the impact is found a step late, up to 0.45 m past or short of it), pointing the way it flew.
+function stickIn(p, hit) {
+  const m = p.mesh, d = _s.copy(p.vel);
+  if (d.lengthSq() < 1e-6) return;
+  d.normalize();
+  const at = _v2.copy(hit.point);
+  if (hit.from) {
+    const max = hit.from.distanceTo(p.pos) + 1.5, t = raycastWorld(hit.from, d, max);
+    if (t < max) at.copy(hit.from).addScaledVector(d, t);
+  }
+  const len = 0.65 * (m.scale.z || 1); // half the carrot (its tip is 0.65 m ahead of its middle)
+  m.position.copy(at).addScaledVector(d, 0.3 * (m.scale.z || 1) - len); // the tip 0.3 m in
+  p.inside = solidAt(at.copy(m.position).addScaledVector(d, len - 0.1), 0.05)?.collider || null; // what it's stuck in
+  m.lookAt(at.copy(m.position).sub(d));
+}
 
 // Launch speed for a charge fraction c (0..1). Shared with the aim-preview arc.
 export function lobSpeed(id, c) {
@@ -457,7 +474,8 @@ export const FOODS = {
       game.fx.burst('carrot', hit.point);
       game.sfx.play('crunch', hit.point, 0.6);
       if (hit.world) {
-        game.items.stickDecor(p, 3);
+        stickIn(p, hit);
+        game.items.stickDecor(p, 8);
         p.keepMesh = true;
       }
       return true;

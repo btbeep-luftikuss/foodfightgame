@@ -31,6 +31,9 @@ const ROLL = ['cheese', 'watermelon'];
 const PELLET = ['grape', 'berry']; // projectile ids of the volley foods
 const THROWN = [...SINGLE, ...ROLL, 'grapes', 'blueberry']; // everything you throw, by hotbar id
 const WITH_PEEL = [...THROWN, 'peel'];
+// (0.49) Firm foods (cut clean, grate into shreds, bonk off a spoon) and soft ones (squash and splat):
+// the Knife, Spoon and Grater treat them differently. Everything else counts as soft.
+const FIRM = new Set(['carrot', 'cheese', 'cookie', 'ice', 'pineapple', 'chili']);
 // projectile id -> hotbar food
 const ROOT = { grape: 'grapes', berry: 'blueberry', melonchunk: 'watermelon', cheesechunk: 'cheese', bananaslice: 'banana', pinechunk: 'pineapple' };
 // Whole foods that are cut into a different kind of piece (a wheel can't be cut into wheels)
@@ -41,12 +44,12 @@ const TINT = { tomato: '#e8321f', carrot: '#ff8a1c', ice: '#bfe9ff', soda: '#8a4
 const MIX_IMPACT = { tomato: 'tomato', carrot: 'carrot', ice: 'ice', soda: 'soda', chili: 'chili', cookie: 'cookie', jelly: 'jelly', grapes: 'grape', blueberry: 'berry', watermelon: 'melonchunk', cheese: 'cheesechunk', banana: 'bananaslice', pineapple: 'pinechunk' };
 
 export const UTENSILS = [
-  { id: 'knife', tip: 'A fan of 3 slices · uses 1 extra', name: 'Knife', role: 'Rapid-Fire Chopper', color: '#ff5a3c', works: THROWN,
-    buff: 'Slices your food into a fan of 3 that sweeps side to side; a cheese wheel or watermelon is diced into 5 mini balls that roll out in a spread (grapes and berries split in two).', trade: 'Uses 1 extra food per throw, and each slice or mini ball hits softer.' },
+  { id: 'knife', tip: '3 slices · cut through cheese shields', name: 'Knife', role: 'Rapid-Fire Chopper', color: '#ff5a3c', works: THROWN,
+    buff: 'Slices your food into a fan of 3 that flies far and cuts straight through cheese shields. Firm foods (carrot, cookie, ice, chili, pineapple, cheese) cut clean and hit harder. A cheese wheel or watermelon is diced into 5 mini balls that roll out in a spread (grapes and berries split in two).', trade: 'Uses 1 extra food per throw, and each slice or mini ball hits softer than a whole food.' },
   { id: 'ice-cream-machine', tip: 'Freezes on hit · leaves an ice patch', peelTip: 'Your peel lands on an ice patch', name: 'Ice Cream Machine', role: 'Cryo Converter', color: '#7fe3cf', works: WITH_PEEL,
     buff: 'Coats your food in soft-serve: it freezes whoever it hits and leaves an ice patch. A dropped peel gets an ice patch too.', trade: 'Takes half a second to churn, and the frozen shot flies slowly.' },
-  { id: 'spoon', tip: '5-pellet cone · short range', name: 'Spoon', role: 'Shotgun Burst', color: '#8f9cff', works: THROWN,
-    buff: 'Flings a heaped scoop as a tight cone of 5 pellets; grapes and blueberries come out in a fuller, tighter spray.', trade: 'Uses 1 extra food, and the pellets only fly a short way.' },
+  { id: 'spoon', tip: '5-scoop cone · soft splats slow, firm bonks shove', name: 'Spoon', role: 'Shotgun Burst', color: '#8f9cff', works: THROWN,
+    buff: 'Flings a heaped scoop as a tight cone of 5 dollops. Soft foods (tomato, jelly, soda, banana, melon, grapes, berries) splat and stick, slowing whoever they hit; firm foods bonk them and shove them back.', trade: 'Uses 1 extra food, and the dollops only fly a short way.' },
   { id: 'blow-torch', tip: 'Hold the throw 3 s to ignite', name: 'Blow Torch', role: 'Incendiary Charge', color: '#ff8a2a', works: THROWN,
     buff: 'Hold the throw for 3 s to set your food ablaze: harder hit plus 3 s of burning. Blueberries catch fire after 3 s of steady fire.', trade: 'You move at half speed while charging, and the torched food burns up 1 extra.' },
   { id: 'whisk', tip: 'Vortex where it lands', peelTip: 'Your peel gets a vortex that pulls enemies onto it', name: 'Whisk', role: 'Vortex Spinner', color: '#b98cff', works: WITH_PEEL,
@@ -57,8 +60,8 @@ export const UTENSILS = [
     buff: 'Flattens your food into a fast disc that ricochets off 2 walls and knocks back. Wheels and melons roll out faster.', trade: 'Hits a bit softer, and after a bounce the disc can hit you too.' },
   { id: 'microwave', tip: 'Hold 1–2 s, let go before 2.4 s', name: 'Microwave', role: 'Charged Plasma', color: '#ffc23a', works: THROWN,
     buff: 'Hold the throw 1 to 2 s to charge a glowing orb that explodes on impact. With blueberries, every 1.5 s of fire sends a plasma berry.', trade: 'Hold it past 2.4 s and it overcharges and pops on you.' },
-  { id: 'grater', tip: '8 shreds · short range', name: 'Grater', role: 'Flechette Cloud', color: '#ff9d3a', works: THROWN,
-    buff: 'Shreds your food into a fast, dense cloud of 8 shreds (grated cheese included).', trade: 'Shreds fall apart after a few metres, and it uses 1 extra food.' },
+  { id: 'grater', tip: '8 shreds up close · cheese, ice, chili shreds bite', name: 'Grater', role: 'Flechette Cloud', color: '#ff9d3a', works: THROWN,
+    buff: 'Shreds firm food into a fast, dense cloud of 8 shreds up close. Grated cheese sticks and slows, grated ice is a snow blast that chills (slows) on top of its freeze, grated chili burns. Soft food is too squishy to grate: it mushes into 5 blobs that leave slippery splats.', trade: 'Shreds fall apart after a few metres, and it uses 1 extra food.' },
   { id: 'spatula', tip: 'Every hit crits · banks off a wall', name: 'Spatula', role: 'Ricochet Crit', color: '#3fd0bf', works: THROWN,
     buff: 'Every hit is a critical hit (x1.75), and thrown food banks off one wall.', trade: 'A smaller hitbox and a slower throw: you have to aim it.' },
   { id: 'deep-fryer', tip: 'Sets targets on fire', peelTip: 'Your peel lands in an oil slick', name: 'Deep Fryer', role: 'Napalm Coater', color: '#ffb12a', works: WITH_PEEL,
@@ -226,8 +229,10 @@ const RULES = {
           return q;
         });
       }
-      // sliced: three pieces fanned out side to side (the Blender fires a straight jet instead)
-      return pieces(o, a, 3, { m: 0.45, sc: 0.62, delay: 0.03 }).map((q, i) => { q.vel.applyAxisAngle(_up, (i - 1) * 0.11); return q; });
+      // sliced: three pieces fanned out side to side (the Blender fires a straight jet instead); firm food
+      // cuts clean and hits harder. Every slice cuts through a cheese shield (see Projectiles._collide).
+      const firm = FIRM.has(o.food);
+      return pieces(o, a, 3, { m: firm ? 0.62 : 0.45, sc: 0.62, delay: 0.03 }).map((q, i) => { q.vel.applyAxisAngle(_up, (i - 1) * 0.11); return q; });
     },
   },
   'ice-cream-machine': {
@@ -246,9 +251,16 @@ const RULES = {
     launch(o, a, rel, I) {
       if (I.kind === 'pellet') { // a fuller, tighter spray along the aim
         const n = rel.auto || I.k % 2 === 0 ? 2 : 1, L = o.vel.length();
-        return Array.from({ length: n }, () => ({ ...clone(o), vel: jitter(aimOf(a).setLength(L), 0.05), x: { m: 0.7, sc: 0.9 } }));
+        return Array.from({ length: n }, () => ({ ...clone(o), vel: jitter(aimOf(a).setLength(L), 0.05), x: { m: 0.7, sc: 0.9, gl: 1 } }));
       }
-      return pieces(o, a, 5, { m: 0.4, sc: 0.55, jit: 0.11, life: 0.75, speed: 1.05, r: 0.7 });
+      // soft food splats and sticks (slows), firm food bonks (a shove)
+      return pieces(o, a, 5, { m: 0.4, sc: 0.55, jit: 0.11, life: 0.75, speed: 1.05, r: 0.7, x: FIRM.has(o.food) ? { wk: 1 } : { gl: 1 } });
+    },
+    post(p, hit) {
+      const t = hit.actor;
+      if (!t?.alive) return;
+      if (p.x.gl) t.addSticky(isPellet(p) ? 0.04 : 0.09, 1.6); // (all slows together stop at 50%)
+      if (p.x.wk) t.knock(_v.copy(p.vel).setY(0).normalize().multiplyScalar(2.6).setY(1.2)); // 5 bonks: about 13 m/s
     },
   },
   'blow-torch': {
@@ -312,8 +324,19 @@ const RULES = {
   grater: {
     cost: 1,
     launch(o, a, rel, I) {
-      if (I.kind === 'pellet') return [0, 1].map(() => ({ ...clone(o), vel: jitter(o.vel.clone().multiplyScalar(1.3), 0.12), life: 0.4, x: { m: 0.5, sc: 0.6 } }));
-      return pieces(o, a, 8, { m: 0.27, sc: 0.38, jit: 0.17, life: 0.34, speed: 1.5, grav: 0.4, r: 0.6 });
+      if (I.kind === 'pellet') return [0, 1].map(() => ({ ...clone(o), vel: jitter(o.vel.clone().multiplyScalar(1.3), 0.12), life: 0.4, x: { m: 0.5, sc: 0.6, ...(I.lead ? { sl: 1 } : {}) } }));
+      // soft food can't be grated: it squishes through as 5 slower blobs that leave slippery splats
+      if (!FIRM.has(o.food)) return pieces(o, a, 5, { m: 0.36, sc: 0.5, jit: 0.13, life: 0.55, speed: 1.1, grav: 0.8, r: 0.65, x: { sl: 1 } });
+      return pieces(o, a, 8, { m: 0.27, sc: 0.38, jit: 0.17, life: 0.34, speed: 1.5, grav: 0.4, r: 0.6, x: { gr: 1 } });
+    },
+    post(p, hit, U) {
+      if (p.x.sl && hit.world && hit.top) U.stampGround(hit.point, 1.1, 'slick', 3);
+      const t = hit.actor;
+      if (!p.x.gr || !t?.alive) return;
+      const root = ROOT[p.food] || p.food;
+      if (root === 'cheese') t.addSticky(0.07, 2); // grated cheese clings
+      else if (root === 'chili') t.burn(1.2); // spicy dust
+      else if (root === 'ice') t.addSticky(0.05, 1.5); // a snow blast chills (each shred still freezes, or shatters a freeze, as ice does)
     },
   },
   spatula: {
@@ -788,7 +811,7 @@ export class Utensils {
     else if (x.sc !== undefined) out.sc = n(x.sc, 0.2, 2);
     for (const k of ['wb', 'fb', 'pc']) if (x[k] !== undefined) out[k] = n(x[k], 0, 5) | 0;
     if (x.pa !== undefined) out.pa = n(x.pa, 0, 2);
-    for (const k of ['fl', 'pi', 'pp', 'nf', 'ns', 'sl', 'sp', 'sm', 'kb', 'tr', 'ps', 'pe', 'mb']) if (x[k]) out[k] = 1;
+    for (const k of ['fl', 'pi', 'pp', 'nf', 'ns', 'sl', 'sp', 'sm', 'kb', 'tr', 'ps', 'pe', 'mb', 'gl', 'wk', 'gr']) if (x[k]) out[k] = 1;
     if (typeof x.mx === 'string' && Object.values(MIX_IMPACT).includes(x.mx)) out.mx = x.mx;
     return out;
   }

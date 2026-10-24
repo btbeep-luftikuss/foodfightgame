@@ -277,7 +277,7 @@ export class Projectiles {
     const rad = p.radius;
     // 1) cheese shields block projectiles from the front
     for (const a of game.actors) {
-      if (!a.alive || !a.shieldUp || a === p.owner || p.roll || p.u === 'oven-mitt') continue; // a power throw goes straight through
+      if (!a.alive || !a.shieldUp || a === p.owner || p.roll || p.u === 'oven-mitt' || p.u === 'knife') continue; // a power throw or a knife slice goes straight through
       if (p.remote && SHOOTER_SHOTS.has(p.food) && !a.isRemote) continue; // (0.48: their game decides shield or body)
       forwardOf(a.yaw, _f);
       _c.copy(a.pos).addScaledVector(_f, 1.45).setY(a.pos.y + 1.0);
@@ -343,7 +343,7 @@ export class Projectiles {
         return false;
       }
       const point = top ? p.pos.clone().setY(s.groundY) : _prev.clone();
-      return this._impact(p, food, { point, world: true, top });
+      return this._impact(p, food, { point, world: true, top, from: _prev.clone() });
     }
     return false;
   }

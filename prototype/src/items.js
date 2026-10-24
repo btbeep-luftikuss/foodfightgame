@@ -287,7 +287,7 @@ export class Items {
   }
 
   stickDecor(p, seconds) {
-    this.decor.push({ food: p.food, mesh: p.mesh, until: this.game.time + seconds });
+    this.decor.push({ food: p.food, mesh: p.mesh, until: this.game.time + seconds, in: p.inside || null });
   }
 
   update(dt) {
@@ -381,7 +381,8 @@ export class Items {
     }
     for (let i = this.decor.length - 1; i >= 0; i--) {
       const d = this.decor[i];
-      if (now > d.until) { game.projectiles.releaseMesh(d.food, d.mesh); this.decor.splice(i, 1); }
+      // (a pot picked up or smashed takes its carrots with it)
+      if (now > d.until || (d.in && !d.in.enabled)) { game.projectiles.releaseMesh(d.food, d.mesh); this.decor.splice(i, 1); }
     }
     this._draw(now, cam);
   }
