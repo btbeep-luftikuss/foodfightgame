@@ -76,6 +76,18 @@ const LOG_KEEP = 1.5;   // seconds an event stays in the rolling log (pot moves:
 const LOG_MAX = 90;
 const MIN_SENT = 6;     // an event leaves the log once it went out this often and is past LOG_KEEP (pot moves: 5x)
 const BUDGET = 3900;    // bytes of one player's presence (the claude.ai room refuses over 4096)
+// (0.51) The game's version, in every update: players on different copies of the game (one browser still
+// showing an older one) play by different rules, so each is told to reload. Bump it with every release.
+export const NET_VERSION = 51;
+// What a hit did besides its damage, merged into the claim for it (freezes add up to 3, shoves add up)
+function mergeStatus(a, s) {
+  for (const [k, v] of Object.entries(s)) {
+    if (k === 'cc') a.cc = [...(a.cc || []), ...v].slice(-3);
+    else if (k === 'k') a.k = a.k ? a.k.map((x, i) => Math.round((x + v[i]) * 10) / 10) : v;
+    else a[k] = v;
+  }
+  return a;
+}
 const THROW_DEFAULTS = { g: 1, r: 0.35, l: 6, c: 1 }; // what a receiver assumes for a throw field left out (others: 0)
 const POT_EVENTS = new Set(['pp', 'lh', 'pc', 'ps']);
 const FLOOR_EVENTS = new Set(['it', 'ut', 'ub', 'g', 'ug']); // (0.44)
@@ -219,7 +231,7 @@ export class Net {
     this.game = game;
     this.room = null; this.connected = false;
     this.proxies = new Map(); // peer -> { actor, lastSeq, presence, recvAt, target, netVel, throws }
-    this.seq = 0; this.log = []; // log: { seq, type, arr (as sent), bytes, t, sent }
+    this.seq = 0; this.log = []; this.claims = new Map(); this.claim = null; // log: { seq, type, arr (as sent), bytes, t, sent }
     this.frame = 0;
     this.via = '';                // how this room is reached: 'claude' (the claude.ai room) or 'p2p'
     this.refused = 0; this.lost = ''; // updates the room refused; why the room ended (if it did)
@@ -311,25 +323,29 @@ export class Net {
   // (0.48) My throw hit them (a carrot, a berry, a grape: see SHOOTER_DECIDES): their game takes the damage.
   // What it does to them besides the damage (a freeze, a burn, a slow, a shove) goes with it: the status
   // calls on their Titan here land in noteStatus (before or after this, in the same instant).
+  // (0.51) Hits on the same Titan by the same thrower until my next update go as one claim, their damage
+  // added up: a stream of blueberries was one message a berry, crowding out the rest (throws, splats, pickups).
   claimHit(target, attacker, food, amount, head) {
     const to = this._peerOf(target), t = this.game.time;
     if (!to) return;
-    const st = this.stBuf && this.stBuf.actor === target && this.stBuf.t === t ? this.stBuf.st : {};
-    this.event('hc', to, food, Math.round(amount * 10) / 10, head ? 1 : 0, attacker !== this.game.player ? attacker.id : null, st);
-    this.claim = { target, t, st, ev: this.log.at(-1) };
+    const by = attacker !== this.game.player ? attacker.id : null, key = `${to}/${by}`;
+    let c = this.claims.get(key);
+    if (!c) this.claims.set(key, (c = { to, by, food, amt: 0, head: 0, st: {} }));
+    c.amt += amount; c.food = food; if (head) c.head = 1;
+    if (this.stBuf && this.stBuf.actor === target && this.stBuf.t === t) mergeStatus(c.st, this.stBuf.st);
+    this.claim = { target, t, c };
   }
   noteStatus(actor, s) {
     const t = this.game.time;
-    if (s.cc) s = { cc: [...(this.claim?.st?.cc || []), s.cc].slice(-3) };
+    if (s.cc) s = { cc: [s.cc] };
     if (s.k) s = { k: s.k.map((v) => Math.round(v * 10) / 10) };
-    if (this.claim && this.claim.target === actor && this.claim.t === t) { // (after the hit: into its event, if not sent yet)
-      Object.assign(this.claim.st, s);
-      const ev = this.claim.ev;
-      if (ev && !ev.sent) { ev.arr = JSON.parse(JSON.stringify([...ev.arr.slice(0, -1), this.claim.st])); ev.bytes = utf8(JSON.stringify(ev.arr)) + 1; }
-      return;
-    }
+    if (this.claim && this.claim.target === actor && this.claim.t === t) { mergeStatus(this.claim.c.st, s); return; } // (after the hit, in the same instant)
     if (!this.stBuf || this.stBuf.actor !== actor || this.stBuf.t !== t) this.stBuf = { actor, t, st: {} };
-    Object.assign(this.stBuf.st, s);
+    mergeStatus(this.stBuf.st, s);
+  }
+  _flushClaims() {
+    for (const c of this.claims.values()) this.event('hc', c.to, c.food, Math.round(c.amt * 10) / 10, c.head, c.by, c.st);
+    this.claims.clear(); this.claim = null;
   }
 
   _peerOf(actor) {
@@ -349,8 +365,9 @@ export class Net {
   _sendState() {
     const p = this.game.player, g = this.game, t = g.time;
     this.frame = (this.frame + 1) % 1e6;
+    this._flushClaims();
     // every field, every time: what isn't mine (any more) goes out as null, which takes it off my presence
-    const msg = { n: this.name, c: this.color, k: this.game.playerSkin, w: this.ready ? 1 : 0, hl: g.highlights.playing?.live ? 1 : 0, s: this._stateOf(p, this.game.input.pitch), pm: null, rs: null, rd: null, b: null, pw: null, e: [] };
+    const msg = { v: NET_VERSION, n: this.name, c: this.color, k: this.game.playerSkin, w: this.ready ? 1 : 0, hl: g.highlights.playing?.live ? 1 : 0, s: this._stateOf(p, this.game.input.pitch), pm: null, rs: null, rd: null, b: null, pw: null, e: [] };
     if (g.mode === 'pots') msg.pm = (g.potMenu || []).map((id) => FOOD_IDS.indexOf(id).toString(36)).join(''); // my pick for my pot's menu
     if (this.isHost && g.pots.active) msg.pw = [Math.max(0, g.round.id), ...g.pots.state()]; // Cooking Pot Wars: the pots
     msg.sp = this.isHost && g.round.id >= 0 ? [g.round.id, g.items.spawnerCode()] : null; // (0.44) which food spots hold food
@@ -608,6 +625,7 @@ export class Net {
     pr.ready = pres.w !== 0; // wants to play (older games always did)
     pr.watching = pres.hl === 1; // (0.38) watching the round's highlight reel (the next round waits for them)
     pr.actor.name = cleanName(pres.n);
+    this._checkVersion(pr, pres.v);
     if (/^#[0-9a-f]{6}$/i.test(pres.c)) pr.actor.ownColor = pres.c;
     pr.potMenu = typeof pres.pm === 'string' && pres.pm.length <= 5 ? [...pres.pm].map((c) => FOOD_IDS[parseInt(c, 36)]).filter(Boolean) : null;
     this._applyState(pr, pres.s);
@@ -630,6 +648,19 @@ export class Net {
       pr.lastSeq = Math.max(pr.lastSeq, top - 200);
       for (const q of pr.seen) if (q <= pr.lastSeq) pr.seen.delete(q);
     }
+  }
+
+  // (0.51) Someone on a different copy of the game: tell everyone who can fix it to reload (every 30 s
+  // while it lasts). Games before 0.51 don't say their version.
+  _checkVersion(pr, v) {
+    const theirs = typeof v === 'number' ? v : 0, now = this.game.time;
+    pr.version = theirs;
+    if (theirs === NET_VERSION || now < (pr.versionToldAt ?? -1e9) + 30) return;
+    pr.versionToldAt = now;
+    const name = pr.actor.name || 'Someone', hud = this.game.hud;
+    if (theirs < NET_VERSION) hud.banner(`${name} has an older copy of the game`, 'They need to reload the game page, or online play glitches', 6);
+    else hud.banner('There is a newer version of the game', `${name} has it: reload this page so you play by the same rules`, 6);
+    console.warn(`[online] ${name} plays version ${theirs || 'older than 51'}, this is ${NET_VERSION}`);
   }
 
   // A Titan's shared state (a player's or one of the host's bots).
@@ -740,7 +771,7 @@ export class Net {
       const log = (a.netClaims ||= new Map()), list = (log.get(t) || []).filter((x) => now - x < 1);
       if (list.length >= 60) return;
       list.push(now); log.set(t, list);
-      game.damage(t, num(d[2], 0, 400), a, food, { head: d[3] === 1, claimed: true });
+      game.damage(t, num(d[2], 0, 800), a, food, { head: d[3] === 1, claimed: true }); // (0.51: hits until their next update, added up)
       const st = d[5] && typeof d[5] === 'object' ? d[5] : null; // what else it did to them
       if (st && t.alive) {
         const n = (v, hi) => num(v, 0, hi);

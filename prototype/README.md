@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.51: online, everyone on the same game, and fewer messages** (`src/net.js`)
+
+- **A different copy of the game is caught.** Players' games didn't check they were the same version: after an update, a browser still showing the old page plays by the old rules (who decides a hit, how the floor's food is shared...) and the game glitches for everyone. Every update now carries the game's version (`NET_VERSION`, 51). If a player's is older (or missing: anything before 0.51), the others see "*Name* has an older copy of the game: they need to reload the game page"; if it's newer, "There is a newer version of the game: reload this page". Every 30 s while it lasts.
+- **Hits sent together.** Since 0.48 every carrot, blueberry and grape that hit another player went out as its own message (12 a second for a stream of blueberries, 8 at once for grapes, each sent up to 6 times), on top of the throws; in a busy round that could crowd out the rest of the messages (throws, splats, pickups, the round), which then come late or not at all. Now the hits on one Titan by one thrower between two updates go as one, their damage added up and what else they did merged (freezes add up to 3, shoves add up).
+- Tests: carrots at a moving player (4 hits, 220), an Ice Cream Machine carrot (damage and freeze), the Knife, Spoon and Grater online, a 0.50 and a 0.51 player together (the 0.51 player is told) and two 0.51 players (nobody is), the 0.44 fixes, Cooking Pot Wars, the shared floor, the claude.ai room, peer-to-peer, Low internet, 3-player online play. No errors.
+
 **Version 0.50: the highlight reels show utensils and abilities as they were** (`src/highlights.js`, `src/utensils.js`, `src/abilities.js`, `src/surface.js`, `index.html`)
 
 - **Utensil throws look like they did.** The reels recorded each flying food's size as one number, so a Rolling Pin's flat disc came back as a round food; and nothing of the utensil came back at all. Now the reel records the food's whole shape and its utensil, and replays its coat (the Ice Cream Machine's soft-serve, the Blow Torch's flames, the Microwave's plasma orb, the Deep Fryer's oil, the Oven Mitt's bubble, the Mixer's second food) and its trail. The Titans hold the utensil they had then.
