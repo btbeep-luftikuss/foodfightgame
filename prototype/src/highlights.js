@@ -40,9 +40,11 @@ import * as THREE from 'three';
 import { clamp, damp, lerp, raycastWorld, segSegDist2, angleLerp, forwardOf, FLOOR_Y } from './core.js';
 import { FOODS, FOOD_IDS } from './foods.js';
 import { PALETTE } from './fx.js';
+import { UTENSIL_IDS, UTENSIL_BY_ID, utensilIcon } from './utensils.js';
+import { SPIKE_GAP, ULT_COLOR } from './abilities.js';
 
 const HZ = 15;                // frames a second
-const K = 13;                 // numbers per Titan per frame: x y z yaw pitch vx vy vz flags charge armT held hitFlash
+const K = 14;                 // numbers per Titan per frame: x y z yaw pitch vx vy vz flags charge armT held hitFlash utensil
 const FL = { alive: 1, ground: 2, glide: 4, dash: 8, trip: 16, frozen: 32, rooted: 64, charging: 128, shield: 256, eating: 512, burning: 1024 };
 const KEEP = 9;               // seconds of the latest frames always kept (a throw can fly for 6 s)
 const SNIPE = 30;             // metres: a hit by a throw that flew this far is a snipe
@@ -69,6 +71,13 @@ const danger = (food) => FOODS[food]?.dmg ?? 25; // (most foods work out their d
 const mult = (n) => ['', '', 'Double', 'Triple', 'Quadruple'][n] || `${n}x`;
 // each food's splash (fx.js bursts), for the knockout's big one
 const BURST = { tomato: 'tomato', banana: 'banana', carrot: 'carrot', ice: 'ice', soda: 'soda', cheese: 'cheese', grapes: 'grape', grape: 'grape', chili: 'fire', cookie: 'crumb', watermelon: 'melon', melonchunk: 'melon', pineapple: 'pine', jelly: 'jelly', blueberry: 'berry', berry: 'berry' };
+// (0.50) a splat by an ability (its damage's name): what it's called, its colour, the big word
+const ABILITY = {
+  storm: ['Ice Storm', ULT_COLOR.ice, 'Blizzard!'], spikes: ['Spike Line', ULT_COLOR.pineapple, 'Skewered!'],
+  flames: ['Flamethrower', ULT_COLOR.chili, 'Toasted!'], tslam: ['Tomato Dash', ULT_COLOR.tomato, 'Slammed!'],
+  smash: ['Melon Smash', ULT_COLOR.watermelon, 'Smashed!'], megajump: ['Mega Jump', ULT_COLOR.soda, 'Stomped!'],
+  juice: ['Juice Ball', ULT_COLOR.grapes, 'Juiced!'], warp: ['Teleport', ULT_COLOR.carrot, 'Warped!'],
+};
 const dirOf = (az, el, out) => out.set(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az));
 // a Titan's colour made bright and saturated (a trail that shows up on a cream table)
 const vivid = (css) => { const c = new THREE.Color(css || '#ffd447'), h = {}; c.getHSL(h); return c.setHSL(h.h, Math.max(0.75, h.s), clamp(h.l, 0.52, 0.6)); };
@@ -165,6 +174,32 @@ export class Highlights {
       if (R?.live && !R.emitting) return;
       return play(name, pos, gain);
     };
+    // (0.50) every puddle, rink and patch on the floor (soda, ice, melted cheese, a Juice Ball's...)
+    const S = game.surface, addZone = S._addZone.bind(S);
+    S._addZone = (x, y, z, r, look, now, duration) => {
+      if (this.rec && !this.playing?.emitting) this.events.push({ t: game.time, pud: look, x, y, z, r, end: game.time + duration });
+      return addZone(x, y, z, r, look, now, duration);
+    };
+  }
+  // (0.50) An ability's storm, spike line, ground fire or flamethrower starts.
+  onAbility(kind, o) {
+    if (!this.rec) return;
+    const t = this.game.time;
+    let e;
+    if (kind === 'storm') e = { ab: kind, x: o.pos.x, y: o.pos.y, z: o.pos.z, r: o.r, end: o.until };
+    else if (kind === 'flame') e = { ab: kind, x: o.pos.x, y: o.pos.y, z: o.pos.z, r: o.r, seed: o.seed, end: o.until };
+    else if (kind === 'spikes') e = { ab: kind, pts: o.pts.map((sp) => [sp.p.x, sp.p.y, sp.p.z, sp.s, sp.tilt, sp.spin]), end: o.until };
+    else if (kind === 'flamer') { if (!this.idx.has(o.owner)) return; e = { ab: kind, a: this.idx.get(o.owner), end: t + o.dur }; }
+    else return;
+    e.t = t;
+    this.events.push(e);
+  }
+  // (0.50) A utensil's zone (a Whisk's vortex, a Mortar's cloud, a Deep Fryer's fire, a candy web) starts.
+  onZone(z) {
+    if (!this.rec) return;
+    const e = { t: this.game.time, zone: z.kind, x: z.pos.x, y: z.pos.y, z: z.pos.z, r: z.r, tint: z.tint, dur: z.until - z.t0, end: z.until, wind: z.wind ? [z.wind.x, z.wind.z] : null };
+    z.hl = e; // (its real end, if it goes early)
+    this.events.push(e);
   }
 
   // ------------------------------------------------------------------ recording
@@ -225,12 +260,14 @@ export class Highlights {
       buf[o + 10] = a.armT;
       buf[o + 11] = HELD.indexOf(a.selected()?.id);
       buf[o + 12] = a.hitFlash;
+      buf[o + 13] = UTENSIL_IDS.indexOf(a.utensil); // (0.50) the utensil in their hand
     });
     const proj = [];
     for (const p of g.projectiles.list) {
       if (p.done || !p.hl || !p.mesh?.visible) continue;
       const m = p.mesh;
-      proj.push([p.hl.id, p.food, m.position.x, m.position.y, m.position.z, m.rotation.x, m.rotation.y, m.rotation.z, m.userData.inner?.rotation.x || 0, m.scale.x]);
+      // (0.50) its whole shape (a Rolling Pin flattens it into a disc) and its utensil's coat
+      proj.push([p.hl.id, p.food, m.position.x, m.position.y, m.position.z, m.rotation.x, m.rotation.y, m.rotation.z, m.userData.inner?.rotation.x || 0, m.scale.x, m.scale.y, m.scale.z, p.hl.u]);
     }
     this.frames.push({ t, a: buf, p: proj, tide: [g.tide.x, g.tide.z, g.tide.r] });
     if (t >= this.pruneAt) this._prune();
@@ -247,16 +284,18 @@ export class Highlights {
     this.actors.forEach((a, i) => { this.meta[i].name = a.name; this.meta[i].color = a.color; });
     const keep = (x) => x >= from || wins.some(([a, b]) => x >= a && x <= b);
     this.frames = this.frames.filter((f) => keep(f.t));
-    this.events = this.events.filter((e) => keep(e.t));
+    this.events = this.events.filter((e) => keep(e.t) || (e.end && (e.end >= from || wins.some(([a, b]) => e.t <= b && e.end >= a)))); // (a puddle or zone that lasts into a clip)
   }
 
   onLaunch(p) {
     if (!this.rec) return;
     const g = this.game;
+    // (0.50) a utensil's throw: which, how big a coat, and the bits of it that change its look
+    const u = p.u ? { u: p.u, r: p.radius, x: { sm: p.x.sm ? 1 : 0, mx: p.x.mx || '', pp: p.x.pp ? 1 : 0 }, pel: /^(grape|berry)$/.test(p.food) } : null;
     p.hl = {
-      id: this.nextPid++, t: g.time, from: (p.owner?.pos || p.pos).clone(), owner: p.owner, near: null,
+      id: this.nextPid++, t: g.time, from: (p.owner?.pos || p.pos).clone(), owner: p.owner, near: null, u, bank: 0, hits: 0,
       // its flight, from the hand (it left at the start of this step)
-      path: { s: [g.time - (this.stepDt || 1 / 30), p.pos.x, p.pos.y, p.pos.z], orient: !!p.orient, food: p.food },
+      path: { s: [g.time - (this.stepDt || 1 / 30), p.pos.x, p.pos.y, p.pos.z], orient: !!p.orient, food: p.food, u },
     };
   }
 
@@ -273,7 +312,8 @@ export class Highlights {
     }
     // how far: the length of its flight, up and down included (0.40); else thrower to target
     const dist = P ? flownTo(P, ti) : p.hl.from.distanceTo(a.pos);
-    this.pending = { victim: a, by: p.owner, t, launchT: p.hl.t, dist, pid: p.hl.id, head: !!head, food: p.food, path: P, ti };
+    p.hl.hits++; // (a Colander throw goes on through: the 2nd, 3rd Titan it skewers)
+    this.pending = { victim: a, by: p.owner, t, launchT: p.hl.t, dist, pid: p.hl.id, head: !!head, food: p.food, path: P, ti, u: p.u || '', bank: p.hl.bank, nth: p.hl.hits };
   }
 
   // (online, a hit on another player is their game's to decide: this is the damage it showed here)
@@ -287,25 +327,27 @@ export class Highlights {
     log.push(rec); if (log.length > 12) log.shift();
     this.hitLog.set(target, log);
     if (pend && rec.dist >= SNIPE && amt >= 14) this._snipe(rec); // (not a stray berry or grape)
-    else if (attacker === g.player && (amt >= 30 || rec.head)) this._bigHit(rec);
+    else if (attacker === g.player && (amt >= 30 || rec.head || (pend && this._trick(rec) && amt >= 12))) this._bigHit(rec); // (a trick shot is worth seeing)
   }
 
-  _hit(rec) { return { tk: rec.t, tt: rec.launchT, ti: rec.ti ?? rec.t, b: this.idx.get(rec.victim), pid: rec.pid, path: rec.path || null, head: !!rec.head, dist: rec.dist, food: rec.food }; }
+  _hit(rec) { return { tk: rec.t, tt: rec.launchT, ti: rec.ti ?? rec.t, b: this.idx.get(rec.victim), pid: rec.pid, path: rec.path || null, head: !!rec.head, dist: rec.dist, food: rec.food, u: rec.u || '', bank: rec.bank || 0, nth: rec.nth || 1 }; }
+  // (0.50) a throw's trick shots: banked off a wall (Rolling Pin, Spatula), on through another Titan (Colander)
+  _trick(rec) { return (rec?.bank ? 16 : 0) + ((rec?.nth || 1) > 1 ? 14 : 0); }
 
   _snipe(rec) {
     const a = this.idx.get(rec.by), hit = this._hit(rec);
     const old = this.moments.find((m) => m.pid === rec.pid && m.kind === 'snipe');
     if (old) return; // the same throw (it pierced on through someone else)
     this._add({
-      kind: 'snipe', a, hits: [hit], pid: rec.pid, dist: rec.dist, food: rec.food, head: rec.head, amt: rec.amt, ko: false, count: 1,
-      score: 32 + Math.min(36, (rec.dist - SNIPE) * 1.2) + (rec.head ? 15 : 0) + Math.min(20, rec.amt / 3),
+      kind: 'snipe', a, hits: [hit], pid: rec.pid, dist: rec.dist, food: rec.food, head: rec.head, amt: rec.amt, ko: false, count: 1, u: rec.u,
+      score: 32 + Math.min(36, (rec.dist - SNIPE) * 1.2) + (rec.head ? 15 : 0) + Math.min(20, rec.amt / 3) + this._trick(rec),
     });
   }
 
   _bigHit(rec) {
     const a = this.idx.get(rec.by);
     if (this.moments.some((m) => m.a === a && Math.abs(m.hits.at(-1).tk - rec.t) < 2)) return; // already part of a play
-    this._add({ kind: 'hit', a, hits: [this._hit(rec)], pid: rec.pid, dist: rec.dist, food: rec.food, head: rec.head, amt: rec.amt, ko: false, count: 1, score: 12 + rec.amt / 2 + (rec.head ? 12 : 0) });
+    this._add({ kind: 'hit', a, hits: [this._hit(rec)], pid: rec.pid, dist: rec.dist, food: rec.food, head: rec.head, amt: rec.amt, ko: false, count: 1, u: rec.u, score: 12 + rec.amt / 2 + (rec.head ? 12 : 0) + this._trick(rec) });
   }
 
   // `late`: how long after the hit that knocked them out the knockout can come (online it comes over
@@ -319,10 +361,10 @@ export class Highlights {
     const dist = link ? link.dist : killer.pos.distanceTo(victim.pos);
     const hit = link ? this._hit(link) : { tk: t, tt: null, ti: t, b, pid: 0, path: null, head: false, dist, food: foodId };
     const same = link && t - link.t <= late;
-    if (link && !same) Object.assign(hit, { tt: null, ti: t, pid: 0, path: null }); // (knocked out later, by a burn: not that throw's moment)
+    if (link && !same) Object.assign(hit, { tt: null, ti: t, pid: 0, path: null, bank: 0, nth: 1 }); // (knocked out later, by a burn: not that throw's moment)
     hit.tk = same ? link.t : t; hit.b = b;
     const air = !killer.onGround;
-    const bonus = Math.min(40, dist * 0.8) + (link?.head ? 15 : 0) + (air ? 10 : 0);
+    const bonus = Math.min(40, dist * 0.8) + (link?.head ? 15 : 0) + (air ? 10 : 0) + (same ? this._trick(link) : 0);
     // a snipe that knocked them out: a snipe splat
     const snipe = link?.pid ? this.moments.find((m) => m.kind === 'snipe' && m.pid === link.pid && m.hits[0].b === b) : null;
     if (snipe) { snipe.ko = true; snipe.score += 45; snipe.t1 = Math.max(snipe.t1, hit.tk + 2.2); snipe.pre = this._pre(victim, hit.tk); return; }
@@ -337,7 +379,7 @@ export class Highlights {
     // (a big hit that was the same throw becomes this splat)
     const big = this.moments.findIndex((m) => m.kind === 'hit' && m.a === a && Math.abs(m.hits[0].tk - t) < 0.3);
     if (big >= 0) this.moments.splice(big, 1);
-    this._add({ kind: 'splat', a, hits: [hit], pid: hit.pid, dist, food: link?.food || foodId, head: !!link?.head, ko: true, count: 1, score: 48 + bonus, pre: this._pre(victim, hit.tk) });
+    this._add({ kind: 'splat', a, hits: [hit], pid: hit.pid, dist, food: link?.food || foodId, head: !!link?.head, ko: true, count: 1, u: same ? link.u : '', score: 48 + bonus, pre: this._pre(victim, hit.tk) });
   }
 
   // (0.46) The hits that wore a Titan down before the one that splatted them: from the last PRE_BACK s,
@@ -509,6 +551,9 @@ class Reel {
     this.live = !!opts.live;   // online: the match goes on underneath (see unpose)
     this.rInv = new Map();     // (online) what each Titan holds in the replay, apart from what they hold live
     this.ghosts = new Map(); // pid -> mesh
+    this.zg = new Map();     // (0.50) a recorded utensil zone -> its replayed one
+    this.pg = new Map();     // ... a recorded puddle -> its replayed one
+    this.ag = new Map();     // ... a recorded ice storm -> its replayed one
     this.paths = new Map();  // pid -> the flight path of a throw in this play
     this.cam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 55, shot: -1, clip: -1, rt: 0 };
     this.freeze = 0; this.punch = 0; this.shake = 0; this.realDt = 0; this.lastSg = 1;
@@ -537,7 +582,7 @@ class Reel {
       a, pos: a.pos.clone(), vel: a.vel.clone(), yaw: a.yaw, aimY: a.aimDir.y, alive: a.alive, vis: a.root.visible,
       onGround: a.onGround, gliding: a.gliding, dashT: a.dashT, frozenUntil: a.frozenUntil, trippedUntil: a.trippedUntil,
       rootedUntil: a.rootedUntil, burnUntil: a.burnUntil, charging: a.charging, chargeT: a.chargeT, armT: a.armT,
-      eat: a.eat, shieldUp: a.shieldUp, inv: a.inv, sel: a.sel, hitFlash: a.hitFlash, fpCam: a.fpCam,
+      eat: a.eat, shieldUp: a.shieldUp, inv: a.inv, sel: a.sel, hitFlash: a.hitFlash, fpCam: a.fpCam, utensil: a.utensil,
     }));
   }
   _putBack(list) {
@@ -546,7 +591,7 @@ class Reel {
       Object.assign(a, {
         yaw: x.yaw, alive: x.alive, onGround: x.onGround, gliding: x.gliding, dashT: x.dashT, frozenUntil: x.frozenUntil,
         trippedUntil: x.trippedUntil, rootedUntil: x.rootedUntil, burnUntil: x.burnUntil, charging: x.charging, chargeT: x.chargeT,
-        armT: x.armT, eat: x.eat, shieldUp: x.shieldUp, inv: x.inv, sel: x.sel, hitFlash: x.hitFlash, fpCam: x.fpCam,
+        armT: x.armT, eat: x.eat, shieldUp: x.shieldUp, inv: x.inv, sel: x.sel, hitFlash: x.hitFlash, fpCam: x.fpCam, utensil: x.utensil,
       });
       a.pos.copy(x.pos); a.vel.copy(x.vel); a.aimDir.y = x.aimY;
       a.root.visible = x.vis; a.root.scale.set(1, 1, 1);
@@ -567,6 +612,7 @@ class Reel {
     g.fx.clear();
     if (this.live) return; // (online: posed and put back frame by frame, see _pose)
     for (const p of this.g.projectiles.list) p.mesh.visible = false;
+    this.saved.world = this._hideWorld();
     for (const a of this.hl.actors) { a.fpCam = null; a.inv = [null, null, null, null, null]; a.sel = 0; }
   }
   // Online, the match goes on under the reel (the host still runs the room). Each frame: keep the live
@@ -581,6 +627,7 @@ class Reel {
       others: g.actors.filter((a) => !this.hl.idx.has(a)).map((a) => [a, a.root.visible]),
     };
     for (const p of g.projectiles.list) p.mesh.visible = false;
+    this.posed.world = this._hideWorld();
     for (const [a] of this.posed.others) { a.root.visible = false; a.glint.visible = false; }
     for (const a of this.hl.actors) {
       if (!this.rInv.has(a)) this.rInv.set(a, [null, null, null, null, null]);
@@ -595,14 +642,40 @@ class Reel {
     const g = this.g;
     this._putBack(s.actors);
     for (const [p, v] of s.proj) p.mesh.visible = v && !p.done;
+    this._showWorld(s.world);
     for (const [a, v] of s.others) a.root.visible = v;
     g.time = s.time;
     g.world.setTide(g.tide.x, g.tide.z, g.tide.r);
   }
+  // (0.50) The live match's utensil zones and puddles, hidden while the replay shows its own.
+  _hideWorld() {
+    const g = this.g, list = [];
+    for (const z of g.utensils.zones) if (z.mesh) list.push([z.mesh, z.mesh.visible]);
+    for (const z of g.surface.zones) list.push([z.mesh, z.mesh.visible]);
+    for (const v of g.abilities.vortices) list.push([v.group, v.group.visible]);
+    for (const [m] of list) m.visible = false;
+    return list;
+  }
+  _showWorld(list) {
+    for (const [m, v] of list || []) m.visible = v;
+    this.g.abilities.drawAt(this.g.time); // (the live ground fires and spikes again)
+  }
+  _clearWorld() {
+    const g = this.g;
+    for (const z of this.zg.values()) g.utensils._dropZone(z);
+    for (const z of this.pg.values()) g.surface.dropPuddle(z);
+    for (const v of this.ag.values()) g.abilities._dropVortex(v);
+    this.zg.clear(); this.pg.clear(); this.ag.clear();
+  }
+  _drop(m) { // a replayed food (and its utensil coat) back to the pools
+    this.g.utensils.releaseAttach(m.userData.att); m.userData.att = null; m.userData.uv = null;
+    this.g.projectiles.releaseMesh(m.userData.food, m);
+  }
   _restore() {
     const g = this.g, s = this.saved;
-    for (const m of this.ghosts.values()) g.projectiles.releaseMesh(m.userData.food, m);
+    for (const m of this.ghosts.values()) this._drop(m);
     this.ghosts.clear();
+    this._clearWorld();
     if (this.live) { // (online: the match went on; it's back as it is now, the camera to the match)
       this.unpose();
       for (const a of this.hl.actors) { a.root.scale.set(1, 1, 1); a._refreshHeld(); }
@@ -614,6 +687,7 @@ class Reel {
     this._putBack(s.actors);
     for (const x of s.actors) x.a._refreshHeld();
     for (const [p, v] of s.projVis) p.mesh.visible = v && !p.done;
+    this._showWorld(s.world);
     g.time = s.time; g.fovKick = s.fovKick;
     g.camera.position.copy(s.camPos); g.camera.quaternion.copy(s.camQ); g.camera.fov = s.fov; g.camera.updateProjectionMatrix();
     g.world.setTide(...s.tide);
@@ -787,6 +861,12 @@ class Reel {
       const victims = c.hits.map((h) => this._name(h.b));
       text = `${a} splatted ${victims.length > 1 ? `${victims.slice(0, -1).join(', ')} and ${victims.at(-1)}` : victims[0]}${c.dist >= 12 && n === 1 ? ` from <b>${Math.round(c.dist)} m</b>` : ''}`;
     }
+    // (0.50) the utensil that made it, and its trick: banked off a wall, on through another Titan
+    const u = c.kind !== 'dodge' && UTENSIL_BY_ID[c.u], bank = c.kind !== 'dodge' && c.hits.some((h) => h.bank), skew = c.kind !== 'dodge' && c.hits.some((h) => h.nth > 1);
+    if (n === 1 && bank) kind = c.ko ? 'Bank shot splat' : 'Bank shot'; // (a double, a triple keeps its name)
+    else if (n === 1 && skew) kind = c.ko ? 'Skewer splat' : 'Skewered';
+    if (u) text += ` <span class="ut"><img src="${utensilIcon(c.u)}" alt="">${esc(u.name)}${bank ? ', off the wall' : skew ? ', on through' : ''}</span>`;
+    else if (c.kind !== 'dodge' && ABILITY[c.food]) text += ` <span class="ut ab" style="--c:${ABILITY[c.food][1]}">${ABILITY[c.food][0]}</span>`;
     this.el('reel-kind').textContent = kind;
     this.el('reel-text').innerHTML = text;
     this.el('reel-n').textContent = `${this.ci + 1} / ${this.clips.length}`;
@@ -851,7 +931,7 @@ class Reel {
     this.popped = new Set();
     this.freeze = 0; this.punch = 0; this.shake = 0;
     this.cam.shot = -1;
-    for (const m of this.ghosts.values()) this.g.projectiles.releaseMesh(m.userData.food, m);
+    for (const m of this.ghosts.values()) this._drop(m);
     this.ghosts.clear();
     this.g.fx.clear();
     for (const r of this.rings) { r.age = 9; r.m.visible = false; }
@@ -1017,7 +1097,7 @@ class Reel {
       this.stage = 'play';
       this.shots = this.mainShots; this.mainShots = null;
       this.t = c.t0; this.evT = c.t0; this.freeze = 0;
-      for (const m of this.ghosts.values()) this.g.projectiles.releaseMesh(m.userData.food, m);
+      for (const m of this.ghosts.values()) this._drop(m);
       this.ghosts.clear();
       return;
     }
@@ -1075,6 +1155,11 @@ class Reel {
     else if (c.kind === 'snipe') word = ko ? 'Sniped!' : 'Snipe!';
     else if (c.kind === 'hit') word = 'Bam!';
     else word = n ? `${mult(n + 1)}!` : c.final && c.hits.length === 1 ? 'Winner!' : 'Splat!';
+    if (!dodge && !n && !h.head && !(c.final && ko)) { // (0.50) a trick shot, an ability
+      if (h.bank) word = ko ? 'Bank splat!' : 'Bank shot!';
+      else if (h.nth > 1) word = 'Skewered!';
+      else if (ABILITY[h.food || c.food] && c.kind !== 'snipe') word = ABILITY[h.food || c.food][2];
+    }
     this._pop(word, dodge ? 'dodge' : ko ? 'ko' : '', dodge ? 0.15 : big ? 0.9 : ko ? 0.85 : 0.6);
     this.freeze = dodge ? 0.1 : big ? 0.32 : ko ? 0.24 : 0.15;
     this.punch = dodge ? 0.4 : big ? 1.35 : ko ? 1 : 0.7;
@@ -1105,17 +1190,72 @@ class Reel {
     }
   }
 
-  _ghost(pid, food) {
+  _ghost(pid, food, uv) {
     let m = this.ghosts.get(pid);
-    if (!m) { m = this.g.projectiles.getMesh(food); m.userData.food = food; this.ghosts.set(pid, m); }
+    if (!m) {
+      m = this.g.projectiles.getMesh(food); m.userData.food = food; this.ghosts.set(pid, m);
+      if (uv) { m.userData.uv = uv; m.userData.att = this.g.utensils.attach(uv.u, uv.x, uv.r, m.position); m.userData.trT = 0; } // (0.50) its utensil's coat
+    }
     m.visible = true;
     return m;
+  }
+  // (0.50) A replayed utensil throw: its coat follows it, its trail puffs out behind.
+  _coat(m, step) {
+    const uv = m.userData.uv;
+    if (!uv) return;
+    const U = this.g.utensils;
+    U.poseAttach(m.userData.att, m.position, uv.r, this.t, step);
+    if ((m.userData.trT -= step) > 0 || this.g.fx.scale <= 0) return;
+    m.userData.trT = uv.pel ? 0.09 : 0.045;
+    this.emitting = true; U.trail(uv.u, m.userData.food, m.position, uv.x); this.emitting = false;
+  }
+  // (0.50) The utensil zones and puddles of the moment shown, as they were then.
+  _world(t, step) {
+    const g = this.g, U = g.utensils, S = g.surface, Ab = g.abilities, flames = [], lines = [];
+    for (const e of this.hl.events) {
+      if (!e.zone && !e.pud && !e.ab) continue;
+      const on = t >= e.t && t < e.end;
+      if (e.ab) { // an ability's storm, fires, spikes, flamethrower
+        if (e.ab === 'storm') {
+          let v = this.ag.get(e);
+          if (!on) { if (v) { Ab._dropVortex(v); this.ag.delete(e); } continue; }
+          if (!v) { v = Ab.stormMesh({ pos: new THREE.Vector3(e.x, e.y, e.z), born: e.t, until: e.end, r: e.r }); this.ag.set(e, v); }
+          Ab.stormLook(v, t, step);
+        } else if (!on) continue;
+        else if (e.ab === 'flame') flames.push({ pos: _u.set(e.x, e.y, e.z).clone(), r: e.r, born: e.t, until: e.end, seed: e.seed });
+        else if (e.ab === 'spikes') lines.push({ born: e.t, until: e.end, pts: e.pts.map((p, i) => ({ p: new THREE.Vector3(p[0], p[1], p[2]), s: p[3], tilt: p[4], spin: p[5], up: t >= e.t + i * SPIKE_GAP })) });
+        else if (e.ab === 'flamer' && step > 0) { // from their hand, the way they faced
+          const a = this.hl.actors[e.a];
+          if (!a?.alive) continue;
+          const p = Math.asin(clamp(a.aimDir.y, -0.6, 0.45));
+          Ab.flamerFx(a.handPos(_rt), _up.set(-Math.sin(a.yaw) * Math.cos(p), Math.sin(p), -Math.cos(a.yaw) * Math.cos(p)));
+        }
+        continue;
+      }
+      if (e.zone) {
+        let z = this.zg.get(e);
+        if (!on) { if (z) { U._dropZone(z); this.zg.delete(e); } continue; }
+        if (!z) {
+          z = { kind: e.zone, pos: new THREE.Vector3(e.x, e.y, e.z), r: e.r, tint: e.tint, t0: e.t, until: e.t + e.dur, mesh: null };
+          U.zoneMesh(z); this.zg.set(e, z);
+        }
+        if (e.wind) z.pos.set(e.x + e.wind[0] * (t - e.t), e.y, e.z + e.wind[1] * (t - e.t)); // (a cloud drifts on the wind)
+        this.emitting = true; U.zoneLook(z, t, step); this.emitting = false;
+      } else {
+        let z = this.pg.get(e);
+        if (!on) { if (z) { S.dropPuddle(z); this.pg.delete(e); } continue; }
+        if (!z) { z = S.puddle(e.x, e.y, e.z, e.r, e.pud, e.t, e.end - e.t); this.pg.set(e, z); }
+        S.posePuddle(z, t);
+      }
+    }
+    Ab.drawAt(t, flames, lines);
   }
   _spin(m, q, r, k) { // a food's tumble between two frames
     _qa.setFromEuler(_ea.set(q[5], q[6], q[7])); _qb.setFromEuler(_eb.set(r[5], r[6], r[7]));
     m.quaternion.slerpQuaternions(_qa, _qb, k);
     if (m.userData.inner) m.userData.inner.rotation.x = angleLerp(q[8], r[8], k);
-    m.scale.setScalar((k < 0.5 ? q : r)[9] || 1);
+    const S = k < 0.5 ? q : r;
+    m.scale.set(S[9] || 1, S[10] ?? S[9] ?? 1, S[11] ?? S[9] ?? 1); // (0.50: flat, stretched, as it flew)
   }
 
   // Pose everything at the clip's time, then the camera.
@@ -1156,6 +1296,8 @@ class Reel {
       if ((a.inv[0]?.id || null) !== id) a.inv[0] = id ? { id, count: 1 } : null;
       a.sel = 0;
       if ((a.heldId || null) !== id) a._refreshHeld();
+      const ui = (k < 0.5 ? A : B)[o + 13];
+      a.utensil = ui >= 0 ? UTENSIL_IDS[ui] : null; // (0.50) the utensil they had then (drawn by updateVisual)
       const food = id ? FOODS[id] : null;
       a.chargeT = lerp(A[o + 9], B[o + 9], kk) * Math.max(0.2, food?.charge || 1);
       a.armT = lerp(A[o + 10], B[o + 10], kk);
@@ -1166,11 +1308,12 @@ class Reel {
     for (const [pid, P] of this.paths) {
       if (t < P.s[0] || t > pathEnd(P)) continue;
       seen.add(pid);
-      const m = this._ghost(pid, P.food);
+      const m = this._ghost(pid, P.food, P.u);
       pathAt(P, t, m.position, _v);
       const q = F.p.find((x) => x[0] === pid), r = N.p.find((x) => x[0] === pid);
       if (q || r) this._spin(m, q || r, r || q, k);
       if (P.orient && _v.lengthSq() > 1e-6) m.lookAt(_w.copy(m.position).sub(_v)); // (a carrot's tip leads)
+      this._coat(m, step);
     }
     for (const q of F.p) {
       const pid = q[0], P = this.paths.get(pid);
@@ -1178,19 +1321,22 @@ class Reel {
       const r = N.p.find((x) => x[0] === pid);
       if (!r && k >= 0.5) continue; // (it landed between these two frames)
       seen.add(pid);
-      const m = this._ghost(pid, q[1]), R = r || q;
+      const m = this._ghost(pid, q[1], q[12]), R = r || q;
       m.position.set(lerp(q[2], R[2], k), lerp(q[3], R[3], k), lerp(q[4], R[4], k));
       this._spin(m, q, R, k);
+      this._coat(m, step);
     }
     for (const r of N.p) { // (just thrown, between these two frames)
       const pid = r[0];
       if (seen.has(pid) || this.paths.has(pid) || k < 0.5 || F.p.some((x) => x[0] === pid)) continue;
       seen.add(pid);
-      const m = this._ghost(pid, r[1]);
+      const m = this._ghost(pid, r[1], r[12]);
       m.position.set(r[2], r[3], r[4]);
       this._spin(m, r, r, 0);
+      this._coat(m, step);
     }
-    for (const [pid, m] of this.ghosts) if (!seen.has(pid)) { g.projectiles.releaseMesh(m.userData.food, m); this.ghosts.delete(pid); }
+    for (const [pid, m] of this.ghosts) if (!seen.has(pid)) { this._drop(m); this.ghosts.delete(pid); }
+    this._world(t, step);
     g.world.setTide(lerp(F.tide[0], N.tide[0], k), lerp(F.tide[1], N.tide[1], k), lerp(F.tide[2], N.tide[2], k));
     // animate at the speed of play (slow motion slows the Titans too)
     for (const a of hl.actors) {

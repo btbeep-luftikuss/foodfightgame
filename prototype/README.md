@@ -63,6 +63,16 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.50: the highlight reels show utensils and abilities as they were** (`src/highlights.js`, `src/utensils.js`, `src/abilities.js`, `src/surface.js`, `index.html`)
+
+- **Utensil throws look like they did.** The reels recorded each flying food's size as one number, so a Rolling Pin's flat disc came back as a round food; and nothing of the utensil came back at all. Now the reel records the food's whole shape and its utensil, and replays its coat (the Ice Cream Machine's soft-serve, the Blow Torch's flames, the Microwave's plasma orb, the Deep Fryer's oil, the Oven Mitt's bubble, the Mixer's second food) and its trail. The Titans hold the utensil they had then.
+- **What utensils and abilities leave behind:** the Whisk's vortex, the Mortar's cloud (drifting on the wind), the Deep Fryer's fire and the candy web; the ice patches, puddles and melted cheese on the floor; an Ice Storm's whirlwind, a Spike Line bursting up, the Flamethrower's blast and the fires it leaves. All recorded as they start and replayed as they were at that moment (the live match's are hidden while a reel plays).
+- **Better reels:**
+  - a throw that banked off a wall (Rolling Pin, Spatula) is a "Bank shot" ("Bank splat!"), and one that went on through a Titan into another (Colander) is "Skewered!": both score higher, so they make the reel;
+  - the caption names the utensil, with its picture ("Rolling Pin, off the wall"), or the ability, in its colour ("Spike Line");
+  - an ability's splat gets its own word: Blizzard!, Skewered!, Toasted!, Slammed!, Smashed!, Stomped!, Juiced!, Warped!.
+- Tests: four utensil splats (a banked Rolling Pin, Ice Cream Machine, Whisk, Blow Torch) in "Your highlights" (the disc flat, 1.50 x 0.38; the coats; the vortex; the ice patch; the captions); three ability splats (Spike Line: 15 spikes; Ice Storm; Flamethrower: 42 flames); a 100 s bot match then its whole reel (storms, fires, spikes, zones, puddles, coats, discs all shown, no errors); the earlier reel tests (snipes up and down, lead-ups, online round highlights); utensils offline and online; a bot match. No errors.
+
 **Version 0.49: carrots stick in, and the Knife, Spoon and Grater each their own** (`src/foods.js`, `src/items.js`, `src/projectiles.js`, `src/utensils.js`)
 
 - **Carrots stick in.** A carrot that hit a wall, a table or the floor was left where it was drawn the frame before: in the air, up to several metres short (a carrot flies up to 7 m a frame). Now it finds where it really met the surface and sinks its tip 0.3 m in, pointing the way it flew, and stays 8 s (was 3). One stuck in a pot goes when the pot is picked up or smashed. Test, 20 carrots thrown every way: before 0 of 12 that landed were stuck in (floating up to 5.4 m short), now 18 of 18 have their tip 0.30 m in.

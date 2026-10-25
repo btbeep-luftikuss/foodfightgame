@@ -44,7 +44,8 @@ const TOMATO = [col('#d8231b'), col('#ff4a2e'), col('#b3120f')];
 const MELON = [col('#f25a6a'), col('#ff8a94'), col('#2f7a30')];
 
 const TP_SPEED = 42, TP_GRAV = 0.75; // the teleport carrot: much slower than a carrot (up to 210 m/s), about 115 m at most
-const SPIKE_EVERY = 1.5, SPIKE_COUNT = 15, SPIKE_GAP = 0.055, SPIKE_STAY = 3.2;
+const SPIKE_EVERY = 1.5, SPIKE_COUNT = 15, SPIKE_STAY = 3.2;
+export const SPIKE_GAP = 0.055; // (the highlight reels replay spike lines rising)
 const FLAME_CAP = 330, SPIKE_CAP = 220;
 
 function swirlTexture() {
@@ -256,8 +257,18 @@ export class Abilities {
   }
   addVortex(pos, owner) {
     const g = this.game;
+    const v = this.stormMesh({ pos: pos.clone(), owner, born: g.time, until: g.time + 3.8, r: 10, acc: new Map(), sndAt: 0 });
+    this.vortices.push(v);
+    g.highlights?.onAbility('storm', v); // (0.50) the reels show it too
+    g.sfx.play('storm', pos, 1.3);
+    g.fx.burst('ice', _o.copy(pos).setY(pos.y + 1), 2);
+    this.wave(pos, 10, ULT_COLOR.ice);
+    this._rumble(pos, 0.2);
+  }
+  // The storm's funnel (also the highlight reels', for a replayed one: 0.50).
+  stormMesh(v) {
     const group = new THREE.Group();
-    group.position.copy(pos);
+    group.position.copy(v.pos);
     const mat = (opacity, color) => new THREE.MeshBasicMaterial({ map: this.swirl, color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide });
     const outer = new THREE.Mesh(this.funnelGeo, mat(0.8, '#e6f7ff'));
     const inner = new THREE.Mesh(this.innerGeo, mat(0.9, '#9fdcff'));
@@ -266,30 +277,30 @@ export class Abilities {
     outer.renderOrder = inner.renderOrder = 6;
     group.add(outer, inner, base);
     group.scale.setScalar(0.01);
-    g.scene.add(group);
-    this.vortices.push({ pos: pos.clone(), owner, born: g.time, until: g.time + 3.8, r: 10, group, outer, inner, base, acc: new Map(), sndAt: 0 });
-    g.sfx.play('storm', pos, 1.3);
-    g.fx.burst('ice', _o.copy(pos).setY(pos.y + 1), 2);
-    this.wave(pos, 10, ULT_COLOR.ice);
-    this._rumble(pos, 0.2);
+    this.game.scene.add(group);
+    return Object.assign(v, { group, outer, inner, base });
   }
-  _vortexStep(v, dt) {
-    const g = this.game, now = g.time;
-    const age = now - v.born, left = v.until - now;
-    if (left <= 0) { this._dropVortex(v); return false; }
-    const k = Math.min(1, age / 0.3) * Math.min(1, left / 0.5);
-    v.group.scale.set(k * (1 + 0.04 * Math.sin(now * 9)), k, k * (1 + 0.04 * Math.cos(now * 9)));
+  // how it looks at `now`: growing, spinning, swirling snow, dying away
+  stormLook(v, now, dt) {
+    const g = this.game, age = now - v.born, left = v.until - now;
+    const k = Math.max(0, Math.min(1, age / 0.3) * Math.min(1, left / 0.5));
+    v.group.scale.set(Math.max(0.01, k * (1 + 0.04 * Math.sin(now * 9))), Math.max(0.01, k), Math.max(0.01, k * (1 + 0.04 * Math.cos(now * 9))));
     v.outer.rotation.y += dt * 4.5; v.inner.rotation.y -= dt * 7; v.base.rotation.y += dt * 3;
     v.base.scale.setScalar(v.r);
     v.outer.material.map.offset.x = (v.outer.material.map.offset.x + dt * 0.6) % 1;
-    if (now > v.sndAt) { v.sndAt = now + 0.9; g.sfx.play('storm', v.pos, 0.8); }
-    // swirling ice and snow
     for (let i = 0; i < g.fx.n(8); i++) {
       const a = rand(0, Math.PI * 2), r = rand(1, v.r * 0.85), h = rand(0.3, 11);
       const tx = -Math.sin(a), tz = Math.cos(a), sp = rand(8, 14);
       (Math.random() < 0.5 ? g.fx.chunks : g.fx.blobs).spawn(v.pos.x + Math.cos(a) * r, v.pos.y + h, v.pos.z + Math.sin(a) * r,
         tx * sp - Math.cos(a) * 3, rand(1, 4), tz * sp - Math.sin(a) * 3, rand(0.35, 0.6), rand(0.08, 0.2), ICE[(Math.random() * 3) | 0], 0, 0.3);
     }
+    return k;
+  }
+  _vortexStep(v, dt) {
+    const g = this.game, now = g.time;
+    if (v.until - now <= 0) { this._dropVortex(v); return false; }
+    const k = this.stormLook(v, now, dt);
+    if (now > v.sndAt) { v.sndAt = now + 0.9; g.sfx.play('storm', v.pos, 0.8); }
     // pull every enemy toward the eye of the storm (my Titans only; the others' games pull theirs)
     for (const b of g.actors) {
       if (!b.alive || b.isRemote || !this._foe(v.owner, b)) continue;
@@ -433,6 +444,7 @@ export class Abilities {
     }
     if (!pts.length) { g.sfx.play('thud', start, 0.6); return; }
     this.lines.push({ owner, pts, born: g.time, dir: dir.clone(), hit: new Set(), acc: new Map(), until: g.time + pts.length * SPIKE_GAP + SPIKE_STAY });
+    g.highlights?.onAbility('spikes', this.lines[this.lines.length - 1]);
     g.sfx.play('boom', start, 0.6);
   }
   _lineStep(L, dt) {
@@ -615,6 +627,7 @@ export class Abilities {
   }
   startFlamer(owner) {
     this.flamers.push({ owner, t: 0, dur: 1.8, tick: 0, patch: 0, snd: 0 });
+    this.game.highlights?.onAbility('flamer', this.flamers[this.flamers.length - 1]);
   }
   _flameDir(a, out) {
     if (a.isRemote) { // their aim, from their yaw and pitch
@@ -631,9 +644,7 @@ export class Abilities {
     if (F.t > F.dur || !a.alive) return false;
     const from = a.handPos(new THREE.Vector3());
     const dir = this._flameDir(a, new THREE.Vector3());
-    g.fx.stream('blobs', from, dir, 9, { speed: 13, spread: 0.22, life: 0.45, size: 0.2, colors: FIRE, grav: -0.35, drag: 1.2 });
-    g.fx.stream('puffs', from, dir, 3, { speed: 10, spread: 0.18, life: 0.5, size: 0.55, colors: [FIRE[1], FIRE[2]], grav: -0.5, drag: 1.5, grow: 1.4 });
-    if (Math.random() < 0.4) g.fx.stream('puffs', _c.copy(from).addScaledVector(dir, 6), dir, 1, { speed: 2, spread: 0.5, life: 0.9, size: 0.9, colors: [col('#4a3a32')], grav: -0.6, drag: 1, grow: 1.5 });
+    this.flamerFx(from, dir);
     if (F.t > F.snd) { F.snd = F.t + 0.28; g.sfx.play('flame', from, 1); }
     if (a === g.player) g.fx.shake(0.012);
     // the cone: 7.5 m, about 32 degrees either side
@@ -660,10 +671,24 @@ export class Abilities {
     }
     return true;
   }
+  // The flamethrower's stream of fire (also the reels', from a replayed Titan's hand: 0.50).
+  flamerFx(from, dir) {
+    const g = this.game;
+    g.fx.stream('blobs', from, dir, 9, { speed: 13, spread: 0.22, life: 0.45, size: 0.2, colors: FIRE, grav: -0.35, drag: 1.2 });
+    g.fx.stream('puffs', from, dir, 3, { speed: 10, spread: 0.18, life: 0.5, size: 0.55, colors: [FIRE[1], FIRE[2]], grav: -0.5, drag: 1.5, grow: 1.4 });
+    if (Math.random() < 0.4) g.fx.stream('puffs', _c.copy(from).addScaledVector(dir, 6), dir, 1, { speed: 2, spread: 0.5, life: 0.9, size: 0.9, colors: [col('#4a3a32')], grav: -0.6, drag: 1, grow: 1.5 });
+  }
+  // (0.50) The reels draw the ground fires and spike lines of the moment they show; afterwards, the live ones.
+  drawAt(now, flames = this.flames, lines = this.lines) {
+    const F = this.flames, L = this.lines;
+    this.flames = flames; this.lines = lines;
+    try { this._drawFlames(now); this._drawSpikes(now); } finally { this.flames = F; this.lines = L; }
+  }
   addFlame(pos, owner, r, life) {
     const g = this.game;
     if (this.flames.length >= 100) this.flames.shift();
     this.flames.push({ pos, owner, r, born: g.time, until: g.time + life, acc: new Map(), seed: rand(0, 100) });
+    g.highlights?.onAbility('flame', this.flames[this.flames.length - 1]);
     g.world.paintSplat(pos.x, pos.y, pos.z, r * 1.2, 'chili');
   }
   _flameStep(f, dt) {

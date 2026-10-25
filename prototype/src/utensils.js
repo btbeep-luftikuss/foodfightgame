@@ -822,18 +822,22 @@ export class Utensils {
     const x = p.x;
     if (Array.isArray(x.sc)) p.mesh.scale.set(x.sc[0], x.sc[1], x.sc[2]);
     else if (x.sc) p.mesh.scale.setScalar(x.sc);
-    p.uAttach = [];
-    const r = p.radius;
+    p.uAttach = this.attach(p.u, x, p.radius, p.pos);
+  }
+  // A utensil's coat on a flying food (soft-serve, flames, a plasma orb, oil, the mitt's bubble, the
+  // Mixer's second food), from the pool. Also the highlight reels' (0.50), for a replayed throw.
+  attach(u, x, r, pos) {
+    const list = [];
     const add = (kind, geo, mat, s) => {
       const pool = (this.attachPool[kind] ||= []);
       let m = pool.pop();
       if (!m) { m = new THREE.Mesh(geo, mat); m.castShadow = false; m.userData.kind = kind; this.game.scene.add(m); }
       m.visible = true; m.scale.setScalar(s); m.userData.base = s;
-      m.position.copy(p.pos);
-      p.uAttach.push(m);
+      m.position.copy(pos);
+      list.push(m);
       return m;
     };
-    switch (p.u) {
+    switch (u) {
       case 'ice-cream-machine': add('cream', TORUS, MAT.cream, Math.max(0.3, r * 1.25)); break;
       case 'blow-torch': add('flame', SPHERE, MAT.flame, Math.max(0.35, r * 1.9)); break;
       case 'microwave': add('plasma', SPHERE, MAT.plasma, Math.max(0.4, r * (x.sm ? 3 : 2.2))); break;
@@ -845,8 +849,27 @@ export class Utensils {
         let m = pool.pop();
         if (!m) { m = makeFoodMesh(id); m.userData.kind = 'mix:' + id; this.game.scene.add(m); }
         m.visible = true; m.scale.setScalar(0.55); m.userData.base = 0.55;
-        p.uAttach.push(m);
+        list.push(m);
       } break;
+    }
+    return list;
+  }
+  releaseAttach(list) {
+    for (const m of list || []) { m.visible = false; (this.attachPool[m.userData.kind] ||= []).push(m); }
+  }
+  // the coat follows the food (and wobbles, spins, orbits)
+  poseAttach(list, pos, r, t, dt) {
+    for (let i = 0; i < list.length; i++) {
+      const m = list[i], k = m.userData.kind;
+      m.position.copy(pos);
+      if (k === 'cream') { m.rotation.x += 6 * dt; m.rotation.y += 4 * dt; }
+      else if (k === 'plasma' || k === 'flame') m.scale.setScalar(m.userData.base * (1 + Math.sin(t * 30 + i) * 0.12));
+      else if (k === 'hex') { m.rotation.y += 2 * dt; m.rotation.x += 1.3 * dt; }
+      else if (k.startsWith('mix:')) {
+        const a = t * 9;
+        m.position.x += Math.cos(a) * (r + 0.3); m.position.z += Math.sin(a) * (r + 0.3); m.position.y += 0.15;
+        m.rotation.y += 5 * dt;
+      }
     }
   }
 
@@ -855,24 +878,17 @@ export class Utensils {
     const R = RULES[p.u], g = this.game, t = g.time;
     if (R.step) { R.step(p, dt, this); if (p.done) return; }
     if (p.x.fl) { p.mesh.rotation.set(0, p.mesh.rotation.y + 14 * dt, 0); } // flat disc spins like a frisbee
-    for (let i = 0; i < p.uAttach.length; i++) {
-      const m = p.uAttach[i], k = m.userData.kind;
-      m.position.copy(p.pos);
-      if (k === 'cream') { m.rotation.x += 6 * dt; m.rotation.y += 4 * dt; }
-      else if (k === 'plasma' || k === 'flame') m.scale.setScalar(m.userData.base * (1 + Math.sin(t * 30 + i) * 0.12));
-      else if (k === 'hex') { m.rotation.y += 2 * dt; m.rotation.x += 1.3 * dt; }
-      else if (k.startsWith('mix:')) {
-        const a = t * 9;
-        m.position.x += Math.cos(a) * (p.radius + 0.3); m.position.z += Math.sin(a) * (p.radius + 0.3); m.position.y += 0.15;
-        m.rotation.y += 5 * dt;
-      }
-    }
+    this.poseAttach(p.uAttach, p.pos, p.radius, t, dt);
     // trails
     p.uTrail = (p.uTrail || 0) - dt;
     if (p.uTrail > 0 || g.fx.scale <= 0) return;
     p.uTrail = isPellet(p) ? 0.09 : 0.045;
-    const P = g.fx;
-    switch (p.u) {
+    this.trail(p.u, p.food, p.pos, p.x);
+  }
+  // A puff of a utensil's trail behind a flying food (also the highlight reels', for a replay).
+  trail(u, food, pos, x = {}) {
+    const P = this.game.fx, p = { pos, food, x };
+    switch (u) {
       case 'blow-torch': case 'toaster': P.spray('blobs', p.pos, 2, { speed: 1, up: 1, colors: [col('#ff3d00'), col('#ffae00')], size: 0.1, life: 0.35, grav: -0.3 }); break;
       case 'ice-cream-machine': P.spray('puffs', p.pos, 1, { speed: 0.4, up: 0.2, colors: [col('#ffffff'), col('#dff6ff')], size: 0.3, life: 0.4, grav: 0.2, grow: 0.5 }); break;
       case 'microwave': P.spray('blobs', p.pos, 2, { speed: 2, up: 1, colors: [col('#fff6a8'), col('#ffd23a')], size: 0.08, life: 0.3, grav: 0 }); break;
@@ -889,7 +905,7 @@ export class Utensils {
 
   end(p) {
     if (!p.uAttach) return;
-    for (const m of p.uAttach) { m.visible = false; (this.attachPool[m.userData.kind] ||= []).push(m); }
+    this.releaseAttach(p.uAttach);
     p.uAttach = null;
   }
 
@@ -909,6 +925,7 @@ export class Utensils {
     if (R?.post) R.post(p, hit, this);
   }
   bounced(p) { // wall ricochet (Rolling Pin, Spatula)
+    if (p.hl) p.hl.bank++; // (a bank shot, for the highlight reels)
     const g = this.game;
     g.sfx.play('boing', p.pos, isPellet(p) ? 0.2 : 0.5);
     g.fx.spray('blobs', p.pos, isPellet(p) ? 2 : 6, { speed: 4, up: 2, colors: [col('#fff6a8'), col('#ffd23a')], size: 0.08, life: 0.3, grav: 0 });
@@ -980,6 +997,16 @@ export class Utensils {
       z.wind = new THREE.Vector3(Math.cos(a) * 1.3, 0, Math.sin(a) * 1.3);
       pos.y = Math.max(pos.y, gy + 1.2);
     }
+    this.zoneMesh(z);
+    if (kind === 'vortex') g.sfx.play('whirr', pos, 1);
+    if (kind === 'web') z.activeAt = g.time + 0.5;
+    if (kind === 'fire') g.sfx.play('sizzle', pos, 1);
+    this.zones.push(z);
+    g.highlights?.onZone(z); // (0.50) the reels show it too
+  }
+  // A zone's own mesh (the vortex's rings, the web), if it has one. Also the highlight reels', for a replay.
+  zoneMesh(z) {
+    const g = this.game, { kind, pos, r } = z;
     if (kind === 'vortex') {
       const m = new THREE.Group();
       for (let i = 0; i < 3; i++) {
@@ -992,7 +1019,6 @@ export class Utensils {
       m.position.copy(pos);
       g.scene.add(m);
       z.mesh = m;
-      g.sfx.play('whirr', pos, 1);
     }
     if (kind === 'web') {
       WEB_MAT ||= new THREE.MeshBasicMaterial({ map: webTexture(), transparent: true, depthWrite: false, opacity: 0 });
@@ -1002,40 +1028,40 @@ export class Utensils {
       m.renderOrder = 3;
       g.scene.add(m);
       z.mesh = m;
-      z.activeAt = g.time + 0.5;
     }
-    if (kind === 'fire') g.sfx.play('sizzle', pos, 1);
-    this.zones.push(z);
+  }
+  // How a zone looks at time t (spinning rings, the web fading in and out, its particles). Also the reels'.
+  zoneLook(z, t, dt) {
+    const P = this.game.fx, life = (t - z.t0) / (z.until - z.t0);
+    if (z.kind === 'vortex' && z.mesh) {
+      z.mesh.children.forEach((ring, k) => { ring.rotation.z += dt * (5 + k * 2); });
+      z.mesh.scale.setScalar(life < 0.85 ? 1 : 1 - (life - 0.85) / 0.15);
+    }
+    const on = z.t0 + 0.5;
+    if (z.kind === 'web' && z.mesh) z.mesh.material.opacity = t < on ? 0.4 * (1 - (on - t) / 0.5) : life > 0.85 ? 0.9 * (1 - (life - 0.85) / 0.15) : 0.9;
+    if (P.scale > 0 && Math.random() < dt * 14) {
+      _v.set(z.pos.x + rand(-z.r, z.r) * 0.7, z.pos.y + 0.3, z.pos.z + rand(-z.r, z.r) * 0.7);
+      if (z.kind === 'fire') P.burst('fire', _v, 0.3);
+      else if (z.kind === 'cloud') P.spray('puffs', _v.setY(z.pos.y + rand(-0.6, 0.8)), 2, { speed: 0.6, up: 0.3, colors: [col(z.tint), col('#ffffff')], size: 1.1, life: 1.1, grav: 0, grow: 1.2 });
+      else if (z.kind === 'vortex') {
+        const a = rand(0, Math.PI * 2), rr = rand(0.5, z.r);
+        _v.set(z.pos.x + Math.cos(a) * rr, z.pos.y + rand(0.2, 2), z.pos.z + Math.sin(a) * rr);
+        _w.set(-Math.sin(a) * 9, 1, Math.cos(a) * 9);
+        P.spray('puffs', _v, 1, { speed: 0.2, up: 0, colors: [col(z.tint), col('#b98cff')], size: 0.35, life: 0.5, grav: 0, drag: 1, dir: _w.multiplyScalar(0.6) });
+      }
+    }
   }
 
   _zones(dt) {
-    const g = this.game, t = g.time, P = g.fx;
+    const g = this.game, t = g.time;
     for (let i = this.zones.length - 1; i >= 0; i--) {
       const z = this.zones[i];
-      if (t > z.until) { this._dropZone(z); this.zones.splice(i, 1); continue; }
-      const life = (t - z.t0) / (z.until - z.t0);
+      if (t > z.until) { if (z.hl) z.hl.end = Math.min(z.hl.end, t); this._dropZone(z); this.zones.splice(i, 1); continue; } // (a web burnt away early: the reels end it then too)
       z.tick -= dt;
       const tick = z.tick <= 0;
       if (tick) z.tick = z.kind === 'web' ? 0.3 : 0.5;
       if (z.kind === 'cloud') z.pos.addScaledVector(z.wind, dt);
-      if (z.kind === 'vortex' && z.mesh) {
-        z.mesh.children.forEach((ring, k) => { ring.rotation.z += dt * (5 + k * 2); });
-        z.mesh.scale.setScalar(life < 0.85 ? 1 : 1 - (life - 0.85) / 0.15);
-      }
-      if (z.kind === 'web' && z.mesh) z.mesh.material.opacity = t < z.activeAt ? 0.4 * (1 - (z.activeAt - t) / 0.5) : life > 0.85 ? 0.9 * (1 - (life - 0.85) / 0.15) : 0.9;
-
-      // particles
-      if (P.scale > 0 && Math.random() < dt * 14) {
-        _v.set(z.pos.x + rand(-z.r, z.r) * 0.7, z.pos.y + 0.3, z.pos.z + rand(-z.r, z.r) * 0.7);
-        if (z.kind === 'fire') P.burst('fire', _v, 0.3);
-        else if (z.kind === 'cloud') P.spray('puffs', _v.setY(z.pos.y + rand(-0.6, 0.8)), 2, { speed: 0.6, up: 0.3, colors: [col(z.tint), col('#ffffff')], size: 1.1, life: 1.1, grav: 0, grow: 1.2 });
-        else if (z.kind === 'vortex') {
-          const a = rand(0, Math.PI * 2), rr = rand(0.5, z.r);
-          _v.set(z.pos.x + Math.cos(a) * rr, z.pos.y + rand(0.2, 2), z.pos.z + Math.sin(a) * rr);
-          _w.set(-Math.sin(a) * 9, 1, Math.cos(a) * 9);
-          P.spray('puffs', _v, 1, { speed: 0.2, up: 0, colors: [col(z.tint), col('#b98cff')], size: 0.35, life: 0.5, grav: 0, drag: 1, dir: _w.multiplyScalar(0.6) });
-        }
-      }
+      this.zoneLook(z, t, dt);
       if (t < (z.activeAt || 0)) continue;
 
       // effects on Titans

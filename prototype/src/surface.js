@@ -68,6 +68,10 @@ export class Surface {
   }
 
   _addZone(x, y, z, r, look, now, duration) {
+    this.zones.push(this.puddle(x, y, z, r, look, now, duration));
+  }
+  // A puddle's mesh, from the pool, in its look (also the highlight reels', for a replayed one: 0.50).
+  puddle(x, y, z, r, look, now, duration) {
     let mesh = this.pool.pop();
     if (!mesh) {
       mesh = new THREE.Mesh(this.geo, new THREE.MeshPhysicalMaterial({ transparent: true, depthWrite: false }));
@@ -83,24 +87,28 @@ export class Surface {
     this.layer = (this.layer + 1) % 20;
     mesh.position.set(x, y + 0.03 + this.layer * 0.004, z);
     mesh.scale.setScalar(0.01);
-    this.zones.push({ mesh, x, z, r, look, born: now, until: now + duration, now, baseOpacity: L.opacity });
+    return { mesh, x, z, r, look, born: now, until: now + duration, now, baseOpacity: L.opacity };
   }
+  // how big and clear it is at `now`: it spreads out, wobbles, fades away
+  posePuddle(zn, now) {
+    const age = now - zn.born, left = zn.until - now;
+    const grow = Math.min(1, Math.max(0, age) / 0.18);
+    const wobble = 1 + Math.sin(now * 3 + zn.x) * 0.01;
+    zn.mesh.scale.setScalar(zn.r * (0.3 + 0.7 * (1 - Math.pow(1 - grow, 3))) * wobble);
+    zn.mesh.material.opacity = zn.baseOpacity * Math.min(1, left / 1.2);
+  }
+  dropPuddle(zn) { zn.mesh.visible = false; this.pool.push(zn.mesh); }
 
   update(dt, now) {
     for (let i = this.zones.length - 1; i >= 0; i--) {
       const zn = this.zones[i];
       zn.now = now;
-      const age = now - zn.born, left = zn.until - now;
-      if (left <= 0) {
-        zn.mesh.visible = false;
-        this.pool.push(zn.mesh);
+      if (zn.until - now <= 0) {
+        this.dropPuddle(zn);
         this.zones.splice(i, 1);
         continue;
       }
-      const grow = Math.min(1, age / 0.18);
-      const wobble = 1 + Math.sin(now * 3 + zn.x) * 0.01;
-      zn.mesh.scale.setScalar(zn.r * (0.3 + 0.7 * (1 - Math.pow(1 - grow, 3))) * wobble);
-      zn.mesh.material.opacity = zn.baseOpacity * Math.min(1, left / 1.2);
+      this.posePuddle(zn, now);
     }
     this.sweepT += dt;
     if (this.sweepT > 2) {
