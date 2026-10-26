@@ -455,6 +455,9 @@ function boot() {
     stage.rig = titanPreview(id);
     stage.scene.add(stage.rig.object);
     stage.waveUntil = stage.t + 1.8;
+    // (0.52) straight into the turntable's pose (its first frames bent it double at the waist)
+    stage.rig.object.rotation.y = stage.spin;
+    stage.rig.pose({ t: stage.t, onGround: true, lookAround: true, wave: true, snap: true }, 1 / 60);
     stage.box.style.setProperty('--rar', RARITY[SKIN_BY_ID[id].rarity].color);
   }
   function closeStage() {

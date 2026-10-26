@@ -170,17 +170,28 @@ export function lumpy(geo, amount) {
   geo.computeVertexNormals();
   return geo;
 }
-// A banana: a tube along a curve, tapered at both ends, yellow with brown tips.
-function bananaGeo(points, radius) {
+// (0.52) A tube along a curve that tapers shut at both ends (a banana, a croissant): an open tube's
+// ends were holes you could see into. `shape` is how fast it fattens from the tips.
+export function closedTube(points, radius, segs = 36, radial = 14, shape = 0.6) {
   const curve = new THREE.CatmullRomCurve3(points);
-  const segs = 36, radial = 14;
   const g = new THREE.TubeGeometry(curve, segs, radius, radial, false);
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const u = Math.floor(i / (radial + 1)) / segs;
+    const taper = u <= 0 || u >= 1 ? 0 : Math.sin(Math.PI * u) ** shape;
+    const c = curve.getPointAt(clamp(u, 0, 1));
+    pos.setXYZ(i, c.x + (pos.getX(i) - c.x) * taper, c.y + (pos.getY(i) - c.y) * taper, c.z + (pos.getZ(i) - c.z) * taper);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+// A banana: a closed tube along a curve, tapered at both ends, yellow with brown tips.
+function bananaGeo(points, radius) {
+  const segs = 36, radial = 14;
+  const g = closedTube(points, radius, segs, radial, 0.45);
   const pos = g.attributes.position, cols = new Float32Array(pos.count * 3);
   for (let i = 0; i < pos.count; i++) {
     const u = Math.floor(i / (radial + 1)) / segs;
-    const taper = 0.3 + 0.7 * Math.sin(Math.PI * clamp(u, 0, 1)) ** 0.6;
-    const c = curve.getPointAt(Math.min(1, u));
-    pos.setXYZ(i, c.x + (pos.getX(i) - c.x) * taper, c.y + (pos.getY(i) - c.y) * taper, c.z + (pos.getZ(i) - c.z) * taper);
     const ridge = Math.abs(Math.sin((i % (radial + 1)) / radial * Math.PI * 5)) > 0.96;
     if (u < 0.04 || u > 0.95) _col.set('#5a3a1e');
     else mixHex('#ffd93b', '#e9b51c', ridge ? 1 : 0.15 + 0.2 * Math.sin(u * 9), _col);
@@ -637,6 +648,7 @@ export class World {
     addCyl(-8, 124, 2, -6, 4.5, { surface: 'wood' });
     this._box(7, 13, 91, 93, -6, 1, m.chrome);
     this._box(7.6, 12.4, 91.3, 92.7, -6, 2, m.white);
+    addBox(7.6, 12.4, 91.3, 92.7, -6, 2, { surface: 'ceramic' }); // (0.52) solid
     addBox(7, 13, 91, 93, -6, 1, { surface: 'steel' });
   }
 
@@ -1261,7 +1273,8 @@ export class World {
       const P = geo.parameters || {}, t = geo.type;
       return t === 'PlaneGeometry' || t === 'CircleGeometry' || t === 'RingGeometry' || t === 'ShapeGeometry' || t === 'LatheGeometry'
         || ((t === 'CylinderGeometry' || t === 'ConeGeometry') && P.openEnded)
-        || (t === 'SphereGeometry' && ((P.phiLength ?? 7) < 6.28 || (P.thetaLength ?? 4) < 3.14));
+        || (t === 'SphereGeometry' && ((P.phiLength ?? 7) < 6.28 || (P.thetaLength ?? 4) < 3.14))
+        || (t === 'TorusGeometry' && (P.arc ?? 7) < 6.28) || t === 'TubeGeometry'; // (0.52) part-rings (handles) and tubes have open ends too
     };
     this.scene.traverse((o) => {
       if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material)) return;

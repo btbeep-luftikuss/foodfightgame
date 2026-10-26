@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { addBox, addCyl, rand } from './core.js';
-import { canvasTex, paint, mixHex, lumpy, F } from './world.js';
+import { canvasTex, paint, mixHex, lumpy, closedTube, F } from './world.js';
 
 export const RESTAURANT_REGIONS = {
   buffet: { minX: -66, maxX: 66, minZ: -27, maxZ: 27, top: 0, weight: 0.3 },
@@ -252,6 +252,7 @@ export function buildRestaurant(W) {
   for (const [dx, dz, a] of [[-2, -2, 0.3], [2.5, 1, 1.1], [-1, 3, 2]]) {
     const ice = W._mesh(new THREE.BoxGeometry(3, 3, 3), new THREE.MeshPhysicalMaterial({ color: '#e3f6ff', roughness: 0.05, transparent: true, opacity: 0.92, clearcoat: 1 }), -40 + dx, 10.4, -158 + dz, { cast: false });
     ice.rotation.set(a, a * 0.7, 0.3);
+    addCyl(-40 + dx, -158 + dz, 2.2, 8.5, 12.5, { surface: 'ice' }); // (0.52) the ice sticking up out of the bucket is solid
   }
   W._water(-40, 10.05, -158, 6, 6);
   addCyl(-40, -158, 7, 0, 10, { surface: 'steel' });
@@ -387,7 +388,9 @@ export function buildRestaurant(W) {
     addCyl(x, z, kind === 1 ? 4.2 : 3.6, 0.6, kind === 1 ? 4.5 : kind === 2 ? 3.1 : 3.6, fruit);
   }
   W._box(203, 239, -110, 70, 30, 32, m.steel, { cast: false }); // the heat-lamp rail
+  addBox(203, 239, -110, 70, 30, 32, { surface: 'steel' }); // (0.52) solid, and its lamps
   for (let z = -100; z <= 60; z += 32) {
+    addCyl(220, z, 3, 25.6, 30, { surface: 'steel' });
     W._mesh(new THREE.ConeGeometry(3, 3, 16, 1, true), m.steel, 220, 28, z, { cast: false });
     W._mesh(new THREE.SphereGeometry(1.4, 12, 8), new THREE.MeshBasicMaterial({ color: '#ff5a2a' }), 220, 27, z, { cast: false, receive: false });
   }
@@ -530,7 +533,8 @@ export function buildRestaurant(W) {
     W._mesh(new THREE.CylinderGeometry(0.3, 0.3, 6, 8).rotateZ(Math.PI / 2), m.glass, 24.5, F + 2.6, 70, { cast: false });
     W._mesh(new THREE.CylinderGeometry(1.8, 1.8, 0.3, 20).rotateZ(Math.PI / 2), m.glass, 21.5, F + 2.6, 70, { cast: false });
     W._mesh(new THREE.CircleGeometry(1.8, 20).rotateY(-Math.PI / 2), m.glass, 27.5, F + 2.6, 70, { cast: false }); // its bottom (it was open)
-    W._lyingCyl('x', 27.5, 31.5, F + 2.6, 70, 2, { surface: 'glass' });
+    W._lyingCyl('x', 27.5, 30, F + 2.6, 70, 2.2, { surface: 'glass' }); // (0.52) as wide as it looks, widening to its mouth
+    W._lyingCyl('x', 30, 32.7, F + 2.6, 70, 2.65, { surface: 'glass' });
     addBox(21.6, 27.5, 69.6, 70.4, F + 2.2, F + 3, { surface: 'glass' });
     addBox(21.3, 21.7, 68.4, 71.6, F + 1, F + 4.2, { surface: 'glass' });
   }
@@ -547,12 +551,14 @@ export function buildRestaurant(W) {
     W._lyingCyl('x', x + 21, x + 27, F + 5, z, 1.9, { surface: 'glass' });
   }
   { // a croissant
-    const g = new THREE.TorusGeometry(7, 3, 14, 30, Math.PI * 1.15).rotateX(Math.PI / 2).rotateY(-0.4);
-    food(lumpy(g, 0.06), (px, py, pz, c) => mixHex('#c9782a', '#f2c46a', 0.5 + Math.sin(Math.atan2(pz, px) * 9) * 0.5, c), 70, F + 3, -92);
-    for (const t of [0, Math.PI * 1.15]) { // (0.35) rounded tips (its ends were open: you could see inside it)
-      const cx = 7 * Math.cos(t), cz = 7 * Math.sin(t);
-      food(new THREE.SphereGeometry(2.6, 16, 12), '#c9782a', 70 + cx * Math.cos(0.4) - cz * Math.sin(0.4), F + 3, -92 + cx * Math.sin(0.4) + cz * Math.cos(0.4), true);
+    // (0.52) one tube along the crescent, plump in the middle and tapering shut at its tips (it was an open
+    // torus with a ball on each end, smaller than the tube: you could see in round them)
+    const pts = [];
+    for (let i = 0; i <= 14; i++) {
+      const t = -0.12 * Math.PI + (i / 14) * Math.PI * 1.39, cx = 7 * Math.cos(t), cz = 7 * Math.sin(t);
+      pts.push(new THREE.Vector3(cx * Math.cos(0.4) - cz * Math.sin(0.4), 0, cx * Math.sin(0.4) + cz * Math.cos(0.4)));
     }
+    food(lumpy(closedTube(pts, 3.3, 48, 18, 0.5), 0.05), (px, py, pz, c) => mixHex('#c9782a', '#f2c46a', 0.5 + Math.sin(Math.atan2(pz, px) * 9) * 0.5, c), 70, F + 3, -92);
     const arc = []; // (0.35) solid along the crescent (it was a block, empty in its middle)
     for (let i = 0; i <= 12; i++) {
       const t = (i / 12) * Math.PI * 1.15, cx = 7 * Math.cos(t), cz = 7 * Math.sin(t);
@@ -570,6 +576,7 @@ export function buildRestaurant(W) {
     W._mesh(new THREE.TorusGeometry(8, 0.5, 8, 28).rotateY(Math.PI / 2), yellow, -113, F + 8, 98, { cast: false });
     W._lyingCyl('x', -127, -120, F + 8, 98, 6.8, { surface: 'plastic' });
     W._lyingCyl('x', -120, -114.5, F + 8, 98, 7.6, { surface: 'plastic' });
+    W._lyingCyl('x', -114.5, -112.4, F + 8, 98, 8.5, { surface: 'plastic' }); // (0.52) its rim
   }
   { // a fork
     W._box(130, 170, -108, -105, F, F + 1.2, m.steel);

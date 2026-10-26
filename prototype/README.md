@@ -63,6 +63,14 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.52: the Locker's Titan stands up, closed bananas and croissant, solid maps** (`src/main.js`, `src/world.js`, `src/map-restaurant.js`, `src/map-backyard.js`, `src/net.js`)
+
+- **The Locker:** each time a Titan came onto the turntable (opening the Locker, picking a skin) its first frames bent it double at the waist, and on a slow device for a good while. It now starts in its turntable pose. Everything else in the Locker checked out: picking, trying on, buying (and a skin you can't afford yet says how many coins you need), spinning it, wearing it in the game, coins from a match; on a computer, an iPad either way up and a phone.
+- **See-through food:** bananas were tubes open at both ends (you could see in through their tips); they now taper shut, into brown tips. The croissant was an open ring with a ball on each end, smaller than the ring: now one tube along its crescent that tapers to its tips. Part-rings (handles) and tubes are now drawn from both sides like the other open shapes.
+- **Solid maps:** every object over 1.2 m on the three maps was checked (points just inside its surface, against the solid shapes). Made solid: the restaurant's heat-lamp rail and its lamps, the ice sticking up out of the champagne bucket, the mop bucket's rim; the wine glass on the floor as wide as it looks; the card on the kitchen's dining table; the backyard's ice cubes round (they're turned: their corners were outside). What's left open is meant to be (cups, bowls, the punch bowl you wade into).
+- The game's online version is 52 (the solid shapes changed: a player on 0.51 is told to reload).
+- Tests: the Locker (computer, iPad, phone; pictures of the turntable over its first seconds), coins after a match, pictures of the bananas and the croissant, the solid audit on all three maps, a bot match on each map, the shared floor online. No errors.
+
 **Version 0.51: online, everyone on the same game, and fewer messages** (`src/net.js`)
 
 - **A different copy of the game is caught.** Players' games didn't check they were the same version: after an update, a browser still showing the old page plays by the old rules (who decides a hit, how the floor's food is shared...) and the game glitches for everyone. Every update now carries the game's version (`NET_VERSION`, 51). If a player's is older (or missing: anything before 0.51), the others see "*Name* has an older copy of the game: they need to reload the game page"; if it's newer, "There is a newer version of the game: reload this page". Every 30 s while it lasts.

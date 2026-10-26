@@ -200,7 +200,7 @@ export function buildBackyard(W) {
   W._box(-156, -144, -88, -86, -18, -14, m.white, { cast: false }); // handle
   W._water(-128, F, -80, 14, 9);
   for (const [x, z] of [[-122, -70], [-135, -76]]) {
-    addBox(x - 2.3, x + 2.3, z - 2.3, z + 2.3, F, F + 5, { surface: 'ice' });
+    addCyl(x, z, 3.1, F, F + 5, { surface: 'ice' }); // (0.52) round: the cube is turned, its corners were outside
     W._mesh(new THREE.BoxGeometry(5, 5, 5).rotateY(rand(0, 1)), new THREE.MeshPhysicalMaterial({ color: '#e3f6ff', roughness: 0.05, transparent: true, opacity: 0.92, clearcoat: 1 }), x, F + 2.5, z);
   }
 
