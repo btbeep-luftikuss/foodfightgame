@@ -20,6 +20,7 @@ const COST_JUMP = 18, COST_DOUBLE = 24, COST_DASH = 30, REGEN = 30, REGEN_DELAY 
 export const MAX_HP = 200;
 const RADIUS = 0.45, HEIGHT = 1.95;
 const _v = new THREE.Vector3(), _f = new THREE.Vector3(), _r = new THREE.Vector3();
+const _poseSph = new THREE.Sphere();
 
 function glintTexture() {
   const c = document.createElement('canvas');
@@ -602,14 +603,21 @@ export class Actor {
     this.armT = Math.max(0, this.armT - dt);
     const food = this.selectedFood();
     const pitch = this.isRemote ? (this.lookPitch || 0) : Math.asin(clamp(this.aimDir.y, -1, 1));
-    if (d2 < 140 * 140 || this === this.game.player) {
+    // (0.53) the pose is worked out only for a Titan in view (the game's own view: game.poseCull, while it
+    // draws the match), and further than 45 m only every other frame; a skipped one catches up when posed
+    this.poseDt = Math.min(0.25, (this.poseDt || 0) + dt);
+    const F = this.game.poseCull, me = this === this.game.player;
+    const inView = me || !F || F.intersectsSphere(_poseSph.set(this.pos.x, this.pos.y + 1, this.pos.z, 2.4));
+    const due = inView && (me || d2 < 45 * 45 || (this.poseOdd = !this.poseOdd));
+    if ((d2 < 140 * 140 || me) && due) {
+      const pdt = this.poseDt; this.poseDt = 0;
       this.rig.pose({
         t, phase: this.walkPhase, stride: moving ? clamp(speed / 7.7, 0, 1.3) : 0, sprint: speed > 7.3, onGround: this.onGround, vy: this.vel.y,
         gliding: this.gliding, dashing: this.dashT > 0, tripped: this.isTripped(), frozen: this.isFrozen(),
         charging: this.charging, charge: this.charging && food ? clamp(this.chargeT / Math.max(0.2, food.charge || 1), 0, 1) : 0,
         throwK: this.armT / 0.3, auto: !!(food && food.auto && this.armT > 0), eating: !!this.eat, shield: this.shieldUp,
         heavy: this.heavy() && !this.shieldUp, holding: !!this.heldMesh, tool: !!this.uMesh && this.uHold === 'grip', toolPalm: !!this.uMesh && this.uHold !== 'grip', pitch: clamp(pitch, -1, 1), hit: this.hitFlash,
-      }, dt);
+      }, pdt);
     }
     this.napkin.visible = this.gliding;
     if (this.gliding) this.napkin.rotation.z = Math.sin(t * 3) * 0.08;

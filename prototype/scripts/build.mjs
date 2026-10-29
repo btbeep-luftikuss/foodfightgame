@@ -7,9 +7,11 @@ import { build } from 'esbuild';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 
 const root = new URL('..', import.meta.url);
+// TT_PROFILE=1: an unminified copy only, dist/profile.html, so a CPU profile shows the real function names
+const PROFILE = !!process.env.TT_PROFILE;
 const out = await build({
   entryPoints: [new URL('src/main.js', root).pathname],
-  bundle: true, minify: true, format: 'iife', target: 'es2020', write: false,
+  bundle: true, minify: !PROFILE, format: 'iife', target: 'es2020', write: false,
   legalComments: 'none',
 });
 let js = out.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
@@ -28,6 +30,7 @@ const fragment = full
   .replace(/<meta name="viewport"[^>]*>\n?/i, '');
 
 await mkdir(new URL('dist/', root), { recursive: true });
+if (PROFILE) { await writeFile(new URL('dist/profile.html', root), full); console.log('built dist/profile.html (unminified)'); process.exit(0); }
 await writeFile(new URL('dist/tiny-titans.html', root), full);
 await writeFile(new URL('dist/artifact.html', root), fragment);
 // the public game site (GitHub Pages serves the repository's docs/ folder)

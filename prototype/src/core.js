@@ -60,19 +60,52 @@ export const bus = {
 // Static colliders: axis-aligned boxes and vertical cylinders.
 export const colliders = [];
 
+// (0.53) A grid on the floor plan, GRID_CELL metres a cell: each cell lists the colliders over it (and
+// GRID_PAD around it), in the order they were made, so a question about one spot (what's solid here, how
+// high is the ground) looks at a handful of colliders instead of all ~350. Colliders never move once made;
+// new ones (a pot set down) go into the grid as they come. Anything beyond the floor plan sits in the edge
+// cells (and in `outer`, for rays).
+const GRID_CELL = 8, GRID_PAD = 2;
+const GX0 = FLOOR_BOUNDS.minX - GRID_CELL, GZ0 = FLOOR_BOUNDS.minZ - GRID_CELL;
+const GW = Math.ceil((FLOOR_BOUNDS.maxX - FLOOR_BOUNDS.minX) / GRID_CELL) + 3, GH = Math.ceil((FLOOR_BOUNDS.maxZ - FLOOR_BOUNDS.minZ) / GRID_CELL) + 3;
+const cells = Array.from({ length: GW * GH }, () => []);
+const outer = []; // colliders reaching outside the grid (rays out there test these too)
+let stampN = 1;
+const stamps = [];
+const cellX = (x) => Math.min(GW - 1, Math.max(0, Math.floor((x - GX0) / GRID_CELL)));
+const cellZ = (z) => Math.min(GH - 1, Math.max(0, Math.floor((z - GZ0) / GRID_CELL)));
+function gridAdd(c, i) {
+  const x0 = c.type === 'box' ? c.minX : c.x - c.r, x1 = c.type === 'box' ? c.maxX : c.x + c.r;
+  const z0 = c.type === 'box' ? c.minZ : c.z - c.r, z1 = c.type === 'box' ? c.maxZ : c.z + c.r;
+  for (let gx = cellX(x0 - GRID_PAD); gx <= cellX(x1 + GRID_PAD); gx++) for (let gz = cellZ(z0 - GRID_PAD); gz <= cellZ(z1 + GRID_PAD); gz++) cells[gx + gz * GW].push(i);
+  if (x0 < GX0 || z0 < GZ0 || x1 > GX0 + GW * GRID_CELL || z1 > GZ0 + GH * GRID_CELL) outer.push(i);
+  stamps.push(0);
+}
+// The colliders over (x, z), in the order they were made (pad up to GRID_PAD; more falls back to all).
+function near(x, z, pad = 0) { return pad > GRID_PAD ? null : cells[cellX(x) + cellZ(z) * GW]; }
+// ... over a disc of radius r around (x, z), each once, in order
+const _list = [];
+function nearDisc(x, z, r) {
+  const gx0 = cellX(x - r), gx1 = cellX(x + r), gz0 = cellZ(z - r), gz1 = cellZ(z + r);
+  if (gx0 === gx1 && gz0 === gz1) return cells[gx0 + gz0 * GW];
+  const s = ++stampN; _list.length = 0;
+  for (let gx = gx0; gx <= gx1; gx++) for (let gz = gz0; gz <= gz1; gz++) for (const i of cells[gx + gz * GW]) if (stamps[i] !== s) { stamps[i] = s; _list.push(i); }
+  return _list.sort((a, b) => a - b);
+}
+
 export function addBox(minX, maxX, minZ, maxZ, bottom, top, props = {}) {
   const c = { type: 'box', minX, maxX, minZ, maxZ, bottom, top, enabled: true, ...props };
-  colliders.push(c);
+  colliders.push(c); gridAdd(c, colliders.length - 1);
   return c;
 }
 
 export function addCyl(x, z, r, bottom, top, props = {}) {
   const c = { type: 'cyl', x, z, r, bottom, top, enabled: true, ...props };
-  colliders.push(c);
+  colliders.push(c); gridAdd(c, colliders.length - 1);
   return c;
 }
 
-export function clearColliders() { colliders.length = 0; }
+export function clearColliders() { colliders.length = 0; for (const c of cells) c.length = 0; outer.length = 0; stamps.length = 0; }
 
 function insideFootprint(c, x, z, pad) {
   if (c.type === 'box') return x >= c.minX - pad && x <= c.maxX + pad && z >= c.minZ - pad && z <= c.maxZ + pad;
@@ -83,7 +116,10 @@ function insideFootprint(c, x, z, pad) {
 // Highest walkable surface under (x, z) that can be reached from feetY (stepping up at most `step`).
 export function groundHeight(x, z, feetY, step = STEP, pad = 0.15) {
   let h = FLOOR_Y;
-  for (const c of colliders) {
+  const ids = near(x, z, pad);
+  if (!ids) { for (const c of colliders) if (c.enabled && c.top <= feetY + step && c.top > h && insideFootprint(c, x, z, pad)) h = c.top; return h; }
+  for (let k = 0; k < ids.length; k++) {
+    const c = colliders[ids[k]];
     if (!c.enabled || c.top > feetY + step || c.top <= h) continue;
     if (insideFootprint(c, x, z, pad)) h = c.top;
   }
@@ -93,7 +129,9 @@ export function groundHeight(x, z, feetY, step = STEP, pad = 0.15) {
 // Which collider (if any) provides the ground under a point; used for surface types.
 export function groundCollider(x, z, y) {
   let best = null;
-  for (const c of colliders) {
+  const ids = near(x, z, 0.15);
+  for (let k = 0; k < ids.length; k++) {
+    const c = colliders[ids[k]];
     if (!c.enabled || Math.abs(c.top - y) > 0.25) continue;
     if (insideFootprint(c, x, z, 0.15)) best = c;
   }
@@ -105,7 +143,9 @@ export function groundCollider(x, z, y) {
 const _n = { x: 0, z: 0 };
 export function resolveHorizontal(pos, radius, height, step = STEP) {
   let hit = null;
-  for (const c of colliders) {
+  const ids = nearDisc(pos.x, pos.z, Math.max(0, radius + 0.5 - GRID_PAD)); // (a push moves it a little: room for that)
+  for (let k = 0; k < ids.length; k++) {
+    const c = colliders[ids[k]];
     if (!c.enabled || c.top <= pos.y + step || c.bottom >= pos.y + height) continue;
     if (c.type === 'box') {
       const cx = clamp(pos.x, c.minX, c.maxX), cz = clamp(pos.z, c.minZ, c.maxZ);
@@ -146,7 +186,9 @@ export function resolveHorizontal(pos, radius, height, step = STEP) {
 // Is a point inside solid geometry? Returns { collider, top: bool } or null.
 export function solidAt(p, pad = 0) {
   if (p.y < FLOOR_Y) return { collider: null, top: true, groundY: FLOOR_Y };
-  for (const c of colliders) {
+  const ids = near(p.x, p.z, pad) || colliders.map((c, i) => i);
+  for (let k = 0; k < ids.length; k++) {
+    const c = colliders[ids[k]];
     if (!c.enabled || p.y > c.top + pad || p.y < c.bottom - pad) continue;
     if (insideFootprint(c, p.x, p.z, pad)) return { collider: c, top: false, groundY: c.top };
   }
@@ -160,14 +202,39 @@ export function raycastWorld(o, d, maxDist = 400, ignore = null) {
     const t = (FLOOR_Y - o.y) / d.y;
     if (t > 0 && t < best) best = t;
   }
-  for (const c of colliders) {
-    if (!c.enabled || c === ignore) continue;
+  // (0.53) only the colliders in the grid cells the ray crosses (walked cell by cell, nearest first:
+  // it stops once a hit is nearer than the next cell), plus those reaching outside the grid
+  const s = ++stampN;
+  const test = (i) => {
+    if (stamps[i] === s) return;
+    stamps[i] = s;
+    const c = colliders[i];
+    if (!c.enabled || c === ignore) return;
     const t = c.type === 'box' ? rayBox(o, d, c) : rayCyl(o, d, c);
     if (t !== null && t < best) best = t;
+  };
+  if (o.x < GX0 || o.z < GZ0 || o.x >= GX0 + GW * GRID_CELL || o.z >= GZ0 + GH * GRID_CELL) { // (from outside the grid: every collider)
+    for (let i = 0; i < colliders.length; i++) test(i);
+    return best;
+  }
+  for (const i of outer) test(i);
+  let gx = cellX(o.x), gz = cellZ(o.z);
+  const stepX = d.x > 0 ? 1 : -1, stepZ = d.z > 0 ? 1 : -1;
+  const ax = Math.abs(d.x) > 1e-9, az = Math.abs(d.z) > 1e-9;
+  const cx0 = GX0 + gx * GRID_CELL, cz0 = GZ0 + gz * GRID_CELL;
+  let tx = ax ? ((d.x > 0 ? cx0 + GRID_CELL : cx0) - o.x) / d.x : Infinity, tz = az ? ((d.z > 0 ? cz0 + GRID_CELL : cz0) - o.z) / d.z : Infinity;
+  const dtx = ax ? GRID_CELL / Math.abs(d.x) : Infinity, dtz = az ? GRID_CELL / Math.abs(d.z) : Infinity;
+  for (let n = 0; n < GW + GH + 2; n++) {
+    for (const i of cells[gx + gz * GW]) test(i);
+    const next = Math.min(tx, tz);
+    if (next >= best) break; // (nothing further on can be nearer)
+    if (tx < tz) { gx += stepX; tx += dtx; } else { gz += stepZ; tz += dtz; }
+    if (gx < 0 || gx >= GW || gz < 0 || gz >= GH) break;
   }
   return best;
 }
 
+export const __rayOne = (o, d, c) => (c.type === 'box' ? rayBox(o, d, c) : rayCyl(o, d, c)); // (for the tests)
 function rayBox(o, d, c) {
   let tmin = -Infinity, tmax = Infinity;
   const mins = [c.minX, c.bottom, c.minZ], maxs = [c.maxX, c.top, c.maxZ];

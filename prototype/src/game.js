@@ -47,6 +47,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 const _d = new THREE.Vector3(), _o = new THREE.Vector3(), _c = new THREE.Vector3(), _f = new THREE.Vector3();
 const _r = new THREE.Vector3(), _t = new THREE.Vector3(), _v = new THREE.Vector3();
+const _frus = new THREE.Frustum(), _pv = new THREE.Matrix4();
 
 export class Game {
   constructor({ renderer, scene, camera, quality, hud, input, sfx, map = 'kitchen' }) {
@@ -867,7 +868,11 @@ export class Game {
     // out of the round (or only watching) while in a game: spectator mode
     const p = this.player;
     this.spectator.setActive(this.input.enabled && !!p && !p.alive && this.state !== 'menu');
-    for (const a of this.actors) a.updateVisual(realDt, this.camera);
+    // (0.53) Titans out of view skip their pose this frame (see Actor.updateVisual); the view as last drawn
+    const cam = this.camera;
+    this.poseCull = _frus.setFromProjectionMatrix(_pv.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    for (const a of this.actors) a.updateVisual(realDt, cam);
+    this.poseCull = null;
     this.utensils.updateVisual();
     this._camera(realDt);
     this._preview();

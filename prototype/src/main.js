@@ -14,7 +14,7 @@ import { BOT_LEVELS } from './bots.js';
 import { MAPS } from './world.js';
 import { TEAMS, TEAM_LABEL, teamCount, cleanSize } from './teams.js';
 import { Net, roomAvailable, cleanRoom, netPref, setNetPref } from './net.js';
-import { colliders } from './core.js';
+import { colliders, solidAt, groundHeight, raycastWorld, __rayOne } from './core.js';
 
 const PUBLIC_URL = 'https://btbeep-luftikuss.github.io/foodfightgame/play/';
 import { UTENSILS, UTENSIL_BY_ID, UTENSIL_IDS, utensilIcon, setUtensilIcons } from './utensils.js';
@@ -27,6 +27,8 @@ import { SSRPass } from 'three/addons/postprocessing/SSRPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { FXAAPass } from 'three/addons/postprocessing/FXAAPass.js';
+import { LiteShading } from './lite.js';
+import { Governor, TIERS } from './governor.js';
 
 // Screen-space passes can leave a stray NaN pixel (e.g. right at the camera); bloom would smear it across
 // the whole screen, so it is replaced before bloom runs.
@@ -169,6 +171,7 @@ function boot() {
   window.__ttUp = true; document.getElementById('tt-fail')?.remove();
   setTimeout(() => { try { sessionStorage.removeItem('tt-booting'); } catch { /* storage blocked */ } }, 15000);
   window.__colliders = colliders; window.__THREE = THREE; // (and the solid shapes and three.js, for map checks)
+  window.__core = { solidAt, groundHeight, raycastWorld, __rayOne }; // (0.53: the collision questions, for the grid's tests)
 
   // Menu food legend, using the same rendered icons.
   $('legend').innerHTML = FOOD_IDS.map((id) => {
@@ -832,7 +835,7 @@ function boot() {
   // Ray tracing (screen-space, the kind browsers can run): rays are marched through the depth buffer.
   //  - Reflections (SSR): shiny floors, tiles, steel and glazed pots reflect Titans and food.
   //  - Ambient occlusion (GTAO): soft contact shadows in corners, under counters and around props.
-  let composer = null;
+  let composer = null, extrasOn = true;
   const shinyMeshes = () => scene.children.filter((o) => o.isMesh && (o.userData.merged || o.userData.world) && !o.material.transparent
     && (o.material.roughness ?? 1) <= 0.35);
   const disposeComposer = () => {
@@ -843,8 +846,8 @@ function boot() {
   };
   const makeComposer = () => {
     disposeComposer();
-    const rt = gfx.rt !== 'off';
-    if (!quality.bloom && !rt) return null;
+    const rt = gfx.rt !== 'off' && extrasOn, bloom = quality.bloom && extrasOn; // (the governor's lower tiers drop them)
+    if (!bloom && !rt) return null;
     // screen-space passes read depth/normals from their own targets, so MSAA is only used without them
     const c = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: rt ? 0 : 4 }));
     if (rt) {
@@ -860,7 +863,7 @@ function boot() {
       c.addPass(ao);
     }
     if (rt) c.addPass(new ShaderPass(SanitizeShader));
-    if (quality.bloom) c.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.35, 0.3, 1.9));
+    if (bloom) c.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.35, 0.3, 1.9));
     c.addPass(new OutputPass());
     if (rt) c.addPass(new FXAAPass()); // no MSAA with the screen-space passes, so smooth edges afterwards
     c.setPixelRatio(quality.pixelRatio * resScale);
@@ -868,9 +871,25 @@ function boot() {
     return c;
   };
 
-  // Dynamic resolution: drop render scale when the frame rate sags, restore it when there's headroom.
-  // A fixed Resolution setting turns this off.
-  let resScale = 1, fpsEma = 60, adjustT = 0;
+  // (0.53) The frame-rate governor (governor.js) with Resolution on Auto: it steps down a ladder of cheaper
+  // ways to draw (less resolution, lite shading, fewer particles, no bloom or shadows, a shorter view) to keep
+  // the game smooth, 18 fps or more on the slowest devices, and back up when there's room. Where it settled
+  // is remembered per preset. A fixed Resolution setting turns it off.
+  const _dbs = new THREE.Vector2();
+  const lite = new LiteShading();
+  const render0 = renderer.render.bind(renderer);
+  renderer.render = (s, c) => { // (the match's scene drawn in lite shading when the tier says so, tiny things skipped)
+    if (s !== scene) return render0(s, c);
+    game.world.liteBatch?.(lite.level === 2); // (the plain scenery as one shape a square at the matte tiers: world.js)
+    if (!lite.level && !lite.cullPx) return render0(s, c);
+    lite.begin(s, c, renderer.getDrawingBufferSize(_dbs).y);
+    try { render0(s, c); } finally { lite.end(s); }
+  };
+  const tierKey = (k) => `tt-tier-${k}`;
+  const savedTier = (k) => { try { return Math.max(0, +(localStorage.getItem(tierKey(k)) || 0) | 0); } catch { return 0; } };
+  let tierShown = -1, tierSaved = -1;
+  const gov = new Governor({ start: savedTier(qKey), onChange: () => applyTier() });
+  let resScale = 1, fpsEma = 60;
   const applyScale = () => {
     renderer.setPixelRatio(quality.pixelRatio * resScale);
     renderer.setSize(innerWidth, innerHeight, false);
@@ -894,16 +913,34 @@ function boot() {
       a.root.traverse((o) => { if (o.isMesh) o.castShadow = !!quality.dynamicShadows && o !== a.iceBlock; });
     }
     scene.traverse((o) => { const m = o.material; if (m) (Array.isArray(m) ? m : [m]).forEach((x) => { x.needsUpdate = true; }); });
-    game.fx.scale = gfx.particles === 'auto' ? quality.particles : PARTICLES[gfx.particles];
-    game.world.setAtmosphere(quality.name !== 'Low');
-    camera.far = quality.far; camera.updateProjectionMatrix();
-    scene.fog.near = quality.fog[0]; scene.fog.far = quality.fog[1];
-    resScale = RES[gfx.res] || 1;
-    composer = makeComposer();
-    applyScale();
-    for (const el of document.querySelectorAll('[data-gfx="preset"]')) el.value = key;
+    if (key !== qKey || gfx.res !== 'auto') gov.set(gfx.res === 'auto' ? savedTier(key) : 0, true); // (a new preset: from where it settled last time)
+    gov.on = gfx.res === 'auto';
     qKey = key;
+    tierShown = -1;
+    applyTier(true);
+    for (const el of document.querySelectorAll('[data-gfx="preset"]')) el.value = key;
     try { localStorage.setItem('tt-quality', key); } catch { /* storage blocked */ }
+  }
+  // The governor's tier on top of the preset: only what changed is redone (a full re-apply recompiles every shader).
+  function applyTier(force = false) {
+    const T = TIERS[gov.tier], was = TIERS[Math.max(0, tierShown)];
+    const first = force || tierShown < 0;
+    resScale = gfx.res === 'auto' ? T.res : RES[gfx.res] || 1;
+    lite.setLevel(T.lite);
+    lite.cullPx = T.cull;
+    game.items.drawDist = 110 * T.view;
+    game.fx.scale = (gfx.particles === 'auto' ? quality.particles : PARTICLES[gfx.particles]) * T.fx;
+    camera.far = quality.far * T.view; camera.updateProjectionMatrix();
+    scene.fog.near = quality.fog[0] * T.view; scene.fog.far = quality.fog[1] * T.view;
+    game.world.setAtmosphere(quality.name !== 'Low' && T.extras);
+    const shadows = !!quality.shadows && T.shadows;
+    if (first || shadows !== renderer.shadowMap.enabled) {
+      renderer.shadowMap.enabled = shadows; game.world.sun.castShadow = shadows; renderer.shadowMap.needsUpdate = true;
+      if (!first) scene.traverse((o) => { const m = o.material; if (m) (Array.isArray(m) ? m : [m]).forEach((x) => { x.needsUpdate = true; }); });
+    }
+    if (first || T.extras !== was.extras) { extrasOn = T.extras; composer = makeComposer(); }
+    applyScale();
+    tierShown = gov.tier;
   }
   // One settings panel is rendered into the menu and into the pause card; every copy stays in sync.
   const gfxPanel = (presetId) => `
@@ -950,7 +987,7 @@ function boot() {
   });
   applyQuality(qKey);
   syncGfx();
-  game.perf = { get scale() { return resScale; }, get fps() { return fpsEma; } };
+  game.perf = { get scale() { return resScale; }, get fps() { return fpsEma; }, get tier() { return gov.tier; }, gov, lite };
 
   addEventListener('resize', () => {
     applyScale();
@@ -967,7 +1004,25 @@ function boot() {
   warm.position.set(0, -30, 0);
   scene.add(warm);
   renderer.compileAsync(scene, camera).catch(() => {}).finally(() => scene.remove(warm));
-  let last = performance.now(), frameNo = 0, specOn = false, loadoutT = 0;
+  let last = performance.now(), lastRaw = last, frameNo = 0, specOn = false, loadoutT = 0;
+  // (0.53) Frame pacing: the GPU works behind the page, and a slow one falls further and further behind
+  // (frames queue up: the picture lags, then the browser stalls for seconds). Each drawn frame gets a fence
+  // (WebGL 2), and no new frame is drawn while two are still unfinished; the game itself keeps running. The
+  // time between finished frames is what the governor goes by (where there are no fences: between frames).
+  const gl = renderer.getContext(), fenced = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+  const fences = [];
+  let doneAt = 0, drawn = 0, skipped = 0;
+  Object.defineProperties(game.perf, { drawn: { get: () => drawn }, skipped: { get: () => skipped } });
+  const fenceAt = [];
+  const gpuBusy = (now) => {
+    // (a fence that never says it's done, after 2 s, counts as done: never stop drawing for good)
+    while (fences.length && (gl.getSyncParameter(fences[0], gl.SYNC_STATUS) === gl.SIGNALED || now - fenceAt[0] > 2000)) {
+      gl.deleteSync(fences.shift()); fenceAt.shift();
+      if (doneAt) gov.frame((now - doneAt) / 1000);
+      doneAt = now;
+    }
+    return fences.length >= 2;
+  };
   renderer.info.autoReset = false; // count draw calls across all passes for the perf readout
   renderer.setAnimationLoop((now) => {
     renderer.info.reset();
@@ -984,17 +1039,22 @@ function boot() {
     if (game.world.shadowDirty && quality.shadows && !quality.dynamicShadows) { renderer.shadowMap.needsUpdate = true; game.world.shadowDirty = false; }
     // High: moving shadows refresh at 30 Hz instead of every frame (half the shadow cost).
     if (quality.dynamicShadows) renderer.shadowMap.needsUpdate = (frameNo++ & 1) === 0;
-    if (composer) composer.render(dt); else renderer.render(scene, camera);
+    const busy = fenced && gpuBusy(now);
+    if (busy) skipped++;
+    else {
+      if (composer) composer.render(dt); else renderer.render(scene, camera);
+      drawn++;
+      if (fenced) { const f = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); if (f) { fences.push(f); fenceAt.push(now); gl.flush(); } } // (sent now, or it never finishes)
+    }
     game.highlights.playing?.unpose(); // (0.38) online: the reel's pose was for this frame only; the match is back
     game.lastDrawCalls = renderer.info.render.calls;
 
+    const raw = (now - lastRaw) / 1000; lastRaw = now; // (the real time between frames, for the governor)
     if (dt > 0) fpsEma += (1 / dt - fpsEma) * 0.05;
-    adjustT += dt;
-    if (adjustT > 1.2) {
-      adjustT = 0;
-      if (gfx.res !== 'auto') { /* fixed resolution chosen in settings */ } else if (fpsEma < 50 && resScale > quality.minScale) { resScale = Math.max(quality.minScale, resScale - 0.1); applyScale(); }
-      else if (fpsEma > 58 && resScale < 1) { resScale = Math.min(1, resScale + 0.05); applyScale(); }
-    }
+    if (!fenced && !document.hidden) gov.frame(raw);
+    if (document.hidden) doneAt = 0; // (back from the background: no huge gap)
+    // where it settled (unchanged for 20 s) is where the next game starts
+    if (gov.on && gov.tier !== tierSaved && gov.clock - gov.lastMove > 20) { tierSaved = gov.tier; try { localStorage.setItem(tierKey(qKey), String(gov.tier)); } catch { /* storage blocked */ } }
   });
 }
 

@@ -269,10 +269,13 @@ export class Abilities {
   stormMesh(v) {
     const group = new THREE.Group();
     group.position.copy(v.pos);
+    // (0.53) the same three materials for every storm, kept: a new set each time, thrown away after, made
+    // the GPU build their shaders again each storm, a freeze of a fraction of a second on a slow device
     const mat = (opacity, color) => new THREE.MeshBasicMaterial({ map: this.swirl, color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide });
-    const outer = new THREE.Mesh(this.funnelGeo, mat(0.8, '#e6f7ff'));
-    const inner = new THREE.Mesh(this.innerGeo, mat(0.9, '#9fdcff'));
-    const base = new THREE.Mesh(this.baseGeo, new THREE.MeshBasicMaterial({ map: this.spiralTex, color: '#cfefff', transparent: true, opacity: 0.55, depthWrite: false }));
+    this.stormMats ||= [mat(0.8, '#e6f7ff'), mat(0.9, '#9fdcff'), new THREE.MeshBasicMaterial({ map: this.spiralTex, color: '#cfefff', transparent: true, opacity: 0.55, depthWrite: false })];
+    const outer = new THREE.Mesh(this.funnelGeo, this.stormMats[0]);
+    const inner = new THREE.Mesh(this.innerGeo, this.stormMats[1]);
+    const base = new THREE.Mesh(this.baseGeo, this.stormMats[2]);
     base.position.y = 0.12; base.renderOrder = 3;
     outer.renderOrder = inner.renderOrder = 6;
     group.add(outer, inner, base);
@@ -318,8 +321,7 @@ export class Abilities {
     return true;
   }
   _dropVortex(v) {
-    this.game.scene.remove(v.group);
-    for (const m of [v.outer, v.inner, v.base]) m.material.dispose();
+    this.game.scene.remove(v.group); // (its materials are kept for the next storm)
   }
 
   // ------------------------------------------------------------------ 3. Watermelon: Smash

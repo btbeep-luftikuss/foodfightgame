@@ -1300,9 +1300,14 @@ export class World {
     }
     this.sightBoxes = new Float32Array(sight);
     const groups = new Map();
+    // (0.53) merged in squares of the map, CHUNK m across, so what's behind the camera isn't drawn (one piece
+    // per material across the whole kitchen was drawn whole wherever you looked)
+    const CHUNK = 120, cen = new THREE.Vector3();
     for (const o of [...this.scene.children]) {
       if (!o.isMesh || !o.userData.world || o.userData.dyn || Array.isArray(o.material) || o.material.transparent) continue;
-      const key = `${o.material.uuid}|${o.castShadow}|${o.receiveShadow}`;
+      if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+      cen.copy(o.geometry.boundingSphere.center).applyMatrix4(o.matrixWorld);
+      const key = `${o.material.uuid}|${o.castShadow}|${o.receiveShadow}|${Math.floor(cen.x / CHUNK)},${Math.floor(cen.z / CHUNK)}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(o);
     }
@@ -1332,6 +1337,67 @@ export class World {
     // Scenery never moves: freeze its matrices so three.js skips recomputing them every frame.
     for (const o of this.scene.children) {
       if (o.isMesh && !o.userData.dyn && (o.userData.world || o.userData.merged)) { o.updateMatrix(); o.matrixAutoUpdate = false; }
+    }
+  }
+
+  // (0.53) The governor's lowest tiers draw everything matte (lite shading, Lambert), where a material is
+  // just its colour. There, the plain scenery (not see-through, not textured, not glowing, never changing) of
+  // each 120 m square goes into one shape with each piece's colour on its corners: one draw instead of dozens
+  // (each draw costs a weak device as much as thousands of triangles). Built the first time it's needed; the
+  // originals are hidden while it's on and shown again after.
+  liteBatch(on) {
+    if (on === !!this.batchOn) return;
+    if (on && !this.batches) this._buildBatches();
+    this.batchOn = on;
+    for (const o of this.batched) o.visible = !on;
+    for (const b of this.batches) b.visible = on;
+  }
+  _buildBatches() {
+    const CH = 120, groups = new Map(), cen = new THREE.Vector3(), col = new THREE.Color();
+    this.batched = []; this.batches = [];
+    this.scene.updateMatrixWorld(true);
+    for (const o of this.scene.children) {
+      if (!o.isMesh || o.isInstancedMesh || !(o.userData.world || o.userData.merged) || o.userData.dyn || !o.visible) continue;
+      const m = o.material;
+      if (Array.isArray(m) || !m.isMeshStandardMaterial || m.transparent || m.map || m.alphaMap || m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) continue;
+      if (m.emissiveIntensity > 0 && m.emissive.r + m.emissive.g + m.emissive.b > 0.004) continue; // (glows, and may change)
+      const g = o.geometry;
+      if (!g.attributes.position || !g.attributes.normal) continue;
+      if (!g.boundingSphere) g.computeBoundingSphere();
+      cen.copy(g.boundingSphere.center).applyMatrix4(o.matrixWorld);
+      const key = `${m.side === THREE.DoubleSide ? 2 : 1}|${Math.floor(cen.x / CH)},${Math.floor(cen.z / CH)}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(o);
+    }
+    for (const [key, list] of groups) {
+      if (list.length < 2) continue;
+      let n = 0;
+      const parts = list.map((o) => { const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry; n += g.attributes.position.count; return [o, g]; });
+      const P = new Float32Array(n * 3), N = new Float32Array(n * 3), C = new Float32Array(n * 3);
+      const v = new THREE.Vector3(), nm = new THREE.Matrix3();
+      let at = 0;
+      for (const [o, g] of parts) {
+        const m = o.material, pos = g.attributes.position, nor = g.attributes.normal, vc = m.vertexColors && g.attributes.color;
+        nm.getNormalMatrix(o.matrixWorld);
+        col.copy(m.color); if (m.metalness > 0.5) col.multiplyScalar(0.85); // (as lite.js draws it)
+        for (let i = 0; i < pos.count; i++, at++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld); P[at * 3] = v.x; P[at * 3 + 1] = v.y; P[at * 3 + 2] = v.z;
+          v.fromBufferAttribute(nor, i).applyMatrix3(nm).normalize(); N[at * 3] = v.x; N[at * 3 + 1] = v.y; N[at * 3 + 2] = v.z;
+          C[at * 3] = col.r * (vc ? vc.getX(i) : 1); C[at * 3 + 1] = col.g * (vc ? vc.getY(i) : 1); C[at * 3 + 2] = col.b * (vc ? vc.getZ(i) : 1);
+        }
+        if (g !== o.geometry) g.dispose();
+      }
+      const geo = new THREE.BufferGeometry();
+      const free = function () { this.array = null; }; // (once on the GPU the copy here isn't needed: memory is short on such devices)
+      geo.setAttribute('position', new THREE.BufferAttribute(P, 3).onUpload(free));
+      geo.setAttribute('normal', new THREE.BufferAttribute(N, 3).onUpload(free));
+      geo.setAttribute('color', new THREE.BufferAttribute(C, 3).onUpload(free));
+      geo.computeBoundingSphere(); geo.computeBoundingBox();
+      const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, side: key[0] === '2' ? THREE.DoubleSide : THREE.FrontSide }));
+      mesh.userData.liteBatch = true; mesh.matrixAutoUpdate = false; mesh.visible = false;
+      this.scene.add(mesh);
+      this.batches.push(mesh);
+      for (const [o] of parts) this.batched.push(o);
     }
   }
 

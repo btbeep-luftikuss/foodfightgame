@@ -122,6 +122,7 @@ export class Stains {
     this.mesh.matrixAutoUpdate = false;
     scene.add(this.mesh);
     this.head = 0; this.used = 0; this.dirtyFrom = Infinity; this.dirtyTo = -1; this.wrapped = false; this.flushT = 0;
+    this.queue = []; this.budget = 1.5;
   }
 
   // Every static, opaque scenery triangle in world space, with vertex normals, in a floor-plan grid.
@@ -212,8 +213,15 @@ export class Stains {
   }
 
   // Stain whatever surface is at (x, y, z), radius r.
+  // (0.53) A splat waits its turn: each one cuts its stain out of the scenery (heavy), so a burst of them
+  // (a grape volley, a blender jet) is spread over the next frames, a little time each (`budget` ms)
+  // instead of all at once in one long frame.
   paint(x, y, z, r, kind) {
     if (!LOOKS[kind] || r <= 0) return;
+    if (this.queue.length >= 40) this.queue.shift(); // (a flood: the oldest waiting ones go)
+    this.queue.push([x, y, z, r, kind]);
+  }
+  _paintNow(x, y, z, r, kind) {
     const p = _p.set(x, y, z);
     let hit = this._surface(p, Math.max(1.2, r * 0.6));
     if (!hit) { // e.g. a Titan was hit mid-air: the juice lands on the ground below, if it's close
@@ -283,6 +291,10 @@ export class Stains {
   }
 
   update(dt) {
+    if (this.queue.length) { // at least one a frame, then more while there's time
+      const end = performance.now() + this.budget;
+      do { this._paintNow(...this.queue.shift()); } while (this.queue.length && performance.now() < end);
+    }
     this.flushT += dt;
     if (this.dirtyTo < 0 || this.flushT < 0.05) return;
     for (const [name, n] of [['position', 3], ['normal', 3], ['uv', 2]]) {
@@ -294,6 +306,7 @@ export class Stains {
     this.dirtyFrom = Infinity; this.dirtyTo = -1; this.flushT = 0;
   }
   clear() {
+    this.queue.length = 0;
     this.head = 0; this.used = 0; this.wrapped = false;
     this.geo.setDrawRange(0, 0);
     this.dirtyFrom = Infinity; this.dirtyTo = -1;

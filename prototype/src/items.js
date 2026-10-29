@@ -30,7 +30,8 @@ const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vect
 export class Items {
   constructor(game) {
     this.game = game;
-    this.list = []; this.traps = []; this.decor = []; this.tramps = [];
+    this.list = []; this.traps = []; this.decor = []; this.tramps = []; this.meters = []; // (meters: spare ones, 0.53)
+    this.drawDist = 110; // metres: floor food further away isn't drawn
     const scene = game.scene;
 
     this.setSpawners(game.world.spawnPoints);
@@ -231,6 +232,8 @@ export class Items {
     if (net && (owner === this.game.player || (owner.isBot && !owner.isRemote && net.isHost))) net.event('r', +pos.x.toFixed(2), +pos.y.toFixed(2), +pos.z.toFixed(2), ...(owner.isBot ? [owner.id] : []));
   }
   _meter() {
+    const spare = this.meters.pop(); // (reused: a new one each time made the GPU build its shader again)
+    if (spare) return spare;
     const c = document.createElement('canvas');
     c.width = 128; c.height = 32;
     const tex = new THREE.CanvasTexture(c);
@@ -257,7 +260,7 @@ export class Items {
   _removeTramp(t) {
     this.game.scene.remove(t.mesh);
     this.game.scene.remove(t.meter);
-    t.meter.material.map.dispose(); t.meter.material.dispose();
+    if (this.meters.length < 8) this.meters.push(t.meter); else { t.meter.material.map.dispose(); t.meter.material.dispose(); }
     const i = this.tramps.indexOf(t);
     if (i >= 0) this.tramps.splice(i, 1);
   }
@@ -309,7 +312,7 @@ export class Items {
           if (it.pos.y <= gy) { it.pos.y = gy; it.vel = null; }
         }
       }
-      it.visible = it.pos.distanceToSquared(cam) < 110 * 110;
+      it.visible = it.pos.distanceToSquared(cam) < this.drawDist * this.drawDist; // (0.53: nearer on a slow device's lower tiers)
       if (it.vel || now - it.born < 0.4) continue;
       const net = game.online ? game.net : null;
       for (const a of game.actors) {
@@ -405,8 +408,8 @@ export class Items {
       put(it.id, it.pos.x, it.pos.y + 1 + Math.sin(now * 3 + it.phase) * 0.18, it.pos.z, it.id === 'cheese' ? 1 : 1.35, now * 1.6 + it.phase);
       if (!it.vel && rings < 200) { _m.makeTranslation(it.pos.x, it.pos.y + 0.06, it.pos.z); this.rings.setMatrixAt(rings++, _m); }
     }
-    for (const id of DRAW_IDS) {
-      for (const im of this.inst[id]) { im.count = fill[id]; if (fill[id]) im.instanceMatrix.needsUpdate = true; }
+    for (const id of DRAW_IDS) { // (a food with none on the floor isn't drawn at all: an empty draw still costs)
+      for (const im of this.inst[id]) { im.count = fill[id]; im.visible = fill[id] > 0; if (fill[id]) im.instanceMatrix.needsUpdate = true; }
     }
     this.rings.count = rings;
     this.rings.instanceMatrix.needsUpdate = true;

@@ -21,8 +21,6 @@ class ParticlePool {
     this.drag = new Float32Array(n); this.grow = new Float32Array(n);
     this.rot = new Float32Array(n);
     this.count = 0;
-    this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._s = new THREE.Vector3();
-    this._e = new THREE.Euler(); this._pos = new THREE.Vector3();
   }
   spawn(px, py, pz, vx, vy, vz, life, size, color, grav = 1, drag = 0.3, grow = 0) {
     let i = this.count;
@@ -45,15 +43,18 @@ class ParticlePool {
       p[i3] += v[i3] * dt; p[i3 + 1] += v[i3 + 1] * dt; p[i3 + 2] += v[i3 + 2] * dt;
       this.rot[i] += dt * 4;
     }
+    // (0.53) each particle's matrix written straight into the buffer: turned by rot about x then 0.7 rot about y
+    // (as an Euler rotation, XYZ order), scaled, placed. The same numbers compose() makes, without the objects.
+    const M = this.mesh.instanceMatrix.array;
     for (let i = 0; i < this.count; i++) {
       const t = this.life[i] / this.max[i];
       const s = this.size[i] * (this.grow[i] ? 1 + this.grow[i] * (1 - t) : Math.min(1, t * 3));
-      this._s.set(s, s, s);
-      this._e.set(this.rot[i], this.rot[i] * 0.7, 0);
-      this._q.setFromEuler(this._e);
-      this._pos.set(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]);
-      this._m.compose(this._pos, this._q, this._s);
-      this.mesh.setMatrixAt(i, this._m);
+      const a = this.rot[i], ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(a * 0.7), sb = Math.sin(a * 0.7);
+      const o = i * 16;
+      M[o] = cb * s; M[o + 1] = sa * sb * s; M[o + 2] = -ca * sb * s; M[o + 3] = 0;
+      M[o + 4] = 0; M[o + 5] = ca * s; M[o + 6] = sa * s; M[o + 7] = 0;
+      M[o + 8] = sb * s; M[o + 9] = -sa * cb * s; M[o + 10] = ca * cb * s; M[o + 11] = 0;
+      M[o + 12] = p[i * 3]; M[o + 13] = p[i * 3 + 1]; M[o + 14] = p[i * 3 + 2]; M[o + 15] = 1;
     }
     this.mesh.count = this.count;
     this.mesh.instanceMatrix.needsUpdate = true;

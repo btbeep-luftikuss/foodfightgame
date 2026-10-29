@@ -288,8 +288,12 @@ export class Projectiles {
       }
     }
     // 2) actors: body capsule plus a head sphere for face hits
+    const reach = Math.sqrt((p.pos.x - _prev.x) ** 2 + (p.pos.z - _prev.z) ** 2) + rad + 1.2; // (0.53: a quick "anywhere near?" first)
+    const yLo = Math.min(_prev.y, p.pos.y) - 2.1 - rad, yHi = Math.max(_prev.y, p.pos.y) + rad + 0.1; // (its body and head reach 0.05 to 2.04 m up, plus the food's size)
     for (const a of game.actors) {
       if (!a.alive || p.hitSet.has(a)) continue;
+      const qx = a.pos.x - p.pos.x, qz = a.pos.z - p.pos.z;
+      if (qx * qx + qz * qz > reach * reach || a.pos.y < yLo || a.pos.y > yHi) continue;
       if (a === p.owner && !(p.selfOk && p.life > p.selfAfter)) continue; // a ricochet can come back at you
       _a.set(a.pos.x, a.pos.y + 0.5, a.pos.z); _b.set(a.pos.x, a.pos.y + 1.0, a.pos.z);
       _h.set(a.pos.x, a.pos.y + 1.74, a.pos.z);

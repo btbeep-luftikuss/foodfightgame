@@ -17,6 +17,16 @@
 // times a second (only the latest of each), and a hub on Low does that for everyone.
 // congested(): how many updates were held back in the last 5 s (Auto low internet goes by it).
 //
+// Lean updates (0.53): a line carries only what changed. The first update of a player down a line is the
+// whole presence ('p', numbered); after that each ('u') has only the parts that changed since that line
+// last had them (a part gone: null), and only the events (the presence's `e`: a list of numbered events)
+// that line hasn't had yet. Data channels here deliver everything (in any order), so nothing is lost;
+// each part carries the number of the update it came in, and an older one never overwrites a newer one.
+// A held-back update (a busy or Low line) costs nothing extra: the next one has everything that changed
+// since. The receiver puts each player's presence back together, with the events of the last 4 seconds.
+// Saying `ln: 1` (lean) in an update or keep-alive tells the other end this game can take lean updates;
+// a line to an older game gets whole presences as before (it'll be asked to reload anyway).
+//
 // Everything that arrives is untrusted: the hub ties each connection to one player id, drops
 // oversized or malformed messages, and net.js checks every value it reads.
 import { Peer } from 'peerjs';
@@ -30,6 +40,7 @@ const HUB_LOST_MS = 3500;  // the hub (or a player's line to it) silent this lon
 const MAX_BYTES = 15500;   // one message (PeerJS refuses JSON messages over about 16 KB)
 const BACKLOG = 48000;     // (0.45) bytes waiting on a line before it skips updates
 const LOW_EVERY = 100;     // (0.45) ms between the hub's batches to a Low player (or from a Low hub)
+const EV_KEEP_MS = 4000, EV_MAX = 90, KEY_MAX = 48, WHOLE_EV = 24; // (0.53) events kept per player; parts; events in a whole update
 const busy = (c) => (c?.dataChannel?.bufferedAmount || 0) > BACKLOG;
 // A connection error that isn't the connection going: a message too big, or sent a moment early.
 const harmless = (e) => e && (e.type === 'message-too-big' || e.type === 'not-open-yet');
@@ -41,6 +52,44 @@ const ICE = [
   { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
 ];
 const rid = () => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
+const isEv = (x) => Array.isArray(x) && Number.isFinite(x[0]);
+
+// (0.53) One player's presence, put together from whole and lean updates (see above), with what a line to
+// another game needs to tell what changed (each part's JSON).
+class Held {
+  constructor() {
+    this.vals = new Map(); this.kn = new Map(); this.kj = new Map(); this.ev = new Map(); this.top = 0;
+    this.presence = Object.freeze({}); this.seen = Date.now(); this.partial = true;
+  }
+  _set(k, v, n) {
+    if (n <= (this.kn.get(k) ?? -1)) return; // (an older update than the one this part came in)
+    if (!this.vals.has(k) && this.vals.size >= KEY_MAX) return;
+    this.kn.set(k, n); this.top = Math.max(this.top, n);
+    if (v === null || v === undefined) { this.vals.delete(k); this.kj.delete(k); } else { this.vals.set(k, v); this.kj.set(k, JSON.stringify(v)); }
+  }
+  // the whole presence, in update n (an older game's carry no number: it simply replaces what we had)
+  full(p, n) {
+    if (!Number.isFinite(n)) n = this.top + 1;
+    for (const k of Object.keys(p)) if (k !== 'e') this._set(k, p[k], n);
+    for (const k of [...this.vals.keys()]) if (!Object.hasOwn(p, k) && (this.kn.get(k) ?? -1) < n) this._set(k, null, n);
+    this.events(p.e);
+    this.partial = false;
+  }
+  delta(d, n) { if (isObj(d) && Number.isFinite(n)) for (const k of Object.keys(d)) if (k !== 'e') this._set(k, d[k], n); }
+  events(list) {
+    if (!Array.isArray(list)) return;
+    const now = Date.now(), ev = this.ev;
+    for (let i = 0; i < list.length && i < 120; i++) { const x = list[i]; if (isEv(x) && !ev.has(x[0])) ev.set(x[0], { x, at: now }); }
+    for (const [q, v] of ev) if (now - v.at > EV_KEEP_MS) ev.delete(q);
+    if (ev.size > EV_MAX) { const qs = [...ev.keys()].sort((a, b) => a - b); for (let i = 0; i < qs.length - EV_MAX; i++) ev.delete(qs[i]); }
+  }
+  evList(max = EV_MAX) { const l = [...this.ev.values()].map((v) => v.x).sort((a, b) => a[0] - b[0]); return l.length > max ? l.slice(-max) : l; }
+  build() { this.presence = Object.freeze(Object.fromEntries([...this.vals, ['e', this.evList()]])); this.whole = null; }
+  // to send it whole: with its latest events only (a line taking it whole has had the others, or never
+  // will: one that just arrived doesn't go back over old events; and it has to fit in one message)
+  wholeP() { return (this.whole ||= Object.freeze(Object.fromEntries([...this.vals, ['e', this.evList(WHOLE_EV)]]))); }
+}
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 class P2PRoom {
@@ -49,8 +98,8 @@ class P2PRoom {
     this.hubId = hubIdFor(name);
     this.opts = { debug: 0, config: { iceServers: ICE, sdpSemantics: 'unified-plan' }, ...opts };
     this.me = rid();
-    this.mine = Object.freeze({});
-    this.others = new Map(); // player id -> { presence, seen }
+    this.mine = Object.freeze({}); this.self = new Held(); // (my presence, as lines get it)
+    this.others = new Map(); // player id -> Held (presence, seen)
     this.peerHandlers = new Set(); this.connHandlers = new Set();
     this.isHub = false; this.hub = null; this.client = null; this.conn = null; this.links = new Map(); this.heard = new Map(); // (hub) conn -> player id, conn -> last heard
     this.hubSeen = 0;
@@ -68,12 +117,48 @@ class P2PRoom {
     const next = { ...this.mine };
     for (const [k, v] of Object.entries(patch)) if (v === null) delete next[k]; else next[k] = v; // (a null field goes, as in the claude.ai room)
     this.mine = Object.freeze(next);
-    const msg = { t: 'p', id: this.me, p: this.mine };
-    if (this.isHub) this._broadcast(msg, null);
+    this._mine();
+    if (this.isHub) this._relay(this.me, null);
     else if (this.conn?.open) {
-      if (busy(this.conn)) { this.held.push(Date.now()); return; } // (the line is still sending older ones: skip this one)
-      try { this.conn.send(msg); } catch { /* dropped: the next one follows */ }
+      if (busy(this.conn)) { this.held.push(Date.now()); return; } // (the line is still sending older ones: skip this one; the next has it all)
+      this._send(this.conn, this.me, this.self);
     }
+  }
+  // (0.53) my presence as a Held: each part's JSON (what changed?), my events
+  _mine() {
+    const s = this.self, m = this.mine;
+    for (const k of Object.keys(m)) {
+      if (k === 'e') continue;
+      const j = JSON.stringify(m[k]);
+      if (s.kj.get(k) !== j) { s.vals.set(k, m[k]); s.kj.set(k, j); }
+    }
+    for (const k of [...s.vals.keys()]) if (!Object.hasOwn(m, k)) { s.vals.delete(k); s.kj.delete(k); }
+    s.events(m.e);
+    s.presence = m; s.partial = false;
+  }
+  // (0.53) Send player `id`'s presence (Held h) down line c: the whole of it the first time (or to an older
+  // game, or when `whole`), else what that line hasn't had. False if it couldn't go (it goes whole next time).
+  _send(c, id, h, whole = false) {
+    const tx = (c.tx ||= new Map());
+    let s = tx.get(id), m;
+    if (!s || whole || !c.lean) {
+      s = { kj: new Map(h.kj), evs: new Set(h.ev.keys()), n: (s?.n || 0) + 1 }; tx.set(id, s);
+      m = { t: 'p', id, n: s.n, ln: 1, p: h === this.self ? this.mine : h.wholeP() };
+    } else {
+      const d = [];
+      for (const [k, j] of h.kj) if (s.kj.get(k) !== j) { d.push([k, h.vals.get(k)]); s.kj.set(k, j); }
+      for (const k of [...s.kj.keys()]) if (!h.kj.has(k)) { d.push([k, null]); s.kj.delete(k); }
+      const e = [];
+      for (const [q, v] of h.ev) if (!s.evs.has(q)) { e.push(v.x); s.evs.add(q); }
+      for (const q of s.evs) if (!h.ev.has(q)) s.evs.delete(q);
+      m = { t: 'u', id, n: ++s.n };
+      if (d.length) m.p = Object.fromEntries(d);
+      if (e.length) m.e = e;
+    }
+    try {
+      if (JSON.stringify(m).length > MAX_BYTES) throw new Error('too big');
+      c.send(m); return true;
+    } catch { tx.delete(id); return false; } // (dropped: the next one goes whole)
   }
   peers() { return this.snap; }
   onPeers(h) { this.peerHandlers.add(h); queueMicrotask(() => h({ peers: this.snap, joined: this.snap, left: [], updated: [] })); return () => this.peerHandlers.delete(h); }
@@ -156,7 +241,8 @@ class P2PRoom {
       c.on('open', () => {
         clearTimeout(t);
         this.conn = c; this.missing = null; this.hubSeen = Date.now(); this._setOk(true);
-        c.send({ t: 'p', id: this.me, p: this.mine });
+        for (const h of this.others.values()) h.kn.clear(); // (0.53) a new line: its updates are numbered afresh
+        this._send(c, this.me, this.self, true);
         resolve('ok');
       });
       c.on('data', (m) => this._fromHub(m));
@@ -178,16 +264,21 @@ class P2PRoom {
   }
 
   // ------------------------------------------------------------------ messages
-  _valid(m) { return m && typeof m === 'object' && typeof m.id === 'string' && m.id.length <= 24 && (m.t === 'p' || m.t === 'bye' || m.t === 'k'); }
+  _valid(m) { return m && typeof m === 'object' && typeof m.id === 'string' && m.id.length <= 24 && (m.t === 'p' || m.t === 'u' || m.t === 'bye' || m.t === 'k'); }
   _take(m) {
-    if (m.id === this.me || m.t === 'k') return;
-    if (m.t === 'bye') { if (this.others.delete(m.id)) this._changed(); return; }
-    if (!m.p || typeof m.p !== 'object') return;
-    this.others.set(m.id, { presence: Object.freeze(m.p), seen: Date.now() });
-    this._changed();
+    if (m.id === this.me || m.t === 'k') return false;
+    if (m.t === 'bye') { if (this.others.delete(m.id)) this._changed(); return false; }
+    let h = this.others.get(m.id);
+    if (m.t === 'p') { if (!isObj(m.p)) return false; h ||= new Held(); h.full(m.p, m.n); }
+    else { h ||= new Held(); h.delta(m.p, m.n); h.events(m.e); } // (a lean one before the whole one: kept, shown once that's here)
+    h.seen = Date.now(); h.build();
+    this.others.set(m.id, h);
+    if (!h.partial) this._changed();
+    return true;
   }
   _fromHub(m) {
     this.hubSeen = Date.now();
+    if (m && (m.ln === 1 || m.t === 'u') && this.conn) this.conn.lean = true; // (0.53) the hub takes lean updates
     if (m && m.t === 'k') return; // keep-alive
     if (Array.isArray(m)) { for (const x of m.slice(0, 64)) if (this._valid(x)) this._take(x); return; } // everyone, on arrival
     if (this._valid(m)) this._take(m);
@@ -196,9 +287,8 @@ class P2PRoom {
   _accept(c) {
     c.on('open', () => {
       // everyone in the room so far, one message each (all in one could pass the size limit)
-      const send = (m) => { try { if (JSON.stringify(m).length <= MAX_BYTES) c.send(m); } catch { /* they'll hear the next round */ } };
-      send({ t: 'p', id: this.me, p: this.mine });
-      for (const [id, v] of this.others) send({ t: 'p', id, p: v.presence });
+      this._send(c, this.me, this.self, true);
+      for (const [id, h] of this.others) if (!h.partial) this._send(c, id, h, true);
     });
     this.heard.set(c, Date.now());
     c.on('data', (m) => {
@@ -206,11 +296,12 @@ class P2PRoom {
       if (!this._valid(m)) return;
       const bound = this.links.get(c);
       if (bound && bound !== m.id) return; // one player per connection: no speaking for others
-      if (!bound) { if (m.id === this.me) return; this.links.set(c, m.id); }
+      if (!bound) { if (m.id === this.me) return; this.links.set(c, m.id); this.others.get(m.id)?.kn.clear(); } // (a new line: numbered afresh)
+      if (m.ln === 1 || m.t === 'u') c.lean = true; // (0.53) they take lean updates
       if (m.t === 'k') { c.slow = m.lo === 1; return; } // keep-alive (lo: they're on Low internet)
       try { if (JSON.stringify(m).length > MAX_BYTES) return; } catch { return; }
-      this._take(m);
-      this._broadcast(m, c);
+      if (m.t === 'bye') { this._take(m); this._broadcast(m, c); return; }
+      if (this._take(m)) this._relay(m.id, c);
     });
     c.gone = () => {
       const id = this.links.get(c);
@@ -219,17 +310,26 @@ class P2PRoom {
     };
     c.on('close', c.gone); c.on('error', (e) => { if (!harmless(e)) c.gone(); });
   }
-  _broadcast(m, except) {
+  _broadcast(m, except) { // (a goodbye or a keep-alive)
     for (const c of this.heard.keys()) {
       if (c === except || !c.open) continue;
-      if (m.t === 'bye') c.pend?.delete(m.id); // (a held-back update of theirs mustn't bring them back)
-      // (0.45) an update for a Low line (or from a Low hub), or a line still busy: keep only the latest per player
-      if (m.t === 'p' && (this.low || c.slow || busy(c))) {
+      if (m.t === 'bye') { c.pend?.delete(m.id); c.tx?.delete(m.id); } // (a held-back update of theirs mustn't bring them back)
+      try { c.send(m); } catch { /* a slow line drops one */ }
+    }
+  }
+  // (hub) player `id`'s presence changed: tell every other line
+  _relay(id, except) {
+    const h = id === this.me ? this.self : this.others.get(id);
+    if (!h || h.partial) return;
+    for (const c of this.heard.keys()) {
+      if (c === except || !c.open || this.links.get(c) === id) continue;
+      // (0.45) a Low line (or a Low hub), or a line still busy: it gets it later (0.53: all that changed meanwhile, at once)
+      if (this.low || c.slow || busy(c)) {
         if (busy(c)) this.held.push(Date.now());
-        (c.pend ||= new Map()).set(m.id, m);
+        (c.pend ||= new Set()).add(id);
         continue;
       }
-      try { c.send(m); } catch { /* a slow line drops one */ }
+      this._send(c, id, h);
     }
   }
   // (hub) the held-back updates go out: to a free line, at most every LOW_EVERY ms for a Low one
@@ -240,7 +340,7 @@ class P2PRoom {
       if (!c.pend?.size || !c.open || busy(c)) continue;
       if ((this.low || c.slow) && now - (c.sentAt || 0) < LOW_EVERY) continue;
       c.sentAt = now;
-      for (const m of c.pend.values()) try { c.send(m); } catch { /* the next one follows */ }
+      for (const id of c.pend) { const h = id === this.me ? this.self : this.others.get(id); if (h && !h.partial) this._send(c, id, h); }
       c.pend.clear();
     }
   }
@@ -248,10 +348,10 @@ class P2PRoom {
     const now = Date.now();
     if (this.isHub) {
       this._rejoinServer();
-      this._broadcast({ t: 'k' }, null);
+      this._broadcast({ t: 'k', ln: 1 }, null);
       for (const [c, t] of this.heard) if (now - t > STALE_MS) { c.gone(); try { c.close(); } catch { /* already */ } }
     } else if (this.conn) {
-      try { this.conn.send({ t: 'k', id: this.me, lo: this.low ? 1 : 0 }); } catch { /* the check below decides */ }
+      try { this.conn.send({ t: 'k', id: this.me, lo: this.low ? 1 : 0, ln: 1 }); } catch { /* the check below decides */ }
       if (now - this.hubSeen > HUB_LOST_MS) { const c = this.conn; try { c.close(); } catch { /* already */ } this._hubGone(c); }
     }
     let gone = false;
@@ -260,7 +360,7 @@ class P2PRoom {
   }
   _snapshot() {
     const list = [{ peer: this.me, by: null, isMe: true, sameTab: true, kind: 'viewer', guest: false, presence: this.mine, updatedAt: Date.now() }];
-    for (const [peer, v] of this.others) list.push({ peer, by: null, isMe: false, sameTab: false, kind: 'viewer', guest: false, presence: v.presence, updatedAt: v.seen });
+    for (const [peer, v] of this.others) if (!v.partial) list.push({ peer, by: null, isMe: false, sameTab: false, kind: 'viewer', guest: false, presence: v.presence, updatedAt: v.seen });
     return Object.freeze(list);
   }
   _changed() {

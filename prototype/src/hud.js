@@ -17,6 +17,9 @@ const ALT_BUTTON = {
 };
 const altShort = (id, food) => ALT_SHORT[id] || food.altName || (food.altLabel || '').split(':')[0];
 
+// (0.53) A class switched on or off only if it isn't already: even an unchanged toggle rewrites the attribute,
+// and the browser then re-checks the page's styles (and maybe repaints) every frame.
+const tog = (el, c, on) => { on = !!on; if (el && el.classList.contains(c) !== on) el.classList.toggle(c, on); };
 export class HUD {
   constructor(icons, input, sfx = null) {
     this.icons = icons; this.input = input; this.sfx = sfx;
@@ -58,8 +61,8 @@ export class HUD {
       this.hotSig = sig;
       a.inv.forEach((s, i) => {
         const b = this.slots[i];
-        b.classList.toggle('sel', i === a.sel);
-        b.classList.toggle('empty', !s);
+        tog(b, 'sel', i === a.sel);
+        tog(b, 'empty', !s);
         const img = b.querySelector('img');
         if (s) { img.src = this.icons[s.id]; img.alt = FOODS[s.id].name; }
         else { img.removeAttribute('src'); img.alt = ''; }
@@ -72,8 +75,8 @@ export class HUD {
       this.uSig = usig;
       this.uslots.forEach((b, i) => {
         const id = a.utensils?.[i], u = id && UTENSIL_BY_ID[id];
-        b.classList.toggle('sel', i === a.uSel && !!u);
-        b.classList.toggle('empty', !u);
+        tog(b, 'sel', i === a.uSel && !!u);
+        tog(b, 'empty', !u);
         b.style.setProperty('--sc', u ? u.color : '');
         const img = b.querySelector('img');
         if (u) { img.src = utensilIcon(id); img.alt = u.name; } else { img.removeAttribute('src'); img.alt = ''; }
@@ -86,7 +89,7 @@ export class HUD {
         const h = id && utensilHeat(id), st = a.uStates[i];
         const v = !h ? 0 : this.game.time < st.overUntil ? 1 : Math.min(1, st.heat / h.max);
         const b = this.uslots[i];
-        if (b._h !== v) { b._h = v; b.classList.toggle('heat', v > 0.02); b.style.setProperty('--h', v.toFixed(3)); }
+        if (b._h !== v) { b._h = v; tog(b, 'heat', v > 0.02); b.style.setProperty('--h', v.toFixed(3)); }
       });
     }
   }
@@ -124,13 +127,13 @@ export class HUD {
     else if (T.phase >= T.phases.length) { tt = 'Final'; urgent = true; tip = 'Final circle'; }
     else if (T.mode === 'wait') { const s = Math.ceil(T.t); tt = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; tip = 'The Soap Tide moves in'; }
     else { tt = 'Tide!'; urgent = true; tip = 'The Soap Tide is closing in'; }
-    if (!game.online) $('scores').hidden = true;
+    if (!game.online && !$('scores').hidden) $('scores').hidden = true;
     if (this.lastTide !== tt + ico + urgent) {
       this.lastTide = tt + ico + urgent;
       $('tideText').textContent = tt;
       $('tideIco').className = `ico ${ico}`;
       $('tideSeg').title = tip;
-      $('tide').classList.toggle('urgent', urgent);
+      tog($('tide'), 'urgent', urgent);
       $('aliveSeg').title = 'Titans left';
     }
     const alive = String(game.aliveCount());
@@ -142,11 +145,11 @@ export class HUD {
       const hp = Math.max(0, a.hp), gl = Math.max(0, a.glaze);
       $('hpFill').style.transform = `scaleX(${hp / (a.maxHp || MAX_HP)})`;
       $('glazeFill').style.transform = `scaleX(${gl / 100})`;
-      $('glaze').classList.toggle('none', gl <= 0.5);
+      tog($('glaze'), 'none', gl <= 0.5);
       const hpt = String(Math.ceil(hp));
       if ($('hpText').textContent !== hpt) $('hpText').textContent = hpt;
       $('stamFill').style.transform = `scaleX(${a.stamina / 100})`;
-      $('stam').classList.toggle('tired', a.staminaFlash > 0);
+      tog($('stam'), 'tired', a.staminaFlash > 0);
       this._renderHotbar(a); // (touch laptops can show both the plates and the bar)
       if (this.input.isTouch) this._renderDials(a);
 
@@ -179,12 +182,12 @@ export class HUD {
         const altTxt = (a.utensil === 'pan' && food ? 'Slam' : food && food.alt ? ALT_BUTTON[slot.id] || altShort(slot.id, food) : 'Alt') + (altCd > 0 ? ` ${altCd}` : '');
         const tAlt = $('tAlt');
         if (tAlt.textContent !== altTxt) tAlt.textContent = altTxt;
-        tAlt.classList.toggle('cd', altCd > 0);
+        tog(tAlt, 'cd', altCd > 0);
         const br = $('ubrief');
         const bt = ub ? ub.text : '';
         if (br.textContent !== bt) br.textContent = bt;
         if (br.hidden === !!ub) br.hidden = !ub;
-        if (ub) { br.classList.toggle('warn', !!ub.warn); br.style.setProperty('--uc', UTENSIL_BY_ID[a.utensil].color); }
+        if (ub) { tog(br, 'warn', !!ub.warn); br.style.setProperty('--uc', UTENSIL_BY_ID[a.utensil].color); }
       }
 
       // statuses (short words, no numbers)
@@ -198,28 +201,30 @@ export class HUD {
 
       // crosshair and charge ring
       const ch = $('crosshair');
-      ch.dataset.profile = food ? food.profile : 'none';
+      const prof = food ? food.profile : 'none';
+      if (ch.dataset.profile !== prof) ch.dataset.profile = prof;
       const chan = a.channel; // a teleport winding up fills the ring in purple
       const c = chan ? Math.min(1, chan.t / chan.need) : a.charging && food ? Math.min(1, a.chargeT / Math.max(0.01, a.chargeLen || food.charge)) : 0;
-      $('chargeRing').style.strokeDashoffset = String(176 * (1 - c));
-      ch.classList.toggle('charging', a.charging || !!chan);
-      ch.classList.toggle('channel', !!chan);
-      ch.classList.toggle('full', c >= 1);
-      ch.classList.toggle('cooldown', game.time < a.recoverUntil || game.time < a.swapLockUntil);
+      const dash = String(Math.round(176 * (1 - c) * 10) / 10);
+      if (this._dash !== dash) { this._dash = dash; $('chargeRing').style.strokeDashoffset = dash; }
+      tog(ch, 'charging', a.charging || !!chan);
+      tog(ch, 'channel', !!chan);
+      tog(ch, 'full', c >= 1);
+      tog(ch, 'cooldown', game.time < a.recoverUntil || game.time < a.swapLockUntil);
 
       // full-screen status overlays
       const o = $('fx-overlay');
-      o.classList.toggle('frozen', a.isFrozen());
-      o.classList.toggle('burning', a.isBurning());
-      o.classList.toggle('juiced', game.time < a.juicedUntil);
-      o.classList.toggle('wet', a.isWet());
-      o.classList.toggle('lowhp', a.alive && a.hp < (a.maxHp || MAX_HP) * 0.3);
+      tog(o, 'frozen', a.isFrozen());
+      tog(o, 'burning', a.isBurning());
+      tog(o, 'juiced', game.time < a.juicedUntil);
+      tog(o, 'wet', a.isWet());
+      tog(o, 'lowhp', a.alive && a.hp < (a.maxHp || MAX_HP) * 0.3);
     }
 
-    this.hitT -= dt; if (this.hitT <= 0) $('hitmarker').className = 'hitmarker';
-    this.hurtT -= dt; if (this.hurtT <= 0) $('fx-overlay').classList.remove('hurt');
-    this.toastT -= dt; if (this.toastT <= 0) $('toast').classList.remove('on');
-    this.bannerT -= dt; if (this.bannerT <= 0) $('banner').classList.remove('on');
+    this.hitT -= dt; if (this.hitT <= 0 && $('hitmarker').className !== 'hitmarker') $('hitmarker').className = 'hitmarker';
+    this.hurtT -= dt; if (this.hurtT <= 0) tog($('fx-overlay'), 'hurt', false);
+    this.toastT -= dt; if (this.toastT <= 0) tog($('toast'), 'on', false);
+    this.bannerT -= dt; if (this.bannerT <= 0) tog($('banner'), 'on', false);
 
     this._nameplates(game, cam);
     this._radar(game, cam);
@@ -259,28 +264,31 @@ export class HUD {
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
     this.radarEls.forEach((el, i) => {
       const m = marks[i];
-      if (!m) { el.style.display = 'none'; return; }
+      if (!m) { if (el.style.display !== 'none') el.style.display = 'none'; return; }
       // skip enemies already plainly on screen (unless sniffing)
       if (!m.sniff) {
         const s = this._project(m.actor.center(_e), cam);
-        if (s && s.x > 0 && s.x < innerWidth && s.y > 0 && s.y < innerHeight && hasLineOfSight(cam.position, _e)) { el.style.display = 'none'; return; }
+        if (s && s.x > 0 && s.x < innerWidth && s.y > 0 && s.y < innerHeight && hasLineOfSight(cam.position, _e)) { if (el.style.display !== 'none') el.style.display = 'none'; return; }
       }
       const dx = m.actor.pos.x - game.player.pos.x, dz = m.actor.pos.z - game.player.pos.z;
-      const ang = Math.atan2(dx * rx + dz * rz, dx * fx + dz * fz); // 0 = straight ahead
-      el.style.display = '';
-      el.style.transform = `rotate(${ang}rad)`;
-      el.style.opacity = String(0.35 + 0.65 * m.strength);
-      el.classList.toggle('sniff', m.sniff);
-      const span = el.querySelector('span');
-      span.textContent = m.sniff ? `${Math.round(m.dist)} m` : '';
-      span.style.transform = `rotate(${-ang}rad)`;
+      const ang = Math.atan2(dx * rx + dz * rz, dx * fx + dz * fz).toFixed(2); // 0 = straight ahead
+      // (0.53) only what changed is written (each write has the browser redo the arrow)
+      const c = (el._c ||= {}), op = (0.35 + 0.65 * m.strength).toFixed(2), txt = m.sniff ? `${Math.round(m.dist)} m` : '';
+      if (el.style.display) el.style.display = '';
+      if (c.ang !== ang) { c.ang = ang; el.style.transform = `rotate(${ang}rad)`; }
+      if (c.op !== op) { c.op = op; el.style.opacity = op; }
+      tog(el, 'sniff', m.sniff);
+      const span = (c.span ||= el.querySelector('span'));
+      if (c.txt !== txt) { c.txt = txt; span.textContent = txt; }
+      if (txt && c.sang !== ang) { c.sang = ang; span.style.transform = `rotate(${-ang}rad)`; }
     });
     const sn = $('sniff');
     const left = (game.sniffReadyAt || 0) - game.time;
-    sn.classList.toggle('ready', left <= 0);
-    sn.style.setProperty('--p', left > 0 ? (1 - left / 10).toFixed(3) : '1');
+    tog(sn, 'ready', left <= 0);
+    const sp = left > 0 ? (1 - left / 10).toFixed(2) : '1';
+    if (this._sp !== sp) { this._sp = sp; sn.style.setProperty('--p', sp); }
     const tb = document.getElementById('tSniff');
-    if (tb) tb.classList.toggle('cooling', left > 0);
+    if (tb) tog(tb, 'cooling', left > 0);
   }
 
   _project(pos, cam) {
@@ -307,14 +315,17 @@ export class HUD {
         const d = cam.position.distanceTo(_e);
         if (d < 55 && hasLineOfSight(cam.position, _e)) pos = this._project(_e, cam);
       }
-      if (!pos) { el.style.display = 'none'; continue; }
-      el.style.display = '';
-      el.style.transform = `translate(${pos.x}px, ${pos.y}px) translate(-50%, -100%)`;
-      el.querySelector('.name').textContent = a.name;
-      el.querySelector('.h').style.width = `${Math.max(0, a.hp) / (a.maxHp || MAX_HP) * 100}%`;
-      el.querySelector('.g').style.width = `${Math.max(0, a.glaze)}%`;
-      el.style.setProperty('--c', a.color);
-      el.classList.toggle('locked', a === game.lockCandidate);
+      // (0.53) only what changed is written (each write makes the browser redo some layout work)
+      const c = (el._c ||= { name: el.querySelector('.name'), h: el.querySelector('.h'), g: el.querySelector('.g') });
+      const set = (k, v, fn) => { if (c[k] !== v) { c[k] = v; fn(v); } };
+      if (!pos) { set('show', false, () => { el.style.display = 'none'; }); continue; }
+      set('show', true, () => { el.style.display = ''; });
+      set('tf', `translate(${Math.round(pos.x)}px, ${Math.round(pos.y)}px) translate(-50%, -100%)`, (v) => { el.style.transform = v; });
+      set('nm', a.name, (v) => { c.name.textContent = v; });
+      set('hp', Math.round(Math.max(0, a.hp) / (a.maxHp || MAX_HP) * 200) / 2, (v) => { c.h.style.width = `${v}%`; });
+      set('gl', Math.round(Math.max(0, a.glaze)), (v) => { c.g.style.width = `${v}%`; });
+      set('col', a.color, (v) => { el.style.setProperty('--c', v); });
+      set('lk', a === game.lockCandidate, (v) => { tog(el, 'locked', v); });
     }
     // (0.43) a plate whose Titan has left the match (the bots behind the menu when an online room starts with
     // no bots, a player who left): gone too, or it stays frozen where it was last drawn
