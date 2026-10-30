@@ -198,6 +198,17 @@ export class PotWars {
     else if (a === g.player) g.net.event('lh', p.team); // the host takes the hit off
   }
   // The enemy pot a swing reaches (in front of the Titan, roughly).
+  // (0.57) What the one action button on touch screens does right now: set the pot down (first 30 s), climb into
+  // the turret at your pot (or out of it), swing the ladle at an enemy pot in reach, or (null) sniff.
+  touchAction(a) {
+    if (!this.active || !a?.alive || a.team == null) return null;
+    if (a.inTurret) return 'out';
+    const p = this.pots[a.team];
+    if (this.setup) return p && !p.placed ? 'place' : null;
+    if (this._inFront(a, 0.5)) return 'ladle';
+    if (p?.alive && p.placed && Math.hypot(a.pos.x - p.pos.x, a.pos.z - p.pos.z) <= POT_R + TURRET_REACH && Math.abs(a.pos.y - p.pos.y) <= 3) return 'turret';
+    return null;
+  }
   _inFront(a, slack = 0) {
     const fx = -Math.sin(a.yaw), fz = -Math.cos(a.yaw);
     for (const p of this.pots) {
@@ -336,7 +347,7 @@ export class PotWars {
     if (other && other !== a) { if (a === g.player) g.hud.toast(`${other.name} is in the turret`); return; }
     p.gunner = a; a.inTurret = p;
     a.pos.set(p.pos.x, p.pos.y + POT_H, p.pos.z); a.vel.set(0, 0, 0);
-    if (a === g.player) g.hud.banner('In the turret', `Aim and throw: ${(1.6 + 0.4 * p.captures).toFixed(1)}× damage · T to climb out`, 2.6);
+    if (a === g.player) g.hud.banner('In the turret', `Aim and throw: ${(1.6 + 0.4 * p.captures).toFixed(1)}× damage · ${g.input.isTouch ? 'Climb out button to leave' : 'T to climb out'}`, 2.6);
   }
   _remoteGunner(p) { return this.game.actors.find((x) => x.isRemote && x.alive && x.netTurret && x.team === p.team) || null; }
   _leaveTurret(a) {
@@ -480,7 +491,7 @@ export class PotWars {
       }
     }
     if (this.setup !== this.wasSetup && !this.setup && this.wasSetup !== undefined) {
-      g.hud.banner('Pots are down!', 'Smash their pots with your ladle (G) · press T at yours to get in its turret', 3.2);
+      g.hud.banner('Pots are down!', g.input.isTouch ? 'Ladle their pots, man your turret: the action button does both' : 'Smash their pots with your ladle (G) · press T at yours to get in its turret', 3.2);
       const mine = this.pots[g.player?.team];
       if (mine) g.hud.feed(`Your pot cooks: ${mine.menu.map((id) => FOODS[id]?.name).join(', ')}`, true);
       g.sfx.play('tide', null, 0.6);

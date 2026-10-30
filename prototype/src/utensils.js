@@ -85,19 +85,21 @@ export const UTENSILS = [
     buff: 'Hurls your food 70% faster and further, straight through cheese shields. It can even throw a peel trap 18 m.', trade: 'Only every 3.5 s, and quick throws overheat it for 6 s.' },
   { id: 'pan', tip: 'Q: slam to fire the alt', name: 'Pan', role: 'Alt-Ability Activator', color: '#a49bc4', works: WITH_PEEL,
     buff: "Your food's alt ability (Q) ignores its cooldown and slams a shockwave around you.", trade: 'The Pan has its own 7 s cooldown, and the slam roots you for a moment.' },
-  // (0.54) The five Legendary utensils: King of the Utensil puts two of them in the middle of the map.
+  // (0.54) The Legendary utensils: King of the Utensil puts two of them in the middle of the map.
   // Each is far stronger than any utensil above, and each rules a different part of a fight (see
-  // legendary.js for the numbers and how they are kept even): area burn, melting one Titan, raining
-  // on an area from afar, freezing whoever is on the ground, chain explosions. They still only buffer
+  // legendary.js for the numbers and how they are kept even): area burn, melting one Titan, freezing
+  // whoever is on the ground, chain explosions, (0.57) rain clouds over where it lands, a sniper shot. They still only buffer
   // the food in them: it's always that food that flies, splats and does what it does.
   { id: 'gold-torch', base: 'blow-torch', legendary: true, tip: 'Hold: a spiral cone of flame and food', name: 'Legendary Blow Torch', role: 'Spiral Flame Cone', color: '#7cf03a', works: THROWN,
     buff: 'Hold the throw for a spiralling cone of flame: everyone in it burns, while pieces of your food fly out along the spiral and hit as that food does. Mid-range, many Titans at once.', trade: 'The cone only reaches 11 m and is narrow: keep it on them. It burns a food every second.' },
   { id: 'gold-blender', base: 'blender', legendary: true, tip: 'Hold: a laser of liquefied food that ramps up', name: 'Legendary Blender', role: 'Ramping Juice Laser', color: '#19c8d6', works: THROWN,
     buff: 'Hold the throw for a laser of your food, liquefied. The longer it stays on the same Titan, the harder it hits: 14, then 40, then 120 damage a second. Melts the toughest Titan. One food lasts 3.5 s.', trade: 'A thin beam: it only hurts the Titan it touches, and the ramp starts over the moment it slips off.' },
-  { id: 'gold-mitt', base: 'oven-mitt', legendary: true, tip: 'Click: a burst of your food rains down on your aim', name: 'Legendary Oven Mitt', role: 'Burst Rain', color: '#7cf03a', works: THROWN,
-    buff: 'Hurls a burst of 12 of your food into the sky: they rain down at blinding speed all over an 8.5 m wide spot where you aim, up to 70 m away, behind cover too.', trade: 'One burst every 2.6 s, with nothing in between: time them.' },
+  { id: 'gold-grater', base: 'grater', legendary: true, tip: 'A rain cloud of your food where it lands', name: 'Legendary Grater', role: 'Food Rain Clouds', color: '#7cf03a', works: THROWN,
+    buff: 'Where your food lands or hits a Titan, a cloud of its colour gathers overhead and rains that food down for 3.5 s (a cloud over a Titan drifts after them). Up to 3 clouds at once.', trade: 'The rain is little pieces, spread over a 5 m circle: run out from under it. It reloads for 0.9 s.' },
   { id: 'gold-cream', base: 'ice-cream-machine', legendary: true, tip: 'Freeze wave where your food lands · jump it!', name: 'Legendary Ice Cream Machine', role: 'Freeze Shockwave', color: '#19c8d6', works: THROWN,
     buff: 'Every food you throw lands with a ring of ice that rolls out 9 m across the floor: everyone it catches on the ground is frozen solid.', trade: 'Only the wave freezes (not the food in the air), and a jump at the right moment clears it.' },
+  { id: 'gold-mitt', base: 'oven-mitt', legendary: true, tip: 'Click: charge, then a dead-straight shot', name: 'Legendary Oven Mitt', role: 'Charged Straight Shot', color: '#19c8d6', works: THROWN,
+    buff: 'A click charges it for 0.8 s, then your food shoots out dead straight at 120 m/s, with no drop, until it hits something: three times the damage, and a hard shove.', trade: 'One shot every 3 s, and only one Titan at a time: miss and you wait.' },
   { id: 'gold-popper', base: 'popcorn-popper', legendary: true, tip: 'Giant food · bursts 5 times over', name: 'Legendary Popcorn Popper', role: '5-Stage Cluster Cascade', color: '#7cf03a', works: THROWN,
     buff: 'Your food flies twice as big and bursts where it lands into mini versions of itself, which burst again, and again: five ever-faster rounds of explosions spreading out.', trade: 'The giant food is easy to see coming, it reloads for 1.1 s, and the outer rings take a moment: quick Titans get out.' },
 ];
@@ -249,18 +251,27 @@ const RULES = {
     post(p, hit) { if (p.x.tf && hit.actor?.alive) hit.actor.burn(1.5); }, // (its flying pieces are on fire too)
   },
   'gold-blender': { stream: true },
-  'gold-mitt': {
-    lockFor: BAL.mitt.cd, lockAuto: true,
-    cost: (a, rel) => (rel.auto ? 9 : 0), // (a burst of blueberries is 10 of them)
-    // The burst goes up as one throw: where it comes down and a seed (the rain is the same on every game).
+  'gold-grater': { // (0.57) a rain cloud where the food lands (legendary.js)
+    lockFor: BAL.grater.lock,
     launch(o, a, rel, I) {
-      if (I.k > 0 && !rel.auto) return []; // (a volley of grapes is one burst)
-      const at = a.game.utensils.legend.mittTarget(a);
-      a.game.fx.spray('puffs', a.handPos(_v), 6, { speed: 3, up: 6, colors: [col('#ff5d5d'), col('#ffffff')], size: 0.4, life: 0.4, grav: -0.5, grow: 1 });
-      return [{ ...clone(o), pos: at, vel: new THREE.Vector3(0, -1, 0), gravity: 0, life: 0.05, spin: 0, seek: null, x: { mr: 1, sd: 1 + ((Math.random() * 999999) | 0) } }];
+      let gc = I.k === 0 && !rel.auto; // (a volley: its first piece makes the cloud)
+      if (rel.auto) { const s = a.uState, t = a.game.time; if (t - (s.cloudAt ?? -9) >= BAL.grater.autoEvery) { s.cloudAt = t; gc = true; } } // (blueberries: one cloud-maker every 1.2 s)
+      return [{ ...clone(o), x: gc ? { gc: 1 } : {} }];
     },
-    post(p, hit, U) { if (p.x.mp) U.once(p, 'slam', () => U.legend.slam(p, hit.point)); },
-    expire(p, U) { if (p.x.mp) U.once(p, 'slam', () => U.legend.slam(p, p.pos)); },
+    pre(p, hit, U) { // a raindrop on the floor or a wall: a light splash
+      if (!p.x.cr || !hit.world) return false;
+      U.legend.drip(p, hit.point); p.done = true;
+      return true;
+    },
+    post(p, hit, U) { if (p.x.gc) U.once(p, 'cloud', () => U.legend.cloud(hit.point, p.owner, rootOf(p.food), hit.actor)); },
+    expire(p, U) { if (p.x.gc) U.once(p, 'cloud', () => U.legend.cloud(p.pos, p.owner, rootOf(p.food), null)); },
+  },
+  'gold-mitt': { // (0.57) charge, then one dead-straight shot every 3 s (legendary.js)
+    charge: () => ({ need: BAL.mitt.charge, auto: true }),
+    lockFor: BAL.mitt.cd, lockAuto: true,
+    launch(o, a, rel, I) { return I.k > 0 ? [] : [a.game.utensils.legend.mittShot(o, a)]; }, // (a volley of grapes: one shot)
+    step(p, dt, U) { if (p.x.ms) U.legend.mittTrail(p, dt); },
+    post(p, hit, U) { if (p.x.ms) U.once(p, 'hit', () => U.legend.mittHit(p, hit.point, hit.actor)); },
   },
   'gold-cream': {
     lockFor: BAL.cream.lock,
@@ -757,6 +768,7 @@ export class Utensils {
 
   // Called every frame while the throw is held.
   whileCharging(a, food, c) {
+    if (a.utensil === 'gold-mitt' && c) this.legend.mittCharge(a, clamp(a.chargeT / c.need, 0, 1)); // (0.57: the Mitt's charge gathers in the hand)
     if (!c?.over || a.chargeT < c.over) return false;
     const g = this.game; // overcharged: it pops in your hand
     g.damage(a, 20, a, ROOT[a.selected()?.id] || a.selected()?.id || 'soda');
@@ -889,8 +901,7 @@ export class Utensils {
     else if (x.sc !== undefined) out.sc = n(x.sc, 0.2, 2);
     for (const k of ['wb', 'fb', 'pc']) if (x[k] !== undefined) out[k] = n(x[k], 0, 5) | 0;
     if (x.pa !== undefined) out.pa = n(x.pa, 0, 2);
-    for (const k of ['fl', 'pi', 'pp', 'nf', 'ns', 'sl', 'sp', 'sm', 'kb', 'tr', 'ps', 'pe', 'mb', 'gl', 'wk', 'gr', 'lw', 'mr', 'tf', 'mp']) if (x[k]) out[k] = 1;
-    if (x.sd !== undefined) out.sd = n(x.sd, 1, 1e6) | 0; // (0.54: a Mitt burst's seed)
+    for (const k of ['fl', 'pi', 'pp', 'nf', 'ns', 'sl', 'sp', 'sm', 'kb', 'tr', 'ps', 'pe', 'mb', 'gl', 'wk', 'gr', 'lw', 'tf', 'gc', 'ms']) if (x[k]) out[k] = 1;
     if (x.cs !== undefined) out.cs = n(x.cs, 0, 4) | 0; // (a Popper round)
     if (typeof x.mx === 'string' && Object.values(MIX_IMPACT).includes(x.mx)) out.mx = x.mx;
     return out;
@@ -900,11 +911,6 @@ export class Utensils {
   onLaunch(p) {
     if (!p.u) return;
     const x = p.x;
-    if (p.u === 'gold-mitt' && x.mr) { // a Legendary Oven Mitt burst: the rain comes down here
-      this.legend.rain(p);
-      p.done = true; p.mesh.visible = false; p.uAttach = [];
-      return;
-    }
     if (Array.isArray(x.sc)) p.mesh.scale.set(x.sc[0], x.sc[1], x.sc[2]);
     else if (x.sc) p.mesh.scale.setScalar(x.sc);
     p.uAttach = this.attach(p.u, x, p.radius, p.pos);
@@ -991,7 +997,7 @@ export class Utensils {
       case 'gold-popper': if (!p.x.cs) P.spray('blobs', p.pos, 2, { speed: 2, up: 1.5, colors: [col('#ffd23a'), col('#fff3c0')], size: 0.12, life: 0.4, grav: 0.5 }); break;
       case 'gold-cream': P.spray('puffs', p.pos, 1, { speed: 0.5, up: 0.2, colors: [col('#ffffff'), col('#bff3ff')], size: 0.4, life: 0.45, grav: 0.2, grow: 0.5 }); break;
       case 'gold-torch': if (p.x.tf) P.spray('blobs', p.pos, 1, { speed: 1, up: 1, colors: [col('#ff3d00'), col('#ffae00')], size: 0.1, life: 0.3, grav: -0.3 }); break;
-      case 'gold-mitt': if (Math.random() < 0.5) P.spray('puffs', p.pos, 1, { speed: 0.2, up: 0, colors: [col('#ffffff')], size: 0.3, life: 0.25, grav: 0, grow: 0.4 }); break;
+      case 'gold-grater': if (p.x.gc) P.spray('puffs', p.pos, 1, { speed: 0.3, up: 0.3, colors: [col(TINT[p.food] || '#ffffff'), col('#ffffff')], size: 0.3, life: 0.35, grav: -0.2, grow: 0.8 }); break;
     }
   }
 
@@ -1525,7 +1531,8 @@ export class Utensils {
         return st < 0 ? 'Find a target' : `Ramp ${'●'.repeat(st + 1)}${'○'.repeat(2 - st)}`;
       }
       case 'gold-torch': return a.streamOn ? 'Flame cone!' : brief ? null : u.tip;
-      case 'gold-mitt': return t < s.cdUntil ? `Burst in ${Math.ceil(s.cdUntil - t)}` : brief ? null : 'Burst ready';
+      case 'gold-mitt': return a.charging ? 'Charging…' : t < s.cdUntil ? `Next shot in ${Math.ceil(s.cdUntil - t)}` : brief ? null : 'Shot ready';
+      case 'gold-grater': { const n = this.legend.clouds.filter((c) => c.owner === a).length; return n ? `Clouds ${'●'.repeat(n)}${'○'.repeat(Math.max(0, BAL.grater.max - n))}` : brief ? null : u.tip; }
       case 'gold-popper': case 'gold-cream': return t < s.cdUntil - 0.05 && !food.auto ? 'Reloading' : null;
       default: return null;
     }

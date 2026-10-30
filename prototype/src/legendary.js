@@ -6,8 +6,10 @@
 //                                       the cone)
 //   Blender            best (ramps to   none (one Titan) 34 m beam      none              a steady aim; the ramp
 //                      120/s)                                                             starts over when it slips
-//   Oven Mitt          fair             great (8.5 m     70 m, over     drives them out   a burst every 2.6 s
-//                                       spot)            cover          of cover
+//   Grater             fair             great (rain      a throw, then  drives them out   clouds rain for 3.5 s;
+//                                       clouds)          a cloud above  from under it     run out from under them
+//   Oven Mitt          great at range   poor (one at     dead straight, none              a charge, then one shot
+//                      (75 a shot)      a time)          as far as 260 m                  every 3 s
 //   Ice Cream Machine  fair (+ shatter) good (9 m wave)  a throw        best (freezes)    jump the wave
 //   Popcorn Popper     good up close    best (5 rounds   a throw        some              a big target to see, one
 //                                       of blasts)                                        every 1.1 s, outer rings late
@@ -21,8 +23,11 @@
 //  - Blender: hold for a thin laser of the food, liquefied (its colour, its splats, its sting: a tomato beam
 //    slows, a chili beam sets on fire, a jelly beam roots...). Like Clash Royale's Inferno Tower, it starts
 //    weak and ramps up the longer it stays on the same Titan; off them for a moment, it starts over.
-//  - Oven Mitt: a burst of 12 of the food thrown sky-high rains down at blinding speed over a wide spot
-//    where you aim; each lands with a small slam besides its own splat. One burst every 2.6 s.
+//  - Grater (0.57, in place of the first Oven Mitt): where the food lands or hits a Titan, a cloud of its
+//    colour gathers overhead and rains that food (grated: little pieces) for 3.5 s; a cloud over a Titan it
+//    hit drifts after them. Up to 3 of your clouds at once.
+//  - Oven Mitt (0.57, new): a click charges it (0.8 s), then the food goes out dead straight at 120 m/s, no
+//    drop, until it hits something (or 2.2 s): one hard hit, then 3 s before the next.
 //  - Ice Cream Machine: each food you throw lands with a ring of ice rolling out 9 m along the floor; it
 //    freezes whoever it catches on the ground (and does a little damage). Jump it.
 //  - Popcorn Popper: the food flies twice as big (at its own speed); where it lands it bursts into minis of itself,
@@ -30,16 +35,18 @@
 //
 // Online, nothing new goes over the line but one flag: a Titan using a torch or blender has it in its
 // state (each game draws the cone or beam from where that Titan aims, and decides what it does to its own
-// Titans, as with every hit). Mitt bursts go out as one throw (a seed lays out the rain the same everywhere);
-// waves and cascades come from the food landing, which every game sees.
+// Titans, as with every hit). A Mitt shot is one throw; waves, cascades and Grater clouds come from the
+// food landing, which every game sees (each game rains its own drops, and decides what they do to its Titans).
 import * as THREE from 'three';
 import { G, clamp, rand, groundHeight, raycastWorld, hasLineOfSight, forwardOf, segSegDist2 } from './core.js';
 import { FOODS } from './foods.js';
 
 export const BAL = {
   torch: { range: 11, half: 0.42, dps: 24, burn: 2, pieceEvery: 0.2, pieceM: 0.35, useEvery: 1.0 },
-  blender: { range: 34, width: 0.5, stages: [[0, 14], [1.2, 40], [2.4, 120]], gap: 0.25, useEvery: 3.5, dripEvery: 1.2 },
-  mitt: { n: 14, r: 8.5, cd: 2.4, range: 70, slamR: 3, slamDmg: 22, m: 0.9, height: 24 },
+  blender: { range: 34, width: 0.5, stages: [[0, 14], [1.2, 40], [2.4, 120]], gap: 3, useEvery: 3.5, dripEvery: 1.2 },
+  grater: { lock: 0.9, autoEvery: 1.2, dur: 3.5, rate: 16, r: 2.6, h: 8, m: 0.5, drop: 20, follow: 4, max: 3 },
+  mitt: { charge: 0.8, cd: 2.2, speed: 120, // (cd + charge: a shot every 3 s)
+          life: 2.2, m: 3, push: 9 },
   cream: { r: 9, pelletR: 5, speed: 12, freeze: 1.5, dmg: 10, jump: 0.7, lock: 0.7 },
   popper: { lock: 1.1, speed: 1, size: 2, rounds: [ // (0.55: speed 1: as fast as the food always flies)
     { r: 4.0, dmg: 34, force: 9, kids: 6, fuse: 0.55, out: [6, 9] },
@@ -92,8 +99,6 @@ const FIRE_COLS = {
   smoke: [col('#4a3f3a'), col('#5e534d'), col('#3a322e')],
 };
 
-// A little seeded random (the Mitt's rain lands the same on every game).
-function seeded(seed) { let s = (seed | 0) % 2147483647; if (s <= 0) s += 2147483646; return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646; }
 
 function stripeTexture(a, b, n = 6) {
   const c = document.createElement('canvas');
@@ -115,10 +120,13 @@ export class Legends {
     this.waves = [];
     this.fx = new Map(); // actor -> its cone or beam meshes
     this.wavePool = [];
+    this.clouds = []; this.cloudPool = []; // (0.57) Grater rain clouds
   }
   reset() {
     for (const w of this.waves) this._dropWave(w);
     this.waves.length = 0;
+    for (const c of this.clouds) this._dropCloud(c);
+    this.clouds.length = 0;
     for (const a of this.game.botActors || []) { a.streamOn = false; a.beamLock = null; }
   }
 
@@ -167,7 +175,7 @@ export class Legends {
     const g = this.game, now = g.time;
     for (const a of g.actors) {
       if (!a.streamOn) { a.hlStream = null; continue; }
-      if (!a.alive || !this.isStream(a) || (!a.isRemote && now - (a.streamAt || 0) > 0.15) || !a.selected()) { a.streamOn = false; a.beamLock = null; a.hlStream = null; continue; }
+      if (!a.alive || !this.isStream(a) || (!a.isRemote && now - (a.streamAt || 0) > 0.15) || !a.selected()) { a.streamOn = false; if (!a.alive || a.utensil !== 'gold-blender') a.beamLock = null; a.hlStream = null; continue; } // (a blender's ramp outlasts letting go: 3 s)
       const food = rootOf(a.selected().id);
       this.aim(a, _d);
       const from = _from.copy(_o);
@@ -179,6 +187,7 @@ export class Legends {
       else this._blender(a, food, from, _d, dt);
     }
     this._waves(dt);
+    this._clouds(dt);
   }
   // may this game hurt b with a's stream? (each game decides for its own Titans; mine also show my hits)
   _mayHit(a, b) { return b !== a && b.alive && !(a.isRemote && b.isRemote) && !this.game.teammates(a, b); }
@@ -233,14 +242,13 @@ export class Legends {
     }
     a.streamReach = hit ? hd : wall;
     // the lock (as this game sees it: the beam's look, and my own hits)
+    // (0.57) The ramp belongs to the blender, not to the Titan it's on: off every Titan for up to 3 s (on a wall,
+    // swinging to the next Titan, even letting go), it keeps its ramp and carries it to whoever it hits next.
     const L = a.beamLock;
-    if (hit && L && L.T === hit && now - L.last < B.gap) { L.t += dt; L.last = now; }
-    else if (hit) a.beamLock = { T: hit, t: 0, last: now };
+    if (hit) { if (L && now - L.last < B.gap) { L.t += dt; L.last = now; L.T = hit; } else a.beamLock = { T: hit, t: 0, last: now, drip: 0, acc: 0 }; }
     else if (L && now - L.last > B.gap) a.beamLock = null;
     if (!hit || !this._mayHit(a, hit)) return;
-    // the ramp on the Titan it's on (its own game's count decides)
-    const R = hit.blend && hit.blend.by === a && now - hit.blend.last < B.gap ? hit.blend : (hit.blend = { by: a, t: 0, last: now, drip: 0, acc: 0 });
-    R.t += dt; R.last = now;
+    const R = a.beamLock;
     let dps = 0;
     for (const [t, v] of B.stages) if (R.t >= t) dps = v;
     R.acc += dps * (BEAM_MULT[food] || 1) * dt;
@@ -255,47 +263,123 @@ export class Legends {
   // how far the Blender's ramp is on its target (0, 1, 2), as this game sees it
   stage(a) {
     const L = a?.beamLock;
-    if (!L) return -1;
+    if (!L || this.game.time - L.last > BAL.blender.gap) return -1;
     let s = 0;
     BAL.blender.stages.forEach(([t], i) => { if (L.t >= t) s = i; });
     return s;
   }
 
-  // ---------------------------------------------------------------- Oven Mitt: the burst rain
-  // Where a burst lands: the aim point, at most 70 m away, on the ground.
-  mittTarget(a) {
-    const from = a.pos, p = a.aimPoint;
-    const out = new THREE.Vector3();
-    if (p) out.copy(p); else out.copy(a.pos).addScaledVector(forwardOf(a.yaw, _v), 20);
-    const dx = out.x - from.x, dz = out.z - from.z, h = Math.hypot(dx, dz), max = BAL.mitt.range;
-    if (h > max) { out.x = from.x + (dx / h) * max; out.z = from.z + (dz / h) * max; }
-    out.y = groundHeight(out.x, out.z, Math.max(out.y, from.y) + 1);
-    return out;
+  // ---------------------------------------------------------------- Oven Mitt (0.57): the charged shot
+  // Straight from the hand to the aim point, blinding fast, no drop (the food's own throw is replaced).
+  mittShot(o, a) {
+    const B = BAL.mitt, g = this.game;
+    const d = a.aimPoint && a.aimPoint.distanceToSquared(o.pos) > 1 ? _v.subVectors(a.aimPoint, o.pos).normalize() : _v.copy(a.aimDir).normalize();
+    const q = { ...o, pos: o.pos.clone(), vel: d.clone().multiplyScalar(B.speed), gravity: 0, roll: false, seek: null, turn: 0, retarget: 0, curve: 0, bounces: 0, fuse: 0, life: B.life, spin: 0, x: { m: B.m, sc: 1.2, ms: 1 } };
+    q.orient = true;
+    g.fx.jet('flames', o.pos, d, 900, 1 / 30, { speed: 9, spread: 0.35, life: 0.18, size: 0.2, colors: [col('#ffffff'), col('#ffe36a'), col(tintOf(o.food))], drag: 3, grow: 1.5, min: 0.6 });
+    g.sfx.play('boom', o.pos, a === g.player ? 0.55 : 0.4);
+    if (a === g.player) g.fx.shake(0.15);
+    return q;
   }
-  // The burst: 12 of the food dropped from high above, spread evenly over the spot (seeded: the same on every game).
-  rain(p) {
-    const g = this.game, B = BAL.mitt, rnd = seeded(p.x.sd || 1), root = rootOf(p.food), pid = pieceOf(root), f = FOODS[pid];
-    const c = p.pos;
-    for (let i = 0; i < B.n; i++) {
-      const r = B.r * Math.sqrt((i + 0.5) / B.n) * (0.85 + rnd() * 0.3), ang = i * 2.39996 + rnd() * 0.5; // (golden-angle: no gaps, no piles)
-      const x = c.x + Math.cos(ang) * r, z = c.z + Math.sin(ang) * r;
-      const y = groundHeight(x, z, c.y + 8) + B.height + rnd() * 4;
-      g.projectiles.launch({
-        food: pid, owner: p.owner, local: true, u: 'gold-mitt', x: { m: B.m, mp: 1, sc: pid === root ? 1 : 1.3 },
-        pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3((rnd() - 0.5) * 2, -58 - rnd() * 8, (rnd() - 0.5) * 2),
-        gravity: 1, radius: f.radius || 0.3, life: 2.5, spin: 12, charge: 0.6, orient: pid === 'carrot',
-      });
+  // while it charges: sparks of the food's colour gather in the hand
+  mittCharge(a, k) {
+    const g = this.game, c = col(tintOf(a.selected()?.id));
+    if (g.fx.scale <= 0) return;
+    // (on the Mitt: in first person, the one in my hand as I see it, and smaller: it's right in front of me)
+    const fp = a === g.player && a.fpCam && g.viewModel?.toolTip(_e), h = fp || a.handPos(_e), s = fp ? 0.35 : 1;
+    for (let i = 0; i < 4; i++) {
+      const ang = rand(0, Math.PI * 2), r = (0.9 - 0.5 * k) * s;
+      const x = Math.cos(ang) * r, y = rand(-0.4, 0.4) * s, z = Math.sin(ang) * r;
+      g.fx.flames.spawn(h.x + x, h.y + y, h.z + z, -x * 3.5, -y * 3.5, -z * 3.5, 0.26, (0.07 + 0.1 * k) * s, Math.random() < 0.5 ? c : col('#fff6c8'), 0, 0, 0);
     }
-    g.fx.spray('puffs', c.clone().setY(c.y + 0.3), 10, { speed: 6, up: 0.5, colors: [col('#ff5d5d'), col('#ffffff')], size: 0.6, life: 0.5, grav: 0, grow: 1.4 });
-    g.sfx.play('whirr', c, 0.8);
+    if (k >= 1 && Math.random() < 0.5) g.fx.flames.spawn(h.x, h.y, h.z, 0, 0, 0, 0.12, 0.3 * s, col('#ffffff'), 0, 0, 1); // (charged: it glows)
   }
-  slam(p, at) { // each piece of the rain lands with a small slam, besides its own splat
-    const g = this.game, B = BAL.mitt;
-    g.dmgScale = 1;
-    g.explode(at, B.slamR, B.slamDmg, p.owner, rootOf(p.food), 5);
-    g.fx.burst('dust', at, 0.7);
-    g.fx.burst(burstOf(p.food), at, 0.6);
-    g.sfx.play('thud', at, 0.5);
+  // the tracer behind a shot in flight (every frame: dense, however fast it goes)
+  mittTrail(p, dt) {
+    const g = this.game, n = 6, c = col(tintOf(p.food)), w = col('#fff6d8');
+    if (g.fx.scale <= 0) return;
+    for (let i = 0; i < n; i++) {
+      const k = (i / n) * dt;
+      g.fx.flames.spawn(p.pos.x - p.vel.x * k, p.pos.y - p.vel.y * k, p.pos.z - p.vel.z * k, 0, 0.3, 0, 0.22, 0.13, i % 2 ? c : w, 0, 0, -0.5);
+    }
+  }
+  mittHit(p, at, actor) {
+    const g = this.game;
+    if (actor?.alive) actor.knock(_v.copy(p.vel).setY(0).normalize().multiplyScalar(BAL.mitt.push).setY(3));
+    g.fx.burst(burstOf(p.food), at, 1.2);
+    g.fx.spray('puffs', at, 6, { speed: 4, up: 1, colors: [col('#ffffff'), col(tintOf(p.food))], size: 0.5, life: 0.35, grav: 0, grow: 1.6 });
+    g.sfx.play('thud', at, 1);
+  }
+
+  // ---------------------------------------------------------------- Grater (0.57): the rain clouds
+  // A cloud of the food's colour gathers over where it landed (or over the Titan it hit, and follows them),
+  // and rains little pieces of that food for a few seconds.
+  cloud(at, owner, food, follow) {
+    const g = this.game, B = BAL.grater;
+    const mine = this.clouds.filter((c) => c.owner === owner);
+    if (mine.length >= B.max) { const old = mine[0]; this._dropCloud(old); this.clouds.splice(this.clouds.indexOf(old), 1); }
+    const base = _v.set(at.x, at.y + 0.5, at.z);
+    const room = raycastWorld(base, _up, B.h + 2);
+    const h = room > 5 ? Math.min(B.h, room - 1.5) : Math.max(1.4, room - 0.7); // (under a table: just under its top)
+    const c = { x: at.x, y: base.y + h, z: at.z, h, owner, food, follow: follow?.alive && follow !== owner ? follow : null, born: g.time, acc: 0, mesh: this._cloudMesh(tintOf(food)) };
+    this.clouds.push(c);
+    c.mesh.position.set(c.x, c.y, c.z);
+    g.sfx.play('whirr', at, 0.6);
+    g.fx.spray('puffs', _v.set(c.x, c.y, c.z), 8, { speed: 3, up: 1, colors: [col(tintOf(food)), col('#ffffff')], size: 0.7, life: 0.5, grav: 0, grow: 1.5 });
+  }
+  _cloudMesh(tint) {
+    let m = this.cloudPool.pop();
+    if (!m) {
+      CLOUD_GEO ||= new THREE.IcosahedronGeometry(1, 2);
+      const mat = new THREE.MeshStandardMaterial({ roughness: 1, transparent: true, opacity: 0.92, depthWrite: false });
+      m = new THREE.Group();
+      for (const [x, y, z, r] of CLOUD_PUFFS) { const b = new THREE.Mesh(CLOUD_GEO, mat); b.position.set(x, y, z); b.scale.setScalar(r); b.castShadow = false; m.add(b); }
+      m.userData.mat = mat;
+      this.game.scene.add(m);
+    }
+    const mat = m.userData.mat;
+    mat.color.set(tint).lerp(_cc.set('#ffffff'), 0.25);
+    mat.emissive.set(tint).multiplyScalar(0.35);
+    m.visible = true; m.scale.setScalar(0.01);
+    return m;
+  }
+  _dropCloud(c) { c.mesh.visible = false; this.cloudPool.push(c.mesh); }
+  _clouds(dt) {
+    const g = this.game, B = BAL.grater, now = g.time;
+    for (let i = this.clouds.length - 1; i >= 0; i--) {
+      const c = this.clouds[i], age = now - c.born;
+      if (age > B.dur + 0.5) { this._dropCloud(c); this.clouds.splice(i, 1); continue; }
+      if (c.follow) { // drifting after the Titan it hit (slower than they run: they can get out)
+        if (!c.follow.alive) c.follow = null;
+        else {
+          const dx = c.follow.pos.x - c.x, dz = c.follow.pos.z - c.z, d = Math.hypot(dx, dz), step = Math.min(d, B.follow * dt);
+          if (d > 0.01) { c.x += (dx / d) * step; c.z += (dz / d) * step; }
+          c.y += (Math.min(c.follow.pos.y + 0.5 + c.h, c.y + 30) - c.y) * Math.min(1, dt * 2);
+        }
+      }
+      const grow = Math.min(1, age / 0.35), fade = clamp((B.dur + 0.5 - age) / 0.5, 0, 1), k = grow * fade;
+      c.mesh.position.set(c.x, c.y + Math.sin(age * 2) * 0.15, c.z);
+      c.mesh.scale.set(B.r * 0.62 * k, B.r * 0.45 * k, B.r * 0.62 * k);
+      c.mesh.rotation.y += dt * 0.3;
+      if (age < 0.3 || age > B.dur) continue;
+      c.acc += B.rate * dt;
+      while (c.acc >= 1) { c.acc -= 1; this._drop(c); }
+    }
+  }
+  _drop(c) {
+    const g = this.game, B = BAL.grater, root = rootOf(c.food), pid = pieceOf(root), f = FOODS[pid];
+    const r = B.r * Math.sqrt(Math.random()), ang = rand(0, Math.PI * 2);
+    g.projectiles.launch({
+      food: pid, owner: c.owner, local: true, u: 'gold-grater', x: { m: B.m, sc: pid === root ? 0.55 : 0.85, cr: 1 },
+      pos: new THREE.Vector3(c.x + Math.cos(ang) * r, c.y - 0.8, c.z + Math.sin(ang) * r), vel: new THREE.Vector3(rand(-0.5, 0.5), -B.drop, rand(-0.5, 0.5)),
+      gravity: 1, radius: Math.max(0.15, (f.radius || 0.3) * 0.6), life: 2.2, spin: 8, charge: 0.5,
+    });
+  }
+  // a raindrop hits the floor or a wall: a light splash (not the food's whole splat: there are a lot of them)
+  drip(p, at) {
+    const g = this.game, c = col(tintOf(p.food));
+    if (g.fx.scale > 0) g.fx.spray('blobs', at, 2, { speed: 2, up: 2, colors: [c, c.clone().lerp(_cc.set('#ffffff'), 0.4)], size: 0.07, life: 0.3, grav: 1 });
+    if (Math.random() < 0.12 && STAIN[rootOf(p.food)]) g.world.paintSplat(at.x, at.y, at.z, 0.6, STAIN[rootOf(p.food)]);
   }
 
   // ---------------------------------------------------------------- Ice Cream Machine: the freeze wave
@@ -375,7 +459,7 @@ export class Legends {
     const root = rootOf(p.food), pid = pieceOf(root), f = FOODS[pid];
     const pt = at.clone(); pt.y = Math.max(pt.y, groundHeight(pt.x, pt.z, pt.y + 0.5) + 0.3);
     g.dmgScale = 1;
-    g.explode(pt, R.r, R.dmg, p.owner, root, R.force);
+    g.explode(pt, R.r, R.dmg, p.owner, root, R.force, 0.25); // (0.57: a quarter of the shake on the thrower's own screen; everyone else's as before)
     // (the later rounds are many small blasts: a lighter splash each, or the screen is all splash)
     if (s < 2 || Math.random() < 0.6) g.fx.burst(burstOf(root), pt, s === 0 ? 1.4 : 0.42 - s * 0.07);
     if (s < 2) g.fx.spray('puffs', pt, s === 0 ? 8 : 2, { speed: 4, up: 3, colors: [col('#fff3c0'), col('#ffffff')], size: s === 0 ? 0.6 : 0.3, life: 0.3, grav: 0.3, grow: 1 });
@@ -399,7 +483,8 @@ export class Legends {
     }
   }
 }
-let WAVE_MAT = null, WALL_MAT = null;
+let WAVE_MAT = null, WALL_MAT = null, CLOUD_GEO = null;
+const CLOUD_PUFFS = [[0, 0, 0, 1.3], [1.25, -0.15, 0.25, 1], [-1.25, -0.1, -0.2, 1.05], [0.45, 0.45, -0.95, 0.95], [-0.5, 0.4, 0.95, 1], [0.3, -0.25, 1.2, 0.85], [0, -0.2, -1.3, 0.85], [-1, 0.3, -0.9, 0.8], [1, 0.3, 0.9, 0.8]];
 // does the utensil in hand work with this food (the same test as Utensils.works)
 const UTENSIL_WORKS = (U, a, id) => U.works(a, id);
 

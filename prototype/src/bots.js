@@ -7,9 +7,10 @@ import {
 import { FOODS } from './foods.js';
 import { MAX_HP } from './actors.js';
 import { isLegendary } from './utensils.js';
+import { BAL } from './legendary.js';
 
 // (0.54) Where a bot wants to be with a Legendary in hand (min, max metres), and how far it fires it.
-const LEG_RANGE = { 'gold-torch': [3, 9, 11], 'gold-blender': [8, 26, 33], 'gold-mitt': [18, 55, 68] };
+const LEG_RANGE = { 'gold-torch': [3, 9, 11], 'gold-blender': [8, 26, 33], 'gold-mitt': [10, 50, 90] };
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _aim = new THREE.Vector3(), _q = new THREE.Vector3();
 
@@ -306,16 +307,16 @@ export class BotBrain {
     const legend = g.utensils.legend, stream = legend.isStream(a) && food && g.utensils.works(a, slot.id);
     if (t && food && a.canControl() && (stream || a.utensil === 'gold-mitt') && g.utensils.works(a, slot.id)) {
       // (0.54) a Legendary torch or blender: hold it on them (the beam: right on them; it hits at once);
-      // the Mitt: a burst on the floor where they'll be when it comes down
+      // (0.57) the Mitt: a dead-straight shot at their chest, a touch ahead of them, when it can see them
       const R = LEG_RANGE[a.utensil], from = a.handPos(_w);
       _aim.copy(t.pos).setY(t.pos.y + 1).add(_q.copy(this.aimErr).multiplyScalar(a.utensil === 'gold-blender' ? 0.15 : 0.5));
-      if (a.utensil === 'gold-mitt') _aim.addScaledVector(t.vel, 0.55 * this.skill).setY(t.pos.y);
+      if (a.utensil === 'gold-mitt') _aim.addScaledVector(t.vel, (from.distanceTo(_aim) / BAL.mitt.speed + BAL.mitt.charge * 0.3) * this.skill);
       a.aimDir.subVectors(_aim, from).normalize(); a.aimPoint.copy(_aim);
       a.yaw = this.aimYaw = yawOf(a.aimDir.x, a.aimDir.z);
       a.botTarget = t;
       const d = from.distanceTo(_aim), sees = hasLineOfSight(from, _q.copy(t.pos).setY(t.pos.y + 1));
       if (stream) it.primary = d <= R[2] && (sees || a.utensil === 'gold-torch' && d < 6);
-      else if (d <= R[2] && now > this.nextShotAt && now >= a.recoverUntil) { it.primary = !a.primaryPrev; this.nextShotAt = now + 0.3; }
+      else if (d <= R[2] && sees && now > this.nextShotAt && now >= a.recoverUntil && !a.charging) { it.primary = !a.primaryPrev; this.nextShotAt = now + 0.3; }
     } else if (t && food && a.canControl()) {
       const from = a.handPos(_w);
       _aim.copy(t.pos).setY(t.pos.y + (food.profile === 'line' ? 1.0 : 0.8));

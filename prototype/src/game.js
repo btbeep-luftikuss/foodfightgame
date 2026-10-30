@@ -715,7 +715,7 @@ export class Game {
     }
   }
 
-  explode(point, r, dmg, owner, foodId, force) {
+  explode(point, r, dmg, owner, foodId, force, ownShake = 1) { // ownShake: how hard it shakes the thrower's own screen
     for (const a of this.actors) {
       if (!a.alive) continue;
       const c = a.center(_c);
@@ -732,7 +732,7 @@ export class Game {
       a.knock(_d.multiplyScalar(force * k * (a === owner ? 0.9 : 1) * Math.min(1, Math.sqrt(this.dmgScale)))); // small utensil pieces push less
     }
     const camD = this.camera.position.distanceTo(point);
-    this.fx.shake(clamp(0.6 - camD / 60, 0, 0.6));
+    this.fx.shake(clamp(0.6 - camD / 60, 0, 0.6) * (owner && owner === this.player ? ownShake : 1));
   }
 
   _inFront(a, point) {

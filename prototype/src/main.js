@@ -187,6 +187,16 @@ function boot() {
   const menu = $('menu'), pause = $('pause'), end = $('end'), touch = $('touch');
   let playing = false;
 
+  // (0.57) Cooking Pot Wars on a touch screen: the Sniff button is the one action button, named for what it
+  // would do right now (set the pot down, the ladle, the turret, climb out; else sniff)
+  const POT_ACT = { place: 'Place pot', ladle: 'Ladle', turret: 'Turret', out: 'Climb out' };
+  function potActionLabel() {
+    const b = $('tSniff'), act = playing && game.mode === 'pots' && input.isTouch ? game.pots.touchAction(game.player) : null;
+    const txt = (act && POT_ACT[act]) || 'Sniff';
+    if (b.textContent !== txt) b.textContent = txt;
+    b.classList.toggle('potact', !!act);
+  }
+  setInterval(potActionLabel, 200);
   function enterPlay(lock = true) {
     closeStage();
     $('locker').hidden = true;
@@ -196,8 +206,10 @@ function boot() {
     menu.hidden = true; end.hidden = true; pause.hidden = true;
     hud.show(true);
     touch.hidden = !input.isTouch;
-    $('tLadle').hidden = game.mode !== 'pots' && game.mode !== 'king'; $('tTurret').hidden = game.mode !== 'pots';
-    $('tLadle').textContent = game.mode === 'king' ? 'Drop' : 'Ladle'; // (0.54: King of the Utensil: drop the Legendary in hand)
+    // (0.57) Cooking Pot Wars on a touch screen: one action button does the sniff, the ladle and the turret (potAction)
+    $('tLadle').hidden = game.mode !== 'king'; $('tTurret').hidden = true;
+    $('tLadle').textContent = 'Drop'; // (0.54: King of the Utensil: drop the Legendary in hand)
+    potActionLabel();
     $('sb-open').hidden = game.mode !== 'sandbox'; $('sandbox').hidden = true; // (0.55: the Test World's tools)
     if (lock && !input.isTouch) input.requestLock(true);
   }
@@ -344,6 +356,8 @@ function boot() {
   const sbShow = (on) => {
     if (game.mode !== 'sandbox' || !playing) on = false;
     sbPanel.hidden = !on;
+    // (0.57) on a touch screen the game's buttons sit where the panel is: they step aside while it's open
+    if (input.isTouch) { touch.hidden = on || !playing; if (on) { input.touch.fire = false; input.touch.move.x = input.touch.move.y = 0; } }
     if (on) input.exitLock(); else if (!input.isTouch && playing && pause.hidden && game.mode === 'sandbox') input.requestLock(true);
   };
   $('sb-open').addEventListener('click', () => sbShow(sbPanel.hidden));
@@ -853,7 +867,12 @@ function boot() {
   hold('tJump', () => { input.pressed.jump = true; });
   hold('tDash', () => { input.pressed.dodge = true; });
   hold('tAlt', () => { input.pressed.alt = true; });
-  hold('tSniff', () => { input.pressed.sniff = true; });
+  hold('tSniff', () => { // (0.57: in Cooking Pot Wars it's the one action button: see potActionLabel)
+    const act = game.mode === 'pots' ? game.pots.touchAction(game.player) : null;
+    if (act === 'place' || act === 'ladle') input.pressed.ladle = true;
+    else if (act === 'turret' || act === 'out') input.pressed.turret = true;
+    else input.pressed.sniff = true;
+  });
   hold('tLadle', () => { input.pressed.ladle = true; });
   hold('tTurret', () => { input.pressed.turret = true; });
   const stick = $('stick');

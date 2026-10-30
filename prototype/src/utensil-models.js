@@ -255,7 +255,7 @@ const MAKERS = {
   },
 };
 // (0.54) The Legendary utensils: their everyday utensil recoloured (0.55: lime green and teal blue, no crown).
-const LEGEND_BASE = { 'gold-torch': 'blow-torch', 'gold-blender': 'blender', 'gold-mitt': 'oven-mitt', 'gold-cream': 'ice-cream-machine', 'gold-popper': 'popcorn-popper' };
+const LEGEND_BASE = { 'gold-torch': 'blow-torch', 'gold-blender': 'blender', 'gold-grater': 'grater', 'gold-mitt': 'oven-mitt', 'gold-cream': 'ice-cream-machine', 'gold-popper': 'popcorn-popper' };
 for (const [id, base] of Object.entries(LEGEND_BASE)) {
   HOLD[id] = HOLD[base];
   MAKERS[id] = (k) => {

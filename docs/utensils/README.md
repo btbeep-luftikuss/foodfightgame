@@ -40,8 +40,9 @@ balance numbers are in the [GDD, section 10.3](../GDD.md#103-the-five-legendary-
 | Legendary | Role | Buff | Trade-off |
 |-----------|------|------|-----------|
 | Blow Torch | Mid-range area burn + projectile hybrid | Hold for a spiralling cone of flame that burns everyone in it, while pieces of the food fly out along the spiral and hit as that food. | The cone is short (11 m) and narrow: keep aiming it. |
-| Blender | Sustained ramping laser | Hold for a thin laser of the food, liquefied, that ramps from 14 to 40 to 120 damage a second the longer it stays on one Titan (like the Inferno Tower). Uses very little food. | Narrow: it needs precise tracking, and the ramp resets when it breaks contact. |
-| Oven Mitt | Wide-area burst rain | A burst of 14 of the food rains down at blinding speed over a wide spot where you aim (up to 70 m, over cover). | A short cooldown after every burst: no continuous fire. |
+| Blender | Sustained ramping laser | Hold for a thin laser of the food, liquefied, that ramps from 14 to 40 to 120 damage a second the longer it stays on one Titan (like the Inferno Tower). Uses very little food. | Narrow: it needs precise tracking; the ramp resets after 3 s off every Titan (0.57: it carries over to the next one within those 3 s). |
+| Grater (0.57) | Food rain clouds | Where the food lands or hits a Titan, a cloud of its colour gathers overhead and rains that food for 3.5 s; a cloud over a Titan drifts after them. | The rain is little pieces spread over 5 m, slower than a run: step out from under it. |
+| Oven Mitt (0.57) | Charged straight shot | A click charges it, then the food shoots dead straight at 120 m/s, no drop, until it hits something: triple damage and a shove. | One shot every 3 s, one Titan at a time. |
 | Ice Cream Machine | Freeze shockwave zoning | Every food lands with an expanding ring of ice: anyone it catches on the ground is frozen. | Only the wave freezes (not the food in flight), and it can be jumped. |
 | Popcorn Popper | 5-stage cluster cascade | The food flies twice as big and bursts into minis of itself that burst again, five ever-faster rounds in all. | The giant food is big and easy to see coming, and the outer rings unfold over a moment. |
 
