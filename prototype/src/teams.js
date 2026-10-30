@@ -12,13 +12,19 @@ export const TEAMS = [
   { name: 'Team Grape', short: 'Grape', color: '#b07cf0' },
   { name: 'Team Mint', short: 'Mint', color: '#4fd1c5' },
 ];
-export const TEAM_LABEL = { 1: 'Solo', 2: 'Duos', 3: 'Trios', 4: 'Squads' };
+// (0.54) Teams of 4 are "Quads" now: Squads is the two-team mode (two teams of 6, team size 6).
+export const TEAM_LABEL = { 1: 'Solo', 2: 'Duos', 3: 'Trios', 4: 'Quads', 6: 'Two teams' };
 export const TEAM_SIZES = [1, 2, 3, 4];
 export const teamCount = (size) => (size > 1 ? Math.floor(12 / size) : 0);
-export const cleanSize = (v, mode) => { const s = TEAM_SIZES.includes(+v) ? +v : 1; return mode === 'pots' && s < 2 ? 3 : s; };
+export const cleanSize = (v, mode) => {
+  if (mode === 'squads') return 6; // two teams, always
+  if (mode === 'king') return 1; // every Titan for themselves
+  const s = TEAM_SIZES.includes(+v) ? +v : 1; return mode === 'pots' && s < 2 ? 3 : s;
+};
 
 // Where each team starts: a home patch of floor, spread around the arena (both maps share the frame).
 const HOMES = {
+  2: [{ minX: -225, maxX: -80, minZ: -110, maxZ: 145 }, { minX: 80, maxX: 225, minZ: -110, maxZ: 145 }], // (0.54: Squads, west and east)
   3: [{ minX: -225, maxX: -120, minZ: -90, maxZ: 140 }, { minX: 120, maxX: 225, minZ: -90, maxZ: 140 }, { minX: -80, maxX: 80, minZ: -122, maxZ: -55 }],
   4: [{ minX: -220, maxX: -90, minZ: 45, maxZ: 150 }, { minX: 90, maxX: 220, minZ: 45, maxZ: 150 },
     { minX: -220, maxX: -90, minZ: -120, maxZ: -20 }, { minX: 90, maxX: 220, minZ: -120, maxZ: -20 }],
@@ -78,8 +84,9 @@ export function renderTeamBar(game, el, state) {
     const T = TEAMS[t];
     const up = game.actors.filter((a) => a.team === t && a.alive).length;
     const pot = P?.pots[t];
-    const out = P ? !P.teamAlive(t) : up === 0;
+    const out = P ? !P.teamAlive(t) : up === 0 && !game.arena?.active;
     let mid = '';
+    if (game.arena?.squads) mid = `<b class="tscore">${game.arena.teamScore(t)}</b>`; // (0.54: Squads: the team's splats)
     if (pot) mid = !pot.placed ? '<em>placing…</em>' : pot.alive ? `<span class="php"><i style="width:${(pot.hp / pot.maxHp * 100).toFixed(0)}%"></i></span>${pot.captures ? `<small>Lv ${1 + pot.captures}</small>` : ''}` : out ? '' : '<em>pot gone</em>';
     rows.push(`<li class="${out ? 'out' : ''}${t === me ? ' me' : ''}" style="--c:${T.color}"><i></i><b>${T.short}</b>${mid}<small>${up}/${game.teamSize}</small></li>`);
   }

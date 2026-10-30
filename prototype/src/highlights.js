@@ -42,6 +42,7 @@ import { FOODS, FOOD_IDS } from './foods.js';
 import { PALETTE } from './fx.js';
 import { UTENSIL_IDS, UTENSIL_BY_ID, utensilIcon } from './utensils.js';
 import { SPIKE_GAP, ULT_COLOR } from './abilities.js';
+import { drawStream } from './legendary.js';
 
 const HZ = 15;                // frames a second
 const K = 14;                 // numbers per Titan per frame: x y z yaw pitch vx vy vz flags charge armT held hitFlash utensil
@@ -190,9 +191,12 @@ export class Highlights {
     else if (kind === 'flame') e = { ab: kind, x: o.pos.x, y: o.pos.y, z: o.pos.z, r: o.r, seed: o.seed, end: o.until };
     else if (kind === 'spikes') e = { ab: kind, pts: o.pts.map((sp) => [sp.p.x, sp.p.y, sp.p.z, sp.s, sp.tilt, sp.spin]), end: o.until };
     else if (kind === 'flamer') { if (!this.idx.has(o.owner)) return; e = { ab: kind, a: this.idx.get(o.owner), end: t + o.dur }; }
-    else return;
+    else if (kind === 'stream') { if (!this.idx.has(o.owner)) return null; e = { ab: kind, a: this.idx.get(o.owner), u: o.u, food: o.food, end: t + 0.12 }; } // (0.54) a Legendary torch or blender
+    else if (kind === 'wave') e = { ab: kind, x: o.pos.x, y: o.pos.y, z: o.pos.z, r: o.r, end: t + o.r / 12 + 0.1 }; // (0.54) a Legendary Ice Cream Machine's freeze wave
+    else return null;
     e.t = t;
     this.events.push(e);
+    return e;
   }
   // (0.50) A utensil's zone (a Whisk's vortex, a Mortar's cloud, a Deep Fryer's fire, a candy web) starts.
   onZone(z) {
@@ -554,6 +558,8 @@ class Reel {
     this.zg = new Map();     // (0.50) a recorded utensil zone -> its replayed one
     this.pg = new Map();     // ... a recorded puddle -> its replayed one
     this.ag = new Map();     // ... a recorded ice storm -> its replayed one
+    this.wg = new Map();     // (0.54) ... a Legendary freeze wave -> its replayed ring
+    this.streams = new Set(); // (0.54) Titans whose Legendary cone or beam is shown now
     this.paths = new Map();  // pid -> the flight path of a throw in this play
     this.cam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 55, shot: -1, clip: -1, rt: 0 };
     this.freeze = 0; this.punch = 0; this.shake = 0; this.realDt = 0; this.lastSg = 1;
@@ -665,8 +671,11 @@ class Reel {
     for (const z of this.zg.values()) g.utensils._dropZone(z);
     for (const z of this.pg.values()) g.surface.dropPuddle(z);
     for (const v of this.ag.values()) g.abilities._dropVortex(v);
-    this.zg.clear(); this.pg.clear(); this.ag.clear();
+    for (const m of this.wg.values()) g.utensils.legend._dropWave({ mesh: m });
+    for (const a of this.streams) this._endStream(a);
+    this.zg.clear(); this.pg.clear(); this.ag.clear(); this.wg.clear(); this.streams.clear();
   }
+  _endStream(a) { a.replayStream = false; const fx = this.g.utensils.legend.fx.get(a); if (fx && !a.streamOn) fx.grp.visible = false; }
   _drop(m) { // a replayed food (and its utensil coat) back to the pools
     this.g.utensils.releaseAttach(m.userData.att); m.userData.att = null; m.userData.uv = null;
     this.g.projectiles.releaseMesh(m.userData.food, m);
@@ -1212,10 +1221,12 @@ class Reel {
   // (0.50) The utensil zones and puddles of the moment shown, as they were then.
   _world(t, step) {
     const g = this.g, U = g.utensils, S = g.surface, Ab = g.abilities, flames = [], lines = [];
+    const shown = this.streams; this.streams = new Set();
     for (const e of this.hl.events) {
       if (!e.zone && !e.pud && !e.ab) continue;
       const on = t >= e.t && t < e.end;
       if (e.ab) { // an ability's storm, fires, spikes, flamethrower
+        if (e.ab === 'wave' && !on && this.wg.has(e)) { U.legend._dropWave({ mesh: this.wg.get(e) }); this.wg.delete(e); continue; }
         if (e.ab === 'storm') {
           let v = this.ag.get(e);
           if (!on) { if (v) { Ab._dropVortex(v); this.ag.delete(e); } continue; }
@@ -1224,6 +1235,16 @@ class Reel {
         } else if (!on) continue;
         else if (e.ab === 'flame') flames.push({ pos: _u.set(e.x, e.y, e.z).clone(), r: e.r, born: e.t, until: e.end, seed: e.seed });
         else if (e.ab === 'spikes') lines.push({ born: e.t, until: e.end, pts: e.pts.map((p, i) => ({ p: new THREE.Vector3(p[0], p[1], p[2]), s: p[3], tilt: p[4], spin: p[5], up: t >= e.t + i * SPIKE_GAP })) });
+        else if (e.ab === 'stream') { // (0.54) a Legendary torch's cone or blender's beam, from their hand the way they aimed
+          const a = this.hl.actors[e.a];
+          if (!a?.alive) continue;
+          a.replayStream = true; this.streams.add(a);
+          const L = U.legend;
+          drawStream(L, a, e.u, e.food, step, null, Math.min(2, Math.floor((t - e.t) / 1.2)), t);
+        } else if (e.ab === 'wave') {
+          const m = U.legend.waveAt(this.wg.get(e), e.x, e.y, e.z, e.r, t - e.t);
+          if (m) this.wg.set(e, m); else this.wg.delete(e);
+        }
         else if (e.ab === 'flamer' && step > 0) { // from their hand, the way they faced
           const a = this.hl.actors[e.a];
           if (!a?.alive) continue;
@@ -1248,6 +1269,7 @@ class Reel {
         S.posePuddle(z, t);
       }
     }
+    for (const a of shown) if (!this.streams.has(a)) this._endStream(a); // (0.54: a replayed stream that stopped)
     Ab.drawAt(t, flames, lines);
   }
   _spin(m, q, r, k) { // a food's tumble between two frames

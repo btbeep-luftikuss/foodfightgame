@@ -25,6 +25,7 @@ const r2 = (v) => Math.round(v * 100) / 100;
 import { FOODS, makeFoodMesh } from './foods.js';
 import { UTENSIL_ART } from './utensil-art.js';
 import { makeUtensilMesh } from './utensil-models.js';
+import { Legends, BAL, streamVisuals, rootOf } from './legendary.js';
 
 const SINGLE = ['tomato', 'carrot', 'ice', 'soda', 'chili', 'jelly', 'cookie', 'pineapple', 'banana'];
 const ROLL = ['cheese', 'watermelon'];
@@ -84,19 +85,45 @@ export const UTENSILS = [
     buff: 'Hurls your food 70% faster and further, straight through cheese shields. It can even throw a peel trap 18 m.', trade: 'Only every 3.5 s, and quick throws overheat it for 6 s.' },
   { id: 'pan', tip: 'Q: slam to fire the alt', name: 'Pan', role: 'Alt-Ability Activator', color: '#a49bc4', works: WITH_PEEL,
     buff: "Your food's alt ability (Q) ignores its cooldown and slams a shockwave around you.", trade: 'The Pan has its own 7 s cooldown, and the slam roots you for a moment.' },
+  // (0.54) The five Legendary utensils: King of the Utensil puts two of them in the middle of the map.
+  // Each is far stronger than any utensil above, and each rules a different part of a fight (see
+  // legendary.js for the numbers and how they are kept even): area burn, melting one Titan, raining
+  // on an area from afar, freezing whoever is on the ground, chain explosions. They still only buffer
+  // the food in them: it's always that food that flies, splats and does what it does.
+  { id: 'gold-torch', base: 'blow-torch', legendary: true, tip: 'Hold: a spiral cone of flame and food', name: 'Legendary Blow Torch', role: 'Spiral Flame Cone', color: '#ff9a1a', works: THROWN,
+    buff: 'Hold the throw for a spiralling cone of flame: everyone in it burns, while pieces of your food fly out along the spiral and hit as that food does. Mid-range, many Titans at once.', trade: 'The cone only reaches 11 m and is narrow: keep it on them. It burns a food every second.' },
+  { id: 'gold-blender', base: 'blender', legendary: true, tip: 'Hold: a laser of liquefied food that ramps up', name: 'Legendary Blender', role: 'Ramping Juice Laser', color: '#ff4f8b', works: THROWN,
+    buff: 'Hold the throw for a laser of your food, liquefied. The longer it stays on the same Titan, the harder it hits: 14, then 40, then 120 damage a second. Melts the toughest Titan. One food lasts 3.5 s.', trade: 'A thin beam: it only hurts the Titan it touches, and the ramp starts over the moment it slips off.' },
+  { id: 'gold-mitt', base: 'oven-mitt', legendary: true, tip: 'Click: a burst of your food rains down on your aim', name: 'Legendary Oven Mitt', role: 'Burst Rain', color: '#ff5d5d', works: THROWN,
+    buff: 'Hurls a burst of 12 of your food into the sky: they rain down at blinding speed all over an 8.5 m wide spot where you aim, up to 70 m away, behind cover too.', trade: 'One burst every 2.6 s, with nothing in between: time them.' },
+  { id: 'gold-cream', base: 'ice-cream-machine', legendary: true, tip: 'Freeze wave where your food lands · jump it!', name: 'Legendary Ice Cream Machine', role: 'Freeze Shockwave', color: '#6fe0ff', works: THROWN,
+    buff: 'Every food you throw lands with a ring of ice that rolls out 9 m across the floor: everyone it catches on the ground is frozen solid.', trade: 'Only the wave freezes (not the food in the air), and a jump at the right moment clears it.' },
+  { id: 'gold-popper', base: 'popcorn-popper', legendary: true, tip: 'Giant food · bursts 5 times over', name: 'Legendary Popcorn Popper', role: '5-Stage Cluster Cascade', color: '#ffd23a', works: THROWN,
+    buff: 'Your food flies twice as big and bursts where it lands into mini versions of itself, which burst again, and again: five ever-faster rounds of explosions spreading out.', trade: 'The giant food is slow and easy to see coming, and the outer rings take a moment: quick Titans get out.' },
 ];
 export const UTENSIL_BY_ID = Object.fromEntries(UTENSILS.map((u) => [u.id, u]));
-export const UTENSIL_IDS = UTENSILS.map((u) => u.id);
+export const UTENSIL_IDS = UTENSILS.map((u) => u.id); // (the Legendary ones last: online kit codes count on the order)
+export const LEGENDARY_IDS = UTENSILS.filter((u) => u.legendary).map((u) => u.id);
+export const isLegendary = (id) => !!UTENSIL_BY_ID[id]?.legendary;
+export const NORMAL_IDS = UTENSIL_IDS.filter((id) => !isLegendary(id)); // (what delivery boxes, loadouts and bots get)
 export const KIT = 3; // utensils a Titan can carry
 export const utensilHeat = (id) => RULES[id]?.heat || null; // heat limits, for the HUD
-export const randomUtensilId = () => UTENSIL_IDS[(Math.random() * UTENSIL_IDS.length) | 0];
+export const randomUtensilId = () => NORMAL_IDS[(Math.random() * NORMAL_IDS.length) | 0];
 
 // The art as an <img>-ready data URL (HUD, menus, box labels): snapshots of the 3D models when
 // main.js could render them (setUtensilIcons), the flat design-sheet art otherwise.
 const urlCache = {};
 export function setUtensilIcons(map) { for (const [id, url] of Object.entries(map)) if (url) urlCache[id] = url; }
 export function utensilIcon(id) {
-  return (urlCache[id] ||= `data:image/svg+xml;charset=utf-8,${encodeURIComponent(UTENSIL_ART[id] || '')}`);
+  return (urlCache[id] ||= `data:image/svg+xml;charset=utf-8,${encodeURIComponent(UTENSIL_ART[id] || legendArt(id))}`);
+}
+// (0.54) A Legendary's flat art: its everyday utensil's, in a gold ring with a crown.
+const CROWN = '<g><circle cx="200" cy="205" r="178" fill="none" stroke="#ffcf3a" stroke-width="14" opacity="0.9"/><circle cx="200" cy="205" r="178" fill="none" stroke="#fff3b0" stroke-width="4" opacity="0.9"/>'
+  + '<path d="M150 70 L162 22 L186 52 L200 12 L214 52 L238 22 L250 70 Z" fill="#ffcf3a" stroke="#2b1633" stroke-width="7" stroke-linejoin="round"/><circle cx="200" cy="52" r="7" fill="#ff4f8b"/></g>';
+function legendArt(id) {
+  const base = UTENSIL_BY_ID[id]?.base;
+  const svg = (base && UTENSIL_ART[base]) || '';
+  return svg ? svg.replace(/<\/svg>\s*$/, `${CROWN}</svg>`) : '';
 }
 const imgCache = {};
 function withArt(id, draw) { // draws the utensil art once it has loaded
@@ -120,6 +147,7 @@ const MAT = {
   shield: new THREE.MeshBasicMaterial({ color: '#9fe8ff', transparent: true, opacity: 0.22, depthWrite: false }),
   hex: new THREE.MeshBasicMaterial({ color: '#6fd8f0', wireframe: true, transparent: true, opacity: 0.6 }),
   vortex: new THREE.MeshBasicMaterial({ color: '#b98cff', transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide }),
+  gold: new THREE.MeshBasicMaterial({ color: '#ffcf3a', transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }), // (0.54) a Legendary's glow
 };
 const col = (hex) => new THREE.Color(hex);
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _c = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
@@ -215,6 +243,50 @@ function arcTo(from, tgt, grav) {
 //  trapFx(a, pos, U): what the peel leaves where it lands (an ice patch, a vortex...): online it runs on
 //    every game (the peel's 'p' event names the utensil)
 const RULES = {
+  // (0.54) The Legendary utensils (legendary.js does the work). lockFor: seconds before the next throw
+  // (lockAuto: for rapid fire too); stream: held, not thrown (the torch and the blender).
+  'gold-torch': {
+    stream: true,
+    post(p, hit) { if (p.x.tf && hit.actor?.alive) hit.actor.burn(1.5); }, // (its flying pieces are on fire too)
+  },
+  'gold-blender': { stream: true },
+  'gold-mitt': {
+    lockFor: BAL.mitt.cd, lockAuto: true,
+    cost: (a, rel) => (rel.auto ? 9 : 0), // (a burst of blueberries is 10 of them)
+    // The burst goes up as one throw: where it comes down and a seed (the rain is the same on every game).
+    launch(o, a, rel, I) {
+      if (I.k > 0 && !rel.auto) return []; // (a volley of grapes is one burst)
+      const at = a.game.utensils.legend.mittTarget(a);
+      a.game.fx.spray('puffs', a.handPos(_v), 6, { speed: 3, up: 6, colors: [col('#ff5d5d'), col('#ffffff')], size: 0.4, life: 0.4, grav: -0.5, grow: 1 });
+      return [{ ...clone(o), pos: at, vel: new THREE.Vector3(0, -1, 0), gravity: 0, life: 0.05, spin: 0, seek: null, x: { mr: 1, sd: 1 + ((Math.random() * 999999) | 0) } }];
+    },
+    post(p, hit, U) { if (p.x.mp) U.once(p, 'slam', () => U.legend.slam(p, hit.point)); },
+    expire(p, U) { if (p.x.mp) U.once(p, 'slam', () => U.legend.slam(p, p.pos)); },
+  },
+  'gold-cream': {
+    lockFor: BAL.cream.lock,
+    launch: (o, a, rel, I) => [lead({ ...clone(o), vel: o.vel.clone().multiplyScalar(0.92), x: { lw: 1 } }, I)],
+    post(p, hit, U) { if (!p.x.nf) U.once(p, 'wave', () => U.legend.wave(hit.point, p.owner, rootOf(p.food), isPellet(p) ? BAL.cream.pelletR : BAL.cream.r)); },
+    expire(p, U) { if (!p.x.nf) U.once(p, 'wave', () => U.legend.wave(p.pos, p.owner, rootOf(p.food), isPellet(p) ? BAL.cream.pelletR : BAL.cream.r)); },
+  },
+  'gold-popper': {
+    lockFor: BAL.popper.lock,
+    launch(o, a, rel, I) {
+      if (I.k > 0 && !rel.auto) return []; // (a volley is one giant grape)
+      if (rel.auto) { const s = a.uState, t = a.game.time; if (t - (s.popAt ?? -9) < 0.6) return []; s.popAt = t; } // (blueberries: one giant every 0.6 s)
+      const v = o.vel.clone().multiplyScalar(BAL.popper.speed);
+      if (v.length() > BAL.popper.maxSpeed) v.setLength(BAL.popper.maxSpeed); // (a giant carrot or berry is slow and easy to see too)
+      const q = { ...clone(o), vel: v, radius: radiusOf(o) * BAL.popper.size, x: { cs: 0, sc: BAL.popper.size } };
+      if (q.seek) q.turn = (q.turn || 1) * 0.6; // (a giant chili turns slowly)
+      return [q];
+    },
+    // the giant (or a mini) bursts where it lands: the food's own splat first, then the blast and the next round
+    post(p, hit, U) {
+      U.once(p, 'pop', () => { if (!p.x.cs && FOODS[p.food].detonate) FOODS[p.food].detonate(p, U.game); U.legend.cascade(p, hit.point); });
+      p.done = true;
+    },
+    expire(p, U) { U.once(p, 'pop', () => U.legend.cascade(p, p.pos)); },
+  },
   knife: {
     cost: 1, rec: 0.8,
     launch(o, a, rel, I) {
@@ -568,6 +640,7 @@ export class Utensils {
     this.pickups = []; this.zones = []; this.pending = []; this.boxes = [];
     this.nextDrop = 0;
     this.attachPool = {};
+    this.legend = new Legends(this); // (0.54) the Legendary utensils' streams, waves and cascades
   }
 
   // ------------------------------------------------------------------ actors
@@ -603,12 +676,14 @@ export class Utensils {
     if (!UTENSIL_BY_ID[id]) return false;
     if (!a.utensils) Utensils.emptyKit(a);
     if (a.utensils.includes(id)) return false;
+    if (isLegendary(id) && a.utensils.some(isLegendary)) return false; // (0.54) one Legendary at a time
     let i = a.utensils[a.uSel] ? a.utensils.indexOf(null) : a.uSel;
     const swap = i < 0;
     if (swap) i = a.uSel;
     const old = a.utensils[i];
     a.utensils[i] = id; a.uStates[i] = Utensils.freshState();
     if (i === a.uSel) { a.utensil = id; a.uState = a.uStates[i]; a.charging = false; }
+    else if (isLegendary(id)) this.select(a, i); // (0.54) a Legendary goes straight into your hand
     if (a === this.game.player) {
       const u = UTENSIL_BY_ID[id];
       const how = i === a.uSel ? u.role : this.game.input?.isTouch ? 'turn the utensil plate to use it' : `press ${i + 6} to use it`;
@@ -633,6 +708,7 @@ export class Utensils {
     if (!u.works.includes(slot.id)) return `No effect on ${FOODS[slot.id].name}`;
     if (slot.id === 'peel') return u.peelTip || u.tip;
     const food = FOODS[slot.id];
+    if (u.legendary) return this._legendStatus(a, u, food, false) || u.tip;
     const firing = t - s.autoAt < 0.3;
     if (food.auto && u.id === 'blow-torch') return firing && s.fire >= 3 ? 'Berries ablaze!' : firing ? `Keep firing: ${s.fire.toFixed(1)} / 3 s` : 'Keep firing 3 s to ignite';
     if (food.auto && u.id === 'microwave') return 'Every 1.5 s of fire: a plasma berry';
@@ -659,6 +735,7 @@ export class Utensils {
     if (!slot) return null;
     if (!u.works.includes(slot.id)) return { text: 'No effect', warn: true };
     const food = FOODS[slot.id];
+    if (u.legendary) { const s = this._legendStatus(a, u, food, true); return s ? { text: s } : null; }
     if (food.auto && u.id === 'blow-torch' && t - s.autoAt < 0.3) return s.fire >= 3 ? { text: 'Ablaze!' } : { text: `Ignite ${'●'.repeat(Math.floor(s.fire))}${'○'.repeat(3 - Math.floor(s.fire))}` };
     if (u.id === 'oven-mitt' && !food.auto && t < s.cdUntil) return { text: `Mitt ${Math.ceil(s.cdUntil - t)}` };
     if (u.id === 'peeler' && t < s.peel.cdUntil) return { text: `Re-peel ${Math.ceil(s.peel.cdUntil - t)}` };
@@ -732,7 +809,10 @@ export class Utensils {
     a.uRel = null;
     if (!rel || !rel.used) return 1;
     const R = RULES[a.utensil], s = a.uState, t = this.game.time;
-    if (R.cost) a.consume(R.cost);
+    const cost = typeof R.cost === 'function' ? R.cost(a, rel) : R.cost;
+    if (cost) a.consume(cost);
+    a.uLock = R.lockFor && (!rel.auto || R.lockAuto) ? R.lockFor : 0; // (Actor._release waits this long for the next throw)
+    if (a.uLock) s.cdUntil = t + a.uLock;
     if (R.released) R.released(a, this, rel);
     if (rel.mxSlot >= 0) {
       const m = a.inv[rel.mxSlot];
@@ -811,7 +891,9 @@ export class Utensils {
     else if (x.sc !== undefined) out.sc = n(x.sc, 0.2, 2);
     for (const k of ['wb', 'fb', 'pc']) if (x[k] !== undefined) out[k] = n(x[k], 0, 5) | 0;
     if (x.pa !== undefined) out.pa = n(x.pa, 0, 2);
-    for (const k of ['fl', 'pi', 'pp', 'nf', 'ns', 'sl', 'sp', 'sm', 'kb', 'tr', 'ps', 'pe', 'mb', 'gl', 'wk', 'gr']) if (x[k]) out[k] = 1;
+    for (const k of ['fl', 'pi', 'pp', 'nf', 'ns', 'sl', 'sp', 'sm', 'kb', 'tr', 'ps', 'pe', 'mb', 'gl', 'wk', 'gr', 'lw', 'mr', 'tf', 'mp']) if (x[k]) out[k] = 1;
+    if (x.sd !== undefined) out.sd = n(x.sd, 1, 1e6) | 0; // (0.54: a Mitt burst's seed)
+    if (x.cs !== undefined) out.cs = n(x.cs, 0, 4) | 0; // (a Popper round)
     if (typeof x.mx === 'string' && Object.values(MIX_IMPACT).includes(x.mx)) out.mx = x.mx;
     return out;
   }
@@ -820,6 +902,11 @@ export class Utensils {
   onLaunch(p) {
     if (!p.u) return;
     const x = p.x;
+    if (p.u === 'gold-mitt' && x.mr) { // a Legendary Oven Mitt burst: the rain comes down here
+      this.legend.rain(p);
+      p.done = true; p.mesh.visible = false; p.uAttach = [];
+      return;
+    }
     if (Array.isArray(x.sc)) p.mesh.scale.set(x.sc[0], x.sc[1], x.sc[2]);
     else if (x.sc) p.mesh.scale.setScalar(x.sc);
     p.uAttach = this.attach(p.u, x, p.radius, p.pos);
@@ -843,6 +930,9 @@ export class Utensils {
       case 'microwave': add('plasma', SPHERE, MAT.plasma, Math.max(0.4, r * (x.sm ? 3 : 2.2))); break;
       case 'deep-fryer': add('oil', SPHERE, MAT.oil, Math.max(0.28, r * 1.3)); break;
       case 'oven-mitt': add('shield', SPHERE, MAT.shield, Math.max(0.45, r * 2)); add('hex', ICO, MAT.hex, Math.max(0.46, r * 2.02)); break;
+      case 'gold-cream': add('cream', TORUS, MAT.cream, Math.max(0.35, r * 1.4)); add('gold', SPHERE, MAT.gold, Math.max(0.3, r * 1.5)); break;
+      case 'gold-torch': if (x.tf) add('flame', SPHERE, MAT.flame, Math.max(0.25, r * 1.8)); break;
+      case 'gold-popper': if (!x.cs) add('gold', SPHERE, MAT.gold, Math.max(0.5, r * 1.35)); break;
       case 'mixer': if (x.mx) {
         const id = x.mx;
         const pool = (this.attachPool['mix:' + id] ||= []);
@@ -863,7 +953,7 @@ export class Utensils {
       const m = list[i], k = m.userData.kind;
       m.position.copy(pos);
       if (k === 'cream') { m.rotation.x += 6 * dt; m.rotation.y += 4 * dt; }
-      else if (k === 'plasma' || k === 'flame') m.scale.setScalar(m.userData.base * (1 + Math.sin(t * 30 + i) * 0.12));
+      else if (k === 'plasma' || k === 'flame' || k === 'gold') m.scale.setScalar(m.userData.base * (1 + Math.sin(t * 30 + i) * 0.12));
       else if (k === 'hex') { m.rotation.y += 2 * dt; m.rotation.x += 1.3 * dt; }
       else if (k.startsWith('mix:')) {
         const a = t * 9;
@@ -874,7 +964,7 @@ export class Utensils {
   }
 
   step(p, dt) {
-    if (!p.u) return;
+    if (!p.u || p.done) return;
     const R = RULES[p.u], g = this.game, t = g.time;
     if (R.step) { R.step(p, dt, this); if (p.done) return; }
     if (p.x.fl) { p.mesh.rotation.set(0, p.mesh.rotation.y + 14 * dt, 0); } // flat disc spins like a frisbee
@@ -900,6 +990,10 @@ export class Utensils {
       case 'spatula': if (Math.random() < 0.5) P.spray('blobs', p.pos, 1, { speed: 1, up: 1, colors: [col('#fff6a8')], size: 0.07, life: 0.3, grav: 0 }); break;
       case 'colander': P.spray('blobs', p.pos, 1, { speed: 0.3, up: 0, colors: [col(TINT[p.food] || '#ffffff')], size: 0.07, life: 0.25, grav: 0 }); break;
       case 'popcorn-popper': if (!p.x.pp) P.spray('blobs', p.pos, 1, { speed: 1.5, up: 1.5, colors: [col('#fff3c0')], size: 0.08, life: 0.3, grav: 0.5 }); break;
+      case 'gold-popper': if (!p.x.cs) P.spray('blobs', p.pos, 2, { speed: 2, up: 1.5, colors: [col('#ffd23a'), col('#fff3c0')], size: 0.12, life: 0.4, grav: 0.5 }); break;
+      case 'gold-cream': P.spray('puffs', p.pos, 1, { speed: 0.5, up: 0.2, colors: [col('#ffffff'), col('#bff3ff')], size: 0.4, life: 0.45, grav: 0.2, grow: 0.5 }); break;
+      case 'gold-torch': if (p.x.tf) P.spray('blobs', p.pos, 1, { speed: 1, up: 1, colors: [col('#ff3d00'), col('#ffae00')], size: 0.1, life: 0.3, grav: -0.3 }); break;
+      case 'gold-mitt': if (Math.random() < 0.5) P.spray('puffs', p.pos, 1, { speed: 0.2, up: 0, colors: [col('#ffffff')], size: 0.3, life: 0.25, grav: 0, grow: 0.4 }); break;
     }
   }
 
@@ -1229,7 +1323,7 @@ export class Utensils {
   _deliveries(dt) {
     const g = this.game, t = g.time;
     if (t >= this.nextDrop && g.state !== 'over') {
-      if (this.boxes.length < MAX_BOXES) this._deliver(false);
+      if (this.boxes.length < MAX_BOXES && g.mode !== 'king') this._deliver(false); // (King of the Utensil: no utensil but the two Legendaries)
       this.nextDrop = t + rand(16, 24);
     }
     for (let i = this.boxes.length - 1; i >= 0; i--) {
@@ -1281,15 +1375,16 @@ export class Utensils {
   // ------------------------------------------------------------------ loose utensils on the floor
   reset() {
     const g = this.game;
-    for (const it of this.pickups) g.scene.remove(it.model, it.ring);
+    for (const it of this.pickups) g.scene.remove(it.model, it.ring, ...(it.extra || []));
     this.pickups.length = 0;
     for (const z of this.zones) this._dropZone(z);
     this.zones.length = 0;
     this.pending.length = 0;
     for (const b of this.boxes) this._removeBox(b);
     this.boxes.length = 0;
-    for (let i = 0; i < 3; i++) this._deliver(true); // a few boxes are already waiting
+    if (g.mode !== 'king') for (let i = 0; i < 3; i++) this._deliver(true); // a few boxes are already waiting (0.54: none in King of the Utensil)
     this.nextDrop = g.time + rand(7, 10);
+    this.legend.reset();
     this.gone = new Set(); // (online) keys of utensils or boxes someone took before they showed up here
     this.took = new Set(); // ... and of those my Titans took or opened (if the host still has one, it missed that)
   }
@@ -1298,16 +1393,24 @@ export class Utensils {
   // there (key given).
   drop(id, pos, from = null, key = null) {
     const g = this.game;
+    const gold = isLegendary(id);
     const model = makeUtensilMesh(id); // the real thing, big enough to spot, spinning over its ring
-    model.scale.setScalar(2.2);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.25, 40).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: UTENSIL_BY_ID[id].color, transparent: true, opacity: 0.9, depthWrite: false }));
+    model.scale.setScalar(gold ? 3.2 : 2.2);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(gold ? 1.5 : 1.0, gold ? 1.9 : 1.25, 40).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: gold ? '#ffcf3a' : UTENSIL_BY_ID[id].color, transparent: true, opacity: 0.9, depthWrite: false }));
     const p = pos.clone();
     p.y = groundHeight(p.x, p.z, p.y + 1);
     if (!key && g.online) p.set(r2(p.x), r2(p.y), r2(p.z)); // (as the room gets it)
     ring.position.copy(p).setY(p.y + 0.07);
     g.scene.add(model, ring);
-    const it = { id, pos: p, model, ring, phase: rand(0, 6), noPick: from, noPickUntil: g.time + 4, key, born: g.time };
+    const extra = [];
+    if (gold) { // (0.54) a Legendary on the floor: a gold beam of light to find it by, across the map
+      BEAM_GEO ||= new THREE.CylinderGeometry(0.45, 1.1, 36, 12, 1, true);
+      const beam = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ color: '#ffd23a', transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }));
+      beam.position.set(p.x, p.y + 18, p.z);
+      g.scene.add(beam); extra.push(beam);
+    }
+    const it = { id, pos: p, model, ring, extra, phase: rand(0, 6), noPick: from, noPickUntil: g.time + (from ? 4 : 0), key, born: g.time };
     this.pickups.push(it);
     if (!key && g.online && g.net) { it.key = g.net.newKey(); g.net.event('ut', g.round.id, it.key, id, r2(p.x), r2(p.y), r2(p.z)); }
     return it;
@@ -1343,7 +1446,7 @@ export class Utensils {
     const i = this.pickups.findIndex((x) => x.key === key);
     if (i < 0) { this.gone?.add(key); return; }
     const it = this.pickups[i];
-    this.game.scene.remove(it.model, it.ring);
+    this.game.scene.remove(it.model, it.ring, ...(it.extra || []));
     it.ring.geometry.dispose(); it.ring.material.dispose();
     this.pickups.splice(i, 1);
     this.game.fx.spray('puffs', _v.copy(it.pos).setY(it.pos.y + 1.4), 8, { speed: 3, up: 2, colors: [col(UTENSIL_BY_ID[it.id].color), col('#ffffff')], size: 0.4, life: 0.4, grav: 0, grow: 1 });
@@ -1377,13 +1480,16 @@ export class Utensils {
           it.noPick = null;
         }
         if (!near || a.utensils?.includes(it.id) || a.utensil === it.id) continue;
-        if (a.isBot && a.utensil) continue; // bots keep the first utensil they find
-        g.scene.remove(it.model, it.ring);
+        const gold = isLegendary(it.id);
+        if (gold && a.utensils?.some(isLegendary)) continue; // (0.54) one Legendary at a time
+        if (a.isBot && a.utensil && !gold) continue; // bots keep the first utensil they find (a Legendary they always take)
+        g.scene.remove(it.model, it.ring, ...(it.extra || []));
         it.ring.geometry.dispose(); it.ring.material.dispose();
         this.pickups.splice(i, 1);
         if (g.online && it.key) { g.net.event('ug', g.round.id, it.key); this.gone.add(it.key); this.took.add(it.key); }
         const old = this.give(a, it.id);
         if (old) this.drop(old, a.pos, a); // all slots full: leave the one in hand behind
+        if (gold) this.onLegendTaken?.(a, it); // (King of the Utensil: say who has it)
         g.sfx.play('pickup', it.pos, a === g.player ? 1.1 : 0.4);
         g.fx.spray('puffs', _v.copy(it.pos).setY(it.pos.y + 1.4), 8, { speed: 3, up: 2, colors: [col(UTENSIL_BY_ID[it.id].color), col('#ffffff')], size: 0.4, life: 0.4, grav: 0, grow: 1 });
         break;
@@ -1393,6 +1499,7 @@ export class Utensils {
 
   update(dt) {
     this._pending();
+    this.legend.update(dt);
     this._zones(dt);
     this._deliveries(dt);
     this._pickups(dt);
@@ -1406,6 +1513,23 @@ export class Utensils {
       }
     }
   }
-  // (the utensil a Titan carries is drawn in their left hand: Actor._refreshUtensil)
-  updateVisual() {}
+  // (the utensil a Titan carries is drawn in their left hand: Actor._refreshUtensil; a Legendary torch's
+  // or blender's stream from there: legendary.js)
+  updateVisual(dt = 0) { streamVisuals(this.legend, dt); }
+
+  // (0.54) What the HUD says about a Legendary in hand (brief: the short in-play version).
+  _legendStatus(a, u, food, brief) {
+    const t = this.game.time, s = a.uState;
+    switch (u.id) {
+      case 'gold-blender': {
+        const st = this.legend.stage(a);
+        if (!a.streamOn) return brief ? null : u.tip;
+        return st < 0 ? 'Find a target' : `Ramp ${'●'.repeat(st + 1)}${'○'.repeat(2 - st)}`;
+      }
+      case 'gold-torch': return a.streamOn ? 'Flame cone!' : brief ? null : u.tip;
+      case 'gold-mitt': return t < s.cdUntil ? `Burst in ${Math.ceil(s.cdUntil - t)}` : brief ? null : 'Burst ready';
+      case 'gold-popper': case 'gold-cream': return t < s.cdUntil - 0.05 && !food.auto ? 'Reloading' : null;
+      default: return null;
+    }
+  }
 }

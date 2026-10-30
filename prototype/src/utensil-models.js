@@ -26,10 +26,11 @@ function mat(kind) {
 
 const STEEL = '#c6ced9', DARK = '#2b2836', WOOD = '#d9a464', WOOD_D = '#a8693a', CREAM = '#fff6ea';
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
+const _gold = new THREE.Color(), _hsl = {};
 
 // A model under construction: a list of painted, placed parts grouped by material.
 class Kit {
-  constructor() { this.parts = { gloss: [], metal: [], matte: [], glow: [] }; this.solid = []; }
+  constructor() { this.parts = { gloss: [], metal: [], matte: [], glow: [] }; this.solid = []; this.gold = false; }
   // color: a hex string, or fn(x, y, z) -> hex in the part's own space (stripes, spots)
   // grip: this part is the handle (or on it): the fist may close round it
   add(geo, color, kind = 'gloss', { p = [0, 0, 0], r = [0, 0, 0], s = 1, grip = false } = {}) {
@@ -38,6 +39,7 @@ class Kit {
     const pos = g.attributes.position, cols = new Float32Array(pos.count * 3);
     for (let i = 0; i < pos.count; i++) {
       _c.set(typeof color === 'function' ? color(pos.getX(i), pos.getY(i), pos.getZ(i)) : color);
+      if (this.gold && kind === 'metal') _c.lerp(_gold.setHSL(0.12, 0.9, 0.35 + 0.35 * _c.getHSL(_hsl).l), 0.85); // (0.54) a Legendary's steel is gold
       cols[i * 3] = _c.r; cols[i * 3 + 1] = _c.g; cols[i * 3 + 2] = _c.b;
     }
     g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
@@ -248,6 +250,27 @@ const MAKERS = {
     k.add(cyl(0.18, 0.18, 0.004, 30), '#3b3649', 'gloss', { p: [0, 0.46, -0.006], r: [Math.PI / 2, 0, 0] }); // non-stick
   },
 };
+// (0.54) The Legendary utensils: their everyday utensil, its steel turned gold, with a gold crown ring
+// floating round it and glowing gems on it (they're meant to be spotted across the map).
+const LEGEND_BASE = { 'gold-torch': 'blow-torch', 'gold-blender': 'blender', 'gold-mitt': 'oven-mitt', 'gold-cream': 'ice-cream-machine', 'gold-popper': 'popcorn-popper' };
+for (const [id, base] of Object.entries(LEGEND_BASE)) {
+  HOLD[id] = HOLD[base];
+  MAKERS[id] = (k) => {
+    k.gold = true;
+    MAKERS[base](k);
+    k.gold = false;
+    const box = new THREE.Box3();
+    for (const g of k.solid) { g.computeBoundingBox(); box.union(g.boundingBox); }
+    const top = box.max.y, mid = (box.min.y + box.max.y) / 2, R = Math.max(0.16, Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) * 0.5 + 0.05);
+    k.add(tor(R, 0.016, Math.PI * 2, 36), '#ffd23a', 'metal', { p: [0, mid, 0], r: [Math.PI / 2 + 0.25, 0, 0.2] }); // the crown ring
+    for (let i = 0; i < 5; i++) { // its points
+      const a = (i / 5) * Math.PI * 2;
+      k.add(new THREE.ConeGeometry(0.02, 0.06, 6), '#ffd23a', 'metal', { p: [Math.cos(a) * 0.07, top + 0.06, Math.sin(a) * 0.07] });
+    }
+    k.add(tor(0.075, 0.012, Math.PI * 2, 24), '#ffd23a', 'metal', { p: [0, top + 0.03, 0], r: [Math.PI / 2, 0, 0] });
+    for (const [x, z, c] of [[0.075, 0, '#ff4f8b'], [-0.075, 0, '#6fe0ff'], [0, 0.075, '#7dff8a']]) k.add(ball(0.016, 10, 8), c, 'glow', { p: [x, top + 0.035, z] });
+  };
+}
 export const utensilHold = (id) => HOLD[id] || 'palm';
 
 // How many points of a utensil's non-handle parts are inside the fist (0 = nothing clips the hand).

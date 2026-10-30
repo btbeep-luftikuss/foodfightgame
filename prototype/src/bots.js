@@ -6,6 +6,11 @@ import {
 } from './core.js';
 import { FOODS } from './foods.js';
 import { MAX_HP } from './actors.js';
+import { isLegendary } from './utensils.js';
+import { BAL } from './legendary.js';
+
+// (0.54) Where a bot wants to be with a Legendary in hand (min, max metres), and how far it fires it.
+const LEG_RANGE = { 'gold-torch': [3, 9, 11], 'gold-blender': [8, 26, 33], 'gold-mitt': [18, 55, 68] };
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _aim = new THREE.Vector3(), _q = new THREE.Vector3();
 
@@ -47,10 +52,11 @@ export class BotBrain {
     // choose target: whoever hit me recently, else the nearest visible enemy
     let best = null, bestD = this.lv.sight;
     const eye = a.headPos(_v);
+    const king = g.arena?.king;
     for (const o of g.actors) {
       if (o === a || !o.alive || g.teammates(a, o)) continue;
       const d = o.pos.distanceTo(a.pos);
-      const bias = o === a.lastHitBy && now - a.lastHitAt < 4 ? 15 : 0;
+      const bias = (o === a.lastHitBy && now - a.lastHitAt < 4 ? 15 : 0) + (king && g.arena.held(o).length ? 20 : 0); // (King of the Utensil: go for whoever holds a Legendary)
       if (d - bias < bestD && hasLineOfSight(eye, o.headPos(_w))) { best = o; bestD = d - bias; }
     }
     if (best && best !== this.target) this.nextShotAt = Math.max(this.nextShotAt, now + this.lv.react); // a moment to react
@@ -84,6 +90,16 @@ export class BotBrain {
     } else if (!a.inv.some(Boolean) || (!this.target && a.inv.filter(Boolean).length < 3)) {
       const it = this._nearestItem(this.target ? 25 : 80);
       if (it) { this.goal = it.pos; this.goalKind = 'item'; }
+    }
+    // (0.54) King of the Utensil: a Legendary lying about is worth almost anything (unless a fight is right here)
+    if (king && !this.goal && !(a.utensils || []).some(isLegendary) && (!this.target || bestD > 7)) {
+      let it = null, bd = 160;
+      for (const u of g.utensils.pickups) {
+        if (!isLegendary(u.id) || (u.noPick === a && now < u.noPickUntil)) continue;
+        const d = Math.hypot(u.pos.x - a.pos.x, u.pos.z - a.pos.z);
+        if (d < bd) { bd = d; it = u; }
+      }
+      if (it) { this.goal = it.pos.clone(); this.goalKind = 'item'; if (it.pos.y > a.pos.y + 2.5 && a.onGround) this._goPad(it.pos); }
     }
     // No utensil yet: go open a delivery box (or grab a utensil lying on the floor).
     if (!this.goal && !a.utensil && a.inv.some(Boolean) && (!this.target || bestD > 16)) {
@@ -238,7 +254,7 @@ export class BotBrain {
       mv.set(this.goal.x - a.pos.x, 0, this.goal.z - a.pos.z);
       it.sprint = mv.length() > 6;
     } else if (t) {
-      const r = RANGE[slot?.id] || [8, 20];
+      const r = LEG_RANGE[a.utensil] || RANGE[slot?.id] || [8, 20];
       const want = (r[0] + Math.min(r[1], 30)) / 2;
       _w.set(t.pos.x - a.pos.x, 0, t.pos.z - a.pos.z);
       const d = _w.length() || 1;
@@ -288,11 +304,26 @@ export class BotBrain {
     if (mv.lengthSq() > 1e-4) { mv.normalize(); it.moveX = mv.x; it.moveZ = mv.z; }
 
     // ---- aiming and throwing
-    if (t && food && a.canControl()) {
+    const legend = g.utensils.legend, stream = legend.isStream(a) && food && g.utensils.works(a, slot.id);
+    if (t && food && a.canControl() && (stream || a.utensil === 'gold-mitt') && g.utensils.works(a, slot.id)) {
+      // (0.54) a Legendary torch or blender: hold it on them (the beam: right on them; it hits at once);
+      // the Mitt: a burst on the floor where they'll be when it comes down
+      const R = LEG_RANGE[a.utensil], from = a.handPos(_w);
+      _aim.copy(t.pos).setY(t.pos.y + 1).add(_q.copy(this.aimErr).multiplyScalar(a.utensil === 'gold-blender' ? 0.15 : 0.5));
+      if (a.utensil === 'gold-mitt') _aim.addScaledVector(t.vel, 0.55 * this.skill).setY(t.pos.y);
+      a.aimDir.subVectors(_aim, from).normalize(); a.aimPoint.copy(_aim);
+      a.yaw = this.aimYaw = yawOf(a.aimDir.x, a.aimDir.z);
+      a.botTarget = t;
+      const d = from.distanceTo(_aim), sees = hasLineOfSight(from, _q.copy(t.pos).setY(t.pos.y + 1));
+      if (stream) it.primary = d <= R[2] && (sees || a.utensil === 'gold-torch' && d < 6);
+      else if (d <= R[2] && now > this.nextShotAt && now >= a.recoverUntil) { it.primary = !a.primaryPrev; this.nextShotAt = now + 0.3; }
+    } else if (t && food && a.canControl()) {
       const from = a.handPos(_w);
       _aim.copy(t.pos).setY(t.pos.y + (food.profile === 'line' ? 1.0 : 0.8));
       const d = from.distanceTo(_aim);
-      const speed = food.speed || 25;
+      let speed = food.speed || 25;
+      if (a.utensil === 'gold-popper' && g.utensils.works(a, slot.id)) speed = Math.min(speed * BAL.popper.speed, BAL.popper.maxSpeed); // (the giant flies slower)
+      else if (a.utensil === 'gold-cream' && g.utensils.works(a, slot.id)) speed *= 0.92;
       const tFlight = d / speed;
       _aim.addScaledVector(t.vel, tFlight * this.skill).add(this.aimErr);
       a.botTarget = t;

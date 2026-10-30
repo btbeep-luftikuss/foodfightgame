@@ -118,16 +118,18 @@ export class HUD {
     // the top pill: Soap Tide timer (or online status), Titans left, your splats
     const T = game.tide;
     let tt, urgent = false, ico = 'bubble', tip = 'Soap Tide';
-    if (game.online && game.net) this._scoreboard(game);
+    if ((game.online && game.net) || game.arena?.active) this._scoreboard(game);
     if (game.online && game.net && !game.net.connected) { ico = 'online'; tt = game.net.lost ? 'Offline' : 'Reconnecting'; urgent = true; tip = `Room ${game.net.roomName}`; }
     else if (game.state === 'lobby') { ico = 'online'; tt = 'Joining'; tip = `Room ${game.net?.roomName || ''}`; }
     else if (game.mode === 'pots' && game.pots.active && game.state !== 'over') { tt = game.pots.pill(); ico = 'titan'; tip = 'Cooking Pot Wars'; }
+    else if (game.arena?.active && game.state !== 'over') { tt = game.arena.pill(); urgent = game.state === 'play' && game.arena.timeLeft() < 30; tip = 'Time left: most splats wins'; ico = 'titan'; }
+    else if (game.state === 'over' && game.arena?.active && !game.online) { tt = 'Full time'; tip = 'The match is over'; }
     else if (game.state === 'over') { tt = 'Next round'; tip = 'The next round starts in a few seconds'; }
     else if (game.state === 'drop') tt = 'Drop in';
     else if (T.phase >= T.phases.length) { tt = 'Final'; urgent = true; tip = 'Final circle'; }
     else if (T.mode === 'wait') { const s = Math.ceil(T.t); tt = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; tip = 'The Soap Tide moves in'; }
     else { tt = 'Tide!'; urgent = true; tip = 'The Soap Tide is closing in'; }
-    if (!game.online && !$('scores').hidden) $('scores').hidden = true;
+    if (!game.online && !game.arena?.active && !$('scores').hidden) $('scores').hidden = true;
     if (this.lastTide !== tt + ico + urgent) {
       this.lastTide = tt + ico + urgent;
       $('tideText').textContent = tt;
@@ -231,21 +233,25 @@ export class HUD {
     this._floaters(cam, dt);
   }
 
-  // Online scoreboard: everyone in the room by splats (names are plain text).
+  // Online scoreboard: everyone in the room by splats (names are plain text). (0.54) Also in Squads (the two
+  // teams' scores first) and King of the Utensil (a crown by whoever holds a Legendary), online or not.
   _scoreboard(game) {
     this.sbT = (this.sbT || 0) + 1;
     if (this.sbT % 20) return;
     const el = $('scores');
     el.hidden = false;
+    const A = game.arena?.active ? game.arena : null;
     const rows = game.actors.filter((a) => a === game.player || a.isRemote || a.isBot)
-      .sort((a, b) => b.kills - a.kills).slice(0, 8);
-    el.replaceChildren(...rows.map((a) => {
-      const li = document.createElement('li');
-      const n = document.createElement('span'); n.textContent = a === game.player ? `${a.name} (you)` : a.name; n.style.color = a.color;
-      const k = document.createElement('b'); k.textContent = a.kills;
+      .sort((a, b) => b.kills - a.kills).slice(0, A?.squads ? 6 : 8);
+    const line = (name, color, score, cls = '') => {
+      const li = document.createElement('li'); if (cls) li.className = cls;
+      const n = document.createElement('span'); n.textContent = name; n.style.color = color;
+      const k = document.createElement('b'); k.textContent = score;
       li.append(n, k);
       return li;
-    }));
+    };
+    const teams = A?.squads ? A.ranking().sort((x, y) => x.team - y.team).map((r) => line(r.name, r.color, r.score, `team${game.player?.team === r.team ? ' me' : ''}`)) : [];
+    el.replaceChildren(...teams, ...rows.map((a) => line(`${A?.king && A.held(a).length ? '👑 ' : ''}${a === game.player && a.name !== 'You' ? `${a.name} (you)` : a.name}`, a.color, a.kills)));
   }
 
   // Noise arrows around the crosshair: direction only (plus distance while sniffing).

@@ -200,6 +200,9 @@ button { font: inherit; color: inherit; }
 .touchui .hudbtn { display: block; } .touchui .feed { top: calc(54px + env(safe-area-inset-top, 0px)); }
 .scores { margin: 0; padding: 5px 8px; list-style: none; background: var(--ink-glass); border-radius: 10px; display: grid; gap: 2px; min-width: 130px; font-size: 12px; }
 .scores li { display: flex; justify-content: space-between; gap: 12px; }
+.scores li.team { font-weight: 800; font-size: 13.5px; } .scores li.team.me span::after { content: ' (you)'; color: var(--paper-dim); font-weight: 500; font-size: 11px; }
+.scores li.team + li:not(.team) { margin-top: 3px; padding-top: 3px; border-top: 1px solid rgba(255,255,255,0.15); }
+.tscore { font-family: var(--display); font-size: 17px; color: var(--paper); margin: 0 4px; }
 .scores span { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
 .scores b { font-variant-numeric: tabular-nums; color: var(--butter); }
 .online { display: grid; gap: 10px; background: var(--ink-2); border-radius: var(--r); padding: 14px; }
@@ -702,18 +705,18 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.53 · Smooth on anything</p>
+      <p class="eyebrow">Prototype 0.54 · Legendary</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
-      <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in, or smash the other teams' pots in Cooking Pot Wars.</p>
+      <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in; smash the other teams' pots in Cooking Pot Wars; outsplat the other team in Squads; or fight over two Legendary utensils in King of the Utensil.</p>
       <nav class="homenav" aria-label="Main menu">
-        <button id="play" class="navbtn main" type="button" data-go="play"><b>Play vs bots</b><span>Classic, Chef's Choice or Cooking Pot Wars · Solo, Duos, Trios or Squads</span></button>
+        <button id="play" class="navbtn main" type="button" data-go="play"><b>Play vs bots</b><span>Classic, Chef's Choice, Cooking Pot Wars, Squads or King of the Utensil · Solo, Duos, Trios or Quads</span></button>
         <button id="online-open" class="navbtn" type="button" data-go="online"><b>Play online</b><span>Your friends, a room code, every mode and team size</span></button>
         <button id="locker-open" class="navbtn" type="button" data-go="locker"><b>Locker</b><span>Pick your skin</span><em id="home-coins" class="coinpill"></em></button>
         <button id="gfx-open" class="navbtn" type="button" data-go="settings"><b>Settings</b><span>Controls, online connection, graphics</span></button>
         <button id="help-open" class="navbtn" type="button" data-go="help"><b>How to play</b><span>Controls, foods, utensils, the kitchen</span></button>
       </nav>
       <p id="menu-error" hidden></p>
-      <p class="foot">Prototype of the Tiny Titans design document: 13 foods with ultimate alts, 20 utensils, three maps, 12 Titans.</p>
+      <p class="foot">Prototype of the Tiny Titans design document: 13 foods with ultimate alts, 20 utensils and 5 Legendary ones, three maps, 12 Titans.</p>
     </div>
 
     <!-- play vs bots -->
@@ -725,6 +728,8 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
           <button id="mode-classic" class="mode" type="button" data-mode="classic" aria-pressed="true"><b>Classic</b><span>Grab food as you go. Food floats all over the map and bananas heal. The Soap Tide closes in.</span></button>
           <button id="mode-chef" class="mode" type="button" data-mode="chef" aria-pressed="false"><b>Chef's Choice</b><span>Pick 3 foods that never run out. No food spawns and food doesn't heal: grab green heal crosses instead.</span></button>
           <button id="mode-pots" class="mode" type="button" data-mode="pots" aria-pressed="false"><b>Cooking Pot Wars</b><span>Like Bed Wars: hide your team's pot, smash theirs with your ladle (G), carry them home. You respawn at your pot while it stands.</span></button>
+          <button id="mode-squads" class="mode" type="button" data-mode="squads" aria-pressed="false"><b>Squads</b><span>Two equal teams, 4 minutes. Every splat scores for your team; splatted Titans are back in 4 s. Most team splats wins.</span></button>
+          <button id="mode-king" class="mode" type="button" data-mode="king" aria-pressed="false"><b>King of the Utensil</b><span>Two Legendary utensils land in the middle. Fight over them: steal one, keep it, splat everyone. Most splats in 4 minutes wins; you respawn.</span></button>
         </div>
         <p class="step">2 · Teams and arena</p>
         <div id="play-settings"><div id="match-settings" class="match-settings">
@@ -733,6 +738,8 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
                 <button type="button" data-mode="classic" aria-pressed="true">Classic</button>
                 <button type="button" data-mode="chef" aria-pressed="false">Chef's Choice</button>
                 <button type="button" data-mode="pots" aria-pressed="false">Pot Wars</button>
+                <button type="button" data-mode="squads" aria-pressed="false">Squads</button>
+                <button type="button" data-mode="king" aria-pressed="false">King of the Utensil</button>
               </div>
             </div>
             <div class="botlevel-row"><b>Teams</b>
@@ -740,7 +747,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
                 <button type="button" data-team="1" aria-pressed="true">Solo</button>
                 <button type="button" data-team="2" aria-pressed="false">Duos</button>
                 <button type="button" data-team="3" aria-pressed="false">Trios</button>
-                <button type="button" data-team="4" aria-pressed="false">Squads</button>
+                <button type="button" data-team="4" aria-pressed="false">Quads</button>
               </div>
             </div>
             <p id="team-note" class="botlevel-note"></p>

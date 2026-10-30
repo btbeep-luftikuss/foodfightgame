@@ -508,6 +508,7 @@ export class Actor {
   _items(dt, it) {
     const g = this.game, now = g.time;
     if (it.ladle && g.pots.active) g.pots.ladle(this); // Cooking Pot Wars: set the pot down, or swing the ladle
+    else if (it.ladle && g.arena.king) g.arena.dropKey(this); // (0.54) King of the Utensil: G drops the Legendary in hand
     if (it.turret && g.pots.active) g.pots.toggleTurret(this); // ... and climb in or out of your pot's turret
     if (it.slot >= 0) this.select(it.slot);
     if (it.uslot >= 0) g.utensils.select(this, it.uslot);
@@ -534,6 +535,13 @@ export class Actor {
       const readyAt = food.altCd ? this.altReadyAt[slot.id] || 0 : 0;
       if (now < readyAt) { if (!this.isBot) g.hud.toast(`${food.altName || 'Alt'} ready in ${Math.ceil(readyAt - now)} s`); }
       else if (food.alt(this, g) !== false && food.altCd) this.altReadyAt[slot.id] = now + food.altCd;
+    }
+    // (0.54) a Legendary Blow Torch or Blender: held, not thrown (legendary.js)
+    const L = g.utensils.legend;
+    if (L.isStream(this) && g.utensils.works(this, slot.id)) {
+      L.input(this, food, it.primary && now >= this.swapLockUntil, dt);
+      this.charging = false; this.primaryPrev = it.primary;
+      return;
     }
     if (!ready) { this.primaryPrev = it.primary; return; }
     // a utensil can ask for a longer hold (Blow Torch, Microwave, Ice Cream Machine, Mixer)
@@ -562,10 +570,12 @@ export class Actor {
   _release(food, c) {
     const U = this.game.utensils;
     U.beginRelease(this, food, this.chargeT);
+    this.spawnShieldUntil = 0; // (0.54: throwing ends your spawn protection)
     food.release(this, c, this.game);
+    this.uLock = 0;
     const rec = U.endRelease(this);
     this.charging = false; this.chargeT = 0; this.releaseQueued = false;
-    this.recoverUntil = this.game.time + food.recovery * rec;
+    this.recoverUntil = this.game.time + Math.max(food.recovery * rec, this.uLock || 0); // (a Legendary may need a moment: the Mitt's 2.6 s)
     this.noiseAt = this.game.time; // throwing is loud
     this.armT = 0.3;
   }

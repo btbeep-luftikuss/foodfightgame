@@ -26,6 +26,8 @@
 // since. The receiver puts each player's presence back together, with the events of the last 4 seconds.
 // Saying `ln: 1` (lean) in an update or keep-alive tells the other end this game can take lean updates;
 // a line to an older game gets whole presences as before (it'll be asked to reload anyway).
+// (0.54) A line still gets each player's whole presence every 3 s (a whole one that never arrived, sent
+// before the line was quite open, would otherwise leave that player missing at the other end for good).
 //
 // Everything that arrives is untrusted: the hub ties each connection to one player id, drops
 // oversized or malformed messages, and net.js checks every value it reads.
@@ -141,8 +143,10 @@ class P2PRoom {
   _send(c, id, h, whole = false) {
     const tx = (c.tx ||= new Map());
     let s = tx.get(id), m;
-    if (!s || whole || !c.lean) {
-      s = { kj: new Map(h.kj), evs: new Set(h.ev.keys()), n: (s?.n || 0) + 1 }; tx.set(id, s);
+    const now = Date.now();
+    if (!c.open) { tx.delete(id); return false; } // (not quite open: the whole presence goes once it is)
+    if (!s || whole || !c.lean || now - s.at > 3000) {
+      s = { kj: new Map(h.kj), evs: new Set(h.ev.keys()), n: (s?.n || 0) + 1, at: now }; tx.set(id, s);
       m = { t: 'p', id, n: s.n, ln: 1, p: h === this.self ? this.mine : h.wholeP() };
     } else {
       const d = [];

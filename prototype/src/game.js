@@ -21,6 +21,7 @@ import { TEAMS, teamCount, teamHome, assignTeams, emptiest, cleanSize, sidesLeft
 import { randomSkinId } from './skins.js';
 import { FOODS, FOOD_IDS, FEED_VERB, SHOOTER_DECIDES, lobSpeed, lobDir, randomFoodId, rollAmmo, pickupAmmo } from './foods.js';
 import { UTENSIL_BY_ID } from './utensils.js';
+import { Arena, ARENA_MODES } from './arena.js';
 
 const PLAYER_COLOR = '#ff9a1f';
 const BOT_COLORS = ['#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#f2f2f2', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5'];
@@ -43,6 +44,8 @@ const LATE_JOIN = 25; // online: seconds into a round you can still drop in
 const OVER_FOR = 6;   // online: seconds between rounds
 const REEL_WAIT = 32; // online: seconds more the next round waits for players watching the round's highlights
 const random3 = () => [...FOOD_IDS].sort(() => Math.random() - 0.5).slice(0, 3);
+const MODES = ['classic', 'chef', 'pots', 'squads', 'king']; // (0.54: Squads and King of the Utensil: arena.js)
+const cleanMode = (m) => (MODES.includes(m) ? m : 'classic');
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const _d = new THREE.Vector3(), _o = new THREE.Vector3(), _c = new THREE.Vector3(), _f = new THREE.Vector3();
@@ -85,6 +88,7 @@ export class Game {
     this.viewModel = new ViewModel(camera);
     this.spectator = new Spectator(this); // what you watch while you're out (or only watching)
     this.pots = new PotWars(this); // Cooking Pot Wars
+    this.arena = new Arena(this); // (0.54) Squads and King of the Utensil
     this.endAt = 0;
     this.highlights = new Highlights(this); // (0.36) records the match for the highlight reels
 
@@ -168,10 +172,11 @@ export class Game {
   beginRound(id, rs) {
     this.highlights.stop(); // (a reel still playing ends: a new round, maybe a new map)
     if (rs.map) this.setMap(rs.map);
-    this.mode = rs.mode === 'chef' || rs.mode === 'pots' ? rs.mode : 'classic';
+    this.mode = cleanMode(rs.mode);
     this.teamSize = cleanSize(rs.team, this.mode);
     const nT = teamCount(this.teamSize);
-    this.round = { id, state: 'drop', t: 0, started: 0, winner: '', joined: false, fresh: false, idle: 0 }; // (first: what the resets share goes out as this round's)
+    this.round = { id, state: 'drop', t: 0, started: 0, winner: '', joined: false, fresh: false, idle: 0, playAt: 0, score: [0, 0] };
+    this.arena.start(this.mode); // (first: what the resets share goes out as this round's)
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear(); this.abilities.reset();
     this.world.resetRound(); this.utensils.reset(); this.slickAt = 0;
     for (const z of this.spikes) this.scene.remove(z.group);
@@ -201,7 +206,7 @@ export class Game {
         a.team = nT ? botTeams[i - 1] : null;
         if (a.team != null) a.color = TEAMS[a.team].color;
         this._dropIn(a, a.team != null ? teamHome(this.world, nT, a.team) : null);
-        this._kitOut(a, random3(), Math.random() < 0.6 ? randomUtensilId() : null); // bots bring a loadout too
+        this._kitOut(a, random3(), Math.random() < 0.6 && this.mode !== 'king' ? randomUtensilId() : null); // bots bring a loadout too (no utensils in King of the Utensil)
         this.brains.set(a, new BotBrain(a, this));
         bots.push(a);
       }
@@ -224,7 +229,7 @@ export class Game {
   _kitOut(a, foods, utensil) {
     if (this.mode === 'chef') a.giveLoadout(foods);
     else { a.inv = [null, null, null, null, null]; a.sel = 0; for (const id of foods) a.give(id, pickupAmmo(id)); }
-    if (utensil && UTENSIL_BY_ID[utensil]) this.utensils.give(a, utensil);
+    if (utensil && UTENSIL_BY_ID[utensil] && this.mode !== 'king') this.utensils.give(a, utensil); // (King of the Utensil: only the Legendaries)
   }
   // My Titan drops into the current round with my loadout.
   _joinRound() {
@@ -240,7 +245,8 @@ export class Game {
     this.camPivotY = p.pos.y;
     R.joined = true;
     const chef = this.mode === 'chef';
-    this.hud.banner(`Round ${R.id + 1}`, R.state === 'drop' ? (chef ? "Chef's Choice: your 3 foods never run out" : 'Drop in and grab food') : 'Dropping in late: watch out below', 2.4);
+    const what = this.mode === 'king' ? 'King of the Utensil: grab a Legendary in the middle' : this.mode === 'squads' ? `Squads: ${TEAMS[p.team]?.name || ''}, splat the other team` : chef ? "Chef's Choice: your 3 foods never run out" : 'Drop in and grab food';
+    this.hud.banner(`Round ${R.id + 1}`, R.state === 'drop' ? what : this.arena.active ? `Joining: ${what}` : 'Dropping in late: watch out below', 2.4);
     this.onMatchEvent?.('joined');
   }
   // Online: could I drop into the current round right now? (the loadout card's Ready button)
@@ -248,6 +254,7 @@ export class Game {
   joinableNow() {
     const R = this.round;
     if (!this.online || !R || R.id < 0 || R.state === 'over' || R.joined || this.player?.alive) return false;
+    if (this.arena.active) return this.mode !== 'squads' || this.net.squadTeam() != null; // (Squads, King of the Utensil: join any time, everyone respawns; Squads once the host has put me in a team)
     if (!this.pots.active) return R.t < LATE_JOIN;
     const pot = this.pots.pots[this.myTeam()];
     return R.t < POT_SETUP + LATE_JOIN && (!pot || pot.alive);
@@ -256,7 +263,12 @@ export class Game {
   myTeam() {
     const n = teamCount(this.teamSize);
     if (!n) return null;
-    const pick = this.net?.teamPick ?? -1;
+    if (this.mode === 'squads') { // (0.54) Squads: the host splits the players evenly (kept once you're in)
+      if (this.player?.alive && this.player.team != null && this.player.team < n) return this.player.team;
+      const t = this.net?.squadTeam?.();
+      if (t != null) return (this.autoTeam = t);
+    }
+    const pick = this.mode === 'squads' ? -1 : this.net?.teamPick ?? -1;
     if (pick >= 0 && pick < n) return pick;
     const counts = new Array(n).fill(0);
     for (const pr of this.net?.proxies.values() || []) if (pr.ready && pr.actor.team != null && pr.actor.team < n) counts[pr.actor.team]++;
@@ -287,7 +299,9 @@ export class Game {
     const alive = this.actors.filter((a) => a.alive).length;
     if (R.state !== 'over' && R.t < (this.pots.active ? POT_SETUP + LATE_JOIN : LATE_JOIN)) this._balanceTeams(); // players drop in early on
     if (R.state === 'drop') {
-      if (this.actors.every((a) => !a.alive || a.onGround) || R.t > 12) { R.state = 'play'; R.started = sidesLeft(this); this.state = 'play'; }
+      if (this.actors.every((a) => !a.alive || a.onGround) || R.t > 12) { R.state = 'play'; R.started = sidesLeft(this); this.state = 'play'; R.playAt = R.t; }
+    } else if (R.state === 'play' && this.arena.active) { // (0.54) Squads, King: on the clock
+      if (this.arena.decided()) this._roundOver();
     } else if (R.state === 'play') {
       this._tideUpdate(dt);
       const sides = sidesLeft(this);
@@ -329,6 +343,7 @@ export class Game {
   }
   _roundOver(fresh = false) {
     const R = this.round;
+    if (this.arena.active && !fresh) return this._arenaOver();
     const team = !fresh && this.teamSize > 1 ? winningTeam(this) : null;
     const w = fresh ? null : this.actors.find((a) => a.alive && (team == null || a.team === team)) || null;
     const tName = team != null ? TEAMS[team].name : null;
@@ -363,8 +378,9 @@ export class Game {
   _followRound(dt) {
     const net = this.net, rd = net.hostRound, rs = net.hostSettings;
     if (!rd || !rs) return;
-    const [id, st, tx, tz, tr, phase, mode, t, winner, rt, toX, toZ, toR, fresh] = rd;
+    const [id, st, tx, tz, tr, phase, mode, t, winner, rt, toX, toZ, toR, fresh, playAt, s0, s1] = rd;
     if (id !== this.round.id) this.beginRound(id, rs);
+    this.round.playAt = playAt; this.round.score = [s0, s1]; // (0.54: the arena clock and the Squads scores)
     const prevMode = this.tide.mode;
     Object.assign(this.tide, { x: tx, z: tz, r: tr, phase, mode, t, dps: tideDps(phase, mode) }); // (0.44: its damage rate too)
     if (toR !== undefined) this.tide.to = { x: toX, z: toZ, r: toR }; // (where it's heading: the spectator map)
@@ -379,8 +395,24 @@ export class Game {
     if (st !== R.state) {
       R.state = st; this.state = st;
       const tName = this.teamSize > 1 && TEAMS.some((T) => T.name === winner) ? winner : null;
-      if (st === 'over') this._showRoundOver(fresh ? null : this.actors.find((a) => a.name === winner && a.alive) || (winner === this.player.name && this.player.alive ? this.player : null), !!fresh, fresh ? null : tName);
+      if (st === 'over' && this.arena.active && !fresh) this._arenaOver(winner);
+      else if (st === 'over') this._showRoundOver(fresh ? null : this.actors.find((a) => a.name === winner && a.alive) || (winner === this.player.name && this.player.alive ? this.player : null), !!fresh, fresh ? null : tName);
     }
+  }
+  // (0.54) An online Squads or King round ends (the host decided: the clock ran out): who won, coins.
+  _arenaOver(name = null) {
+    const R = this.round, rank = this.arena.ranking(), P = this.player;
+    const top = rank[0], draw = rank.length > 1 && top.score === rank[1].score;
+    const win = name ?? (draw ? '' : top?.name || '');
+    if (this.net?.isHost) { R.state = 'over'; R.t = 0; R.winner = win; R.fresh = false; }
+    this.state = 'over';
+    this.highlights.onOver();
+    const won = !!win && (this.arena.squads ? TEAMS[P?.team]?.name === win : win === P?.name);
+    const place = Math.max(1, rank.findIndex((r) => (this.arena.squads ? r.team === P?.team : r.actor === P)) + 1);
+    this.onMatchEvent?.('roundOver', { won, placement: won ? 1 : this.arena.squads ? 2 : place });
+    const sc = this.arena.squads ? `${rank[0].score}–${rank[1].score}` : `${top?.score ?? 0} splats`;
+    if (won) { this.sfx.play('win'); this.hud.banner("Chef's Kiss!", `${this.arena.squads ? `${esc(win)} wins ${sc}` : `You're King of the Utensil · ${sc}`} · next round in ${OVER_FOR} s`, 4); }
+    else this.hud.banner(win ? 'Round over' : "Time's up", `${win ? `${esc(win)} ${this.arena.squads ? `wins ${sc}` : `is King of the Utensil · ${sc}`}` : 'A draw'} · next round in ${OVER_FOR} s`, 4);
   }
 
   // Swap the arena (between matches, or when an online room plays another map). Returns true if it changed.
@@ -523,8 +555,9 @@ export class Game {
   // opts.team: team size (1 Solo, 2 Duos, 3 Trios, 4 Squads); opts.myTeam: the team you picked (-1: any).
   newMatch(withPlayer, opts = {}) {
     this.highlights.stop(); // (a reel playing ends first)
-    this.mode = opts.mode === 'chef' || opts.mode === 'pots' ? opts.mode : 'classic';
-    this.teamSize = withPlayer ? cleanSize(opts.team, this.mode) : 1;
+    this.mode = cleanMode(opts.mode);
+    this.teamSize = withPlayer || ARENA_MODES.has(this.mode) ? cleanSize(opts.team, this.mode) : 1;
+    this.arena.start(this.mode);
     if (opts.potMenu?.length) this.potMenu = opts.potMenu;
     const nT = teamCount(this.teamSize);
     const chef = this.mode === 'chef';
@@ -578,7 +611,9 @@ export class Game {
     if (this.mode === 'pots') this.pots.start(); else this.pots.clear();
     this.highlights.start();
     this.onMatchEvent?.('start');
-    if (withPlayer && nT && this.mode !== 'pots') this.hud.banner(`${TEAMS[this.player.team].name}`, `${{ 2: 'Duos', 3: 'Trios', 4: 'Squads' }[this.teamSize]}: stick with your team. Last team standing wins`, 3.4);
+    if (withPlayer && this.mode === 'squads') this.hud.banner(`Squads · ${TEAMS[this.player.team].name}`, 'Two teams, 4 minutes: the team with the most splats wins. You respawn', 3.4);
+    else if (withPlayer && this.mode === 'king') this.hud.banner('King of the Utensil', 'Two Legendary utensils land in the middle. Most splats in 4 minutes wins. You respawn', 3.4);
+    else if (withPlayer && nT && this.mode !== 'pots') this.hud.banner(`${TEAMS[this.player.team].name}`, `${{ 2: 'Duos', 3: 'Trios', 4: 'Quads' }[this.teamSize]}: stick with your team. Last team standing wins`, 3.4);
     else if (withPlayer && this.mode !== 'pots') this.hud.banner(chef ? "Chef's Choice" : 'Drop in!', chef ? 'Your 3 foods never run out. Food doesn\'t heal: grab the green crosses' : 'Steer your napkin glider onto the counter');
   }
 
@@ -603,6 +638,8 @@ export class Game {
       return amount;
     }
     let amt = amount;
+    if (this.time < (target.spawnShieldUntil || 0) && attacker && attacker !== target) { this.floatText(target, 'PROTECTED', 'immune'); return 0; } // (0.54: just respawned)
+    if (attacker && attacker !== target) this.arena.onHit(target, attacker); // (King of the Utensil: a hit on a helpless holder knocks the Legendary loose)
     if (target.channel && !ENV.has(foodId)) this.abilities.cancelChannel(target, true); // a hit stops a teleport wind-up
     if (target.isFrozen() && !ENV.has(foodId)) { // any hit shatters the ice for bonus damage
       target.frozenUntil = 0;
@@ -749,6 +786,15 @@ export class Game {
     const food = foodId === 'burning' ? 'burner' : foodId;
     this._feed(victim, killer, food);
 
+    if (this.arena.active) { // (0.54) Squads, King of the Utensil: back in a few seconds; splats are the score
+      if (this.online) {
+        if (victim === this.player) this.net.event('d', killer ? this.net._peerOf(killer) : '', food || '');
+        else if (victim.isBot && this.net.isHost) this.net.event('bd', victim.id, killer ? this.net._peerOf(killer) : '', food || '');
+      }
+      this.arena.onKill(victim, killer);
+      return;
+    }
+
     const back = this.pots.active ? this.pots.onDeath(victim) : false; // Cooking Pot Wars: back at your pot while it stands
     if (this.online) { // online: tell the room; out until the next round (or back at the pot)
       if (victim === this.player) {
@@ -803,6 +849,7 @@ export class Game {
     this.highlights.onKill(victim, killer, food, 1.5); // (it comes a moment after the hit showed here)
     victim.koBy = killer;
     this._feed(victim, killer, food);
+    this.arena.onRemoteKill(victim, killer);
     if (killer === this.player) {
       this.player.kills++;
       this.hud.banner('Splat!', `${esc(victim.name)} is out`, 1.6);
@@ -873,7 +920,7 @@ export class Game {
     this.poseCull = _frus.setFromProjectionMatrix(_pv.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
     for (const a of this.actors) a.updateVisual(realDt, cam);
     this.poseCull = null;
-    this.utensils.updateVisual();
+    this.utensils.updateVisual(realDt);
     this._camera(realDt);
     this._preview();
     this._blobShadows();
@@ -902,11 +949,12 @@ export class Game {
       this.stateT += dt;
       if (this.actors.every((a) => !a.alive || a.onGround) || this.stateT > 12) {
         this.state = 'play';
-        if (this.player) this.hud.banner('Last Bite Standing', 'Food is the only weapon. Good luck.', 2.2);
+        if (this.player && !this.arena.active) this.hud.banner('Last Bite Standing', 'Food is the only weapon. Good luck.', 2.2);
       }
     } else if (this.state === 'play') {
-      this._tideUpdate(dt);
+      if (!this.arena.active) this._tideUpdate(dt); // (no Soap Tide in Squads or King of the Utensil)
     }
+    this.arena.update(dt);
     this.projectiles.update(dt);
     this.abilities.update(dt);
     this.items.update(dt);
@@ -920,7 +968,7 @@ export class Game {
     this._spikeStep(dt);
     this.world.update(dt, this.time, this.fx, this.sfx, this.online && this.round?.id >= 0 ? this.round.t : null); // (online: the host's round clock)
     if (!this.highlights.playing?.live) this.fx.update(dt); // (under an online reel the particles are the reel's, at its speed)
-    if (this.state === 'play' && !this.pots.active && Math.random() < dt * 30) this._tideBubbles();
+    if (this.state === 'play' && !this.pots.active && !this.arena.active && Math.random() < dt * 30) this._tideBubbles();
     this.highlights.step();
   }
 

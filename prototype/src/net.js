@@ -62,7 +62,7 @@ import { TEAMS, cleanSize } from './teams.js';
 import { p2pLobby } from './p2p.js';
 
 const COLORS = ['#ff9a1f', '#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5', '#f2f2f2'];
-const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048, ladle: 4096, turret: 8192 };
+const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048, ladle: 4096, turret: 8192, stream: 16384, guard: 32768 }; // (0.54: stream: a Legendary torch or blender in use; guard: spawn protection)
 const SEND_EVERY = 1 / 30, SEND_LOW = 1 / 10; // (0.45: Low internet)
 // The Online connection setting (0.45), remembered: 'auto', 'normal' or 'low'.
 export function netPref() {
@@ -78,7 +78,7 @@ const MIN_SENT = 6;     // an event leaves the log once it went out this often a
 const BUDGET = 3900;    // bytes of one player's presence (the claude.ai room refuses over 4096)
 // (0.51) The game's version, in every update: players on different copies of the game (one browser still
 // showing an older one) play by different rules, so each is told to reload. Bump it with every release.
-export const NET_VERSION = 53;
+export const NET_VERSION = 54;
 // What a hit did besides its damage, merged into the claim for it (freezes add up to 3, shoves add up)
 function mergeStatus(a, s) {
   for (const [k, v] of Object.entries(s)) {
@@ -96,7 +96,7 @@ const FLOOR_EVENTS = new Set(['it', 'ut', 'ub', 'g', 'ug']); // (0.44)
 const floorKeys = (g) => [...g.items.floorKeys(), ...g.utensils.floorKeys()];
 const digest = (keys) => { let h = 0; for (const k of keys) h = (h + hashStr(k)) >>> 0; return [keys.length, h]; };
 const MAPS_OK = ['kitchen', 'backyard', 'restaurant'], BOTS_OK = ['off', 'easy', 'medium', 'hard'];
-const MODES_OK = ['classic', 'chef', 'pots'];
+const MODES_OK = ['classic', 'chef', 'pots', 'squads', 'king'];
 const cleanRS = (rs) => { // eslint-disable-line arrow-body-style
   if (!rs || typeof rs !== 'object') return null;
   const mode = MODES_OK.includes(rs.mode) ? rs.mode : 'classic';
@@ -105,7 +105,8 @@ const cleanRS = (rs) => { // eslint-disable-line arrow-body-style
 const STATES = ['drop', 'play', 'over'];
 const cleanRD = (rd) => (Array.isArray(rd) ? [num(rd[0], 0, 1e6) | 0, STATES.includes(rd[1]) ? rd[1] : 'play',
   num(rd[2], -300, 300), num(rd[3], -300, 300), num(rd[4], 0, 400, 330), num(rd[5], 0, 10) | 0, rd[6] === 'shrink' ? 'shrink' : 'wait',
-  num(rd[7], 0, 120), typeof rd[8] === 'string' && rd[8] ? cleanName(rd[8]).slice(0, 16) : '', num(rd[9], 0, 1e4), num(rd[10], -300, 300), num(rd[11], -300, 300), num(rd[12], 0, 400), rd[13] === 1 ? 1 : 0] : null);
+  num(rd[7], 0, 120), typeof rd[8] === 'string' && rd[8] ? cleanName(rd[8]).slice(0, 16) : '', num(rd[9], 0, 1e4), num(rd[10], -300, 300), num(rd[11], -300, 300), num(rd[12], 0, 400), rd[13] === 1 ? 1 : 0,
+  num(rd[14], 0, 1e4), num(rd[15], 0, 9999) | 0, num(rd[16], 0, 9999) | 0] : null); // (0.54: when the play began, the Squads scores)
 // (0.44) An id from the room (a food, utensil, skin): plain lower-case words only, so never a name every
 // object has (toString, constructor...) that a table lookup would find.
 const safeId = (v) => (typeof v === 'string' && /^[a-z][a-z0-9-]{0,23}$/.test(v) && v !== 'constructor' ? v : '');
@@ -376,6 +377,7 @@ export class Net {
     const H = g.world.honeys; // (0.44) honey pools: the host's levels; what my Titan took goes to the host
     msg.hy = this.isHost && H.length ? H.map((h) => Math.round(h.cap)) : null;
     msg.lm = this.isHost ? (g.world.landmark?.alive ? 1 : 0) : null; // (0.44) is the giant tomato standing (the host's says)
+    msg.tm = this.isHost && g.mode === 'squads' ? this._squadTeams() : null; // (0.54) Squads: which team each player is on
     if (!this.isHost && t > (this.honeyT || 0)) {
       this.honeyT = t + 0.5;
       H.forEach((h, i) => { if (h.owed >= 1) { this.event('hd', i, Math.round(h.owed)); h.sent = (h.sent || 0) + h.owed; h.sentAt = t; h.owed = 0; } });
@@ -383,7 +385,7 @@ export class Net {
     if (this.isHost) {
       const R = g.round, T = g.tide, to = T.to || { x: T.x, z: T.z, r: T.r };
       msg.rs = { ...this.roomSettings(), since: this.hostSince };
-      msg.rd = [Math.max(0, fin(R.id)), STATES.includes(R.state) ? R.state : 'drop', r2(T.x), r2(T.z), r2(T.r), fin(T.phase), T.mode === 'shrink' ? 'shrink' : 'wait', r2(Math.max(0, T.t)), R.winner || '', r2(R.t), r2(to.x), r2(to.z), r2(to.r), R.fresh ? 1 : 0];
+      msg.rd = [Math.max(0, fin(R.id)), STATES.includes(R.state) ? R.state : 'drop', r2(T.x), r2(T.z), r2(T.r), fin(T.phase), T.mode === 'shrink' ? 'shrink' : 'wait', r2(Math.max(0, T.t)), R.winner || '', r2(R.t), r2(to.x), r2(to.z), r2(to.r), R.fresh ? 1 : 0, r2(R.playAt ?? 0), g.arena.score[0] | 0, g.arena.score[1] | 0];
       // a bot's name, colour and skin only every 10th update (receivers keep them)
       msg.b = this._localBots().map((a) => [a.id, (this.frame + a.id) % 10 ? 0 : [a.name, a.color, a.skinId || 'chef'], ...this._stateOf(a, Math.asin(clamp(a.aimDir.y, -1, 1)))]);
     }
@@ -408,6 +410,30 @@ export class Net {
     this.room.presence(JSON.parse(json)).catch((e) => this._refuse(e)); // (plain JSON, nothing the room could call exotic)
   }
   budget() { return BUDGET; }
+  // (0.54, host) Squads: every player who wants to play, in one of the two teams: a newcomer joins the side with
+  // fewer players (then fewer Titans), and stays on it.
+  _squadTeams() {
+    const g = this.game, map = (this.teamMap ||= new Map());
+    const ready = new Map([[this.myPeer, this.ready]]);
+    for (const [peer, pr] of this.proxies) ready.set(peer, pr.ready);
+    for (const peer of [...map.keys()]) if (!ready.get(peer)) map.delete(peer);
+    for (const [peer, r] of ready) {
+      if (!r || map.has(peer)) continue;
+      const own = peer === this.myPeer ? g.player : this.proxies.get(peer)?.actor;
+      if (own?.alive && (own.team === 0 || own.team === 1)) { map.set(peer, own.team); continue; } // (already playing on a side: it stays)
+      const n = [0, 0];
+      for (const t of map.values()) n[t]++;
+      const titans = [0, 1].map((t) => g.actors.filter((a) => a.alive && a.team === t).length);
+      map.set(peer, n[0] !== n[1] ? (n[0] < n[1] ? 0 : 1) : titans[0] <= titans[1] ? 0 : 1);
+    }
+    return Object.fromEntries(map);
+  }
+  // my team in Squads, as the host has it (null: not given yet)
+  squadTeam() {
+    if (this.isHost) return this.teamMap?.get(this.myPeer) ?? null;
+    const t = this.hostTeams?.[this.myPeer];
+    return t === 0 || t === 1 ? t : null;
+  }
   // The room refused an update (it's lost, the next one follows): say so once, in the console.
   _refuse(e) {
     this.refused++;
@@ -431,6 +457,8 @@ export class Net {
     if (p.onGround) f |= FLAG.ground;
     if (p.ladleT > 0) f |= FLAG.ladle;
     if (p.inTurret) f |= FLAG.turret;
+    if (p.streamOn) f |= FLAG.stream;
+    if (t < (p.spawnShieldUntil || 0)) f |= FLAG.guard;
     return [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r1(p.vel.x), r1(p.vel.y), r1(p.vel.z), r2(p.yaw), r2(pitch),
       Math.round(fin(p.hp)), Math.round(fin(p.glaze)), p.alive ? 1 : 0, p.selected()?.id || '', f, fin(p.kills), r1(Math.min(99, t - p.noiseAt)), p.utensil || '', invCode(p), kitCode(p), p.team ?? -1, p.carry ?? -1];
   }
@@ -515,6 +543,8 @@ export class Net {
       if (this.hostPeer !== top[0]) { this.hostPeer = top[0]; for (const key of [...this.botProxies.keys()]) if (!key.startsWith(`${top[0]}|`)) this._dropBot(key); }
       this.hostSettings = top[3];
       this.hostRound = cleanRD(top[2].rd);
+      const tm = top[2].tm; // (0.54) Squads: the teams the host split the players into
+      this.hostTeams = tm && typeof tm === 'object' && !Array.isArray(tm) ? tm : null;
       this._syncBots(top[0], top[2].b);
       const pw = top[2].pw; // Cooking Pot Wars: the host's pots (for this round only)
       if (Array.isArray(pw) && pw[0] === this.game.round.id) this.game.pots.applyState(pw.slice(1), num);
@@ -694,7 +724,7 @@ export class Net {
     }
     const held = FOOD_IDS.includes(s[11]) && !FOODS[s[11]].hidden ? s[11] : null;
     if ((a.inv[0]?.id || null) !== held) { a.inv[0] = held ? { id: held, count: 1 } : null; a.sel = 0; a._refreshHeld(); }
-    const f = num(s[12], 0, 1 << 16) | 0;
+    const f = num(s[12], 0, 1 << 17) | 0;
     const soon = now + 0.3;
     a.charging = !!(f & FLAG.charging); if (a.charging) a.chargeT += 1 / 30; else a.chargeT = 0;
     a.shieldUp = !!(f & FLAG.shield);
@@ -722,6 +752,8 @@ export class Net {
     game.pots.setCarry(a, game.pots.active && a.alive && carry >= 0 ? carry : null);
     if (f & FLAG.ladle && !(a.ladleT > 0)) a.ladleT = 0.3;
     a.netTurret = !!(f & FLAG.turret); // sitting in their pot's turret (it turns with them)
+    a.streamOn = !!(f & FLAG.stream) && a.alive; // (0.54) their Legendary torch's cone or blender's beam: drawn here, and it hurts my Titans here
+    a.spawnShieldUntil = f & FLAG.guard ? soon : 0;
   }
 
   _event(pr, type, d, peer) {

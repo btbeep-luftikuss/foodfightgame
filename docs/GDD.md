@@ -737,6 +737,51 @@ Hiding is a strength, but **every hideout has a built-in eviction mechanic** to 
 | **Capture the Cake** | 8v8 | Banquet Plateau and Crumb Plains | Carry the enemy cake to your plate. The cake carrier moves at -20% and can only use light foods. |
 | **Party Mode: Kitchen Nightmare** | 24 free-for-all | Rotating POI | Respawns, all foods at Michelin tier, random **Kitchen Events** every 90 s (low gravity, floor is hot sauce, microwave meltdown, butter everything) |
 | **Custom / Private** | 2–100 | Any | Every rule exposed (foods on or off, damage, Soap Tide timing, respawns) for creators and tournaments |
+| **Squads** (prototype 0.54) | 2 equal teams (6v6 in the prototype, bots fill) | Any map | Respawns after 4 s; the team with the most splats when the 4-minute clock runs out wins. Utensils and food spawn as in Classic. No Soap Tide. |
+| **King of the Utensil** (prototype 0.54) | Free-for-all (12 in the prototype) | Any map | Two of the five Legendary utensils (§10.3) land in the middle; no other utensil ever spawns. Respawns; the most splats in 4 minutes wins. Classic food spawns. |
+
+### 10.1 Squads
+
+- **Teams:** everyone is split automatically into two equal teams (Team Tomato and Team Blueberry). Online, the room's host hands out the sides: a newcomer joins the side with fewer players, then fewer Titans, and stays on it; bots make up the numbers so both sides always have six.
+- **Score:** every splat scores one for the splatter's team (a splat by the burner or a fall counts for whoever hit the Titan last, within 6 s). Teammates can't hurt each other.
+- **Respawns:** a splatted Titan is back after **4 s**, in their own team's half of the map, at the spot furthest from the enemy, with 2 tomatoes and a random food, and **2 s of spawn protection** (no damage; it ends the moment they throw).
+- **Clock:** 4 minutes. Level at full time: **sudden death**, the next splat wins; still level a minute later, a draw.
+- **Everything else as Classic:** food spawns all over the map, utensil delivery boxes parachute in, bananas heal. No Soap Tide (it would fight the respawns).
+
+### 10.2 King of the Utensil
+
+- **Every Titan for themselves**, with respawns (4 s, as in Squads, at the spot furthest from any enemy). The most splats when the 4-minute clock runs out wins (sudden death on a tie).
+- **The Legendaries:** once everyone has landed, **two of the five Legendary utensils**, picked at random, land in the middle of the map. No other utensil of any kind appears all match (no delivery boxes, no starting utensils). Food spawns exactly as in Classic, so there's always something to load into them.
+- **Pick up:** walk over one. A Titan carries **one Legendary at a time** (it goes straight into the hand).
+- **Drop:** press **G** (a **Drop** button on touch screens): it lands at your feet, and you can't take it back for a moment.
+- **Splatted while holding one:** it drops exactly where the holder went down, for anyone to grab.
+- **Steal:** hit a holder while they're **frozen, tripped, rooted or stunned** and the Legendary pops out of their hands toward the attacker ("Butterfingers!"); the holder can't re-grab it for 2 s. So the Ice Cream Machine, ice, jelly and banana peels are the tools for taking one off its owner.
+- **No durability:** Legendaries never wear out. One left lying untouched for 30 s flies back to the middle; one that vanishes (its holder left the room) comes back there after a few seconds.
+- **Visibility:** whoever holds a Legendary wears a gold crown and has a gold beam of light over their head that everyone else can see across the map; a Legendary lying on the floor has a gold beam too. The scoreboard marks holders with a crown.
+
+### 10.3 The five Legendary utensils
+
+Super-powered food buffers. Like every utensil they only **buffer** the food loaded into them: it's always that food that flies, splats and does what it does (a tomato laser slows, a chili cone burns, a giant carrot still sticks in), and its colour, shape and effects stay at the centre of the shot. Each Legendary dominates a different part of a fight, and none is best at everything:
+
+| Legendary | Role | What it does | Trade-off |
+|---|---|---|---|
+| **Blow Torch** | Mid-range area burn | Hold the throw: a spiralling cone of flame, 11 m long and 48° wide, burns everyone in it (24 a second, hottest up close, plus burning), while pieces of the loaded food fly out along the spiral and hit as that food (5 a second). | The cone is short and narrow: keep it on them. It burns a food every second. |
+| **Blender** | Sustained ramping laser | Hold the throw: a thin laser of the food, liquefied, reaching 34 m. Like Clash Royale's Inferno Tower it ramps up the longer it stays on the same Titan: 14 damage a second, then 40 after 1.2 s, then 120 after 2.4 s. The food's sting rides on it every 1.2 s (tomato slows, chili burns, jelly roots, cheese shoves...). One food lasts 3.5 s. | Only the Titan it touches is hurt; the ramp starts over the moment the beam slips off them for a quarter of a second. |
+| **Oven Mitt** | Wide-area burst rain | Click: 14 copies of the food are hurled sky-high and rain down at blinding speed over an 8.5 m-radius spot where you aim, up to 70 m away, behind cover too. Each lands with its own splat and a small slam. | One burst every 2.4 s, with nothing in between: time them. |
+| **Ice Cream Machine** | Freeze shockwave zoning | Every food you throw lands with a ring of ice rolling 9 m out across the floor; everyone it catches on the ground is frozen for 1.5 s (and takes 10). A frozen Titan shatters for +15 on the next hit. | Only the wave freezes, never the food in flight, and a jump at the right moment clears it. Hard-CC limits apply (a second freeze within 6 s is halved, a third doesn't take). |
+| **Popcorn Popper** | 5-stage cluster cascade | The food flies twice as big. Where it lands it bursts into six minis of itself, each of which bursts into two more, four times over: five ever-faster rounds of explosions (after 0.55, 0.4, 0.28 and 0.2 s) spreading outward in rings. | The giant food is slow (70% speed, never over 40 m/s) and easy to see coming; one every 1.1 s; the outer rings take a moment, so quick Titans get out. |
+
+**Keeping them even.** Each is measured on still Titans (a best case) in the prototype's legendary test:
+
+| | One Titan 10 m away: time to splat (tomato) | A group of four at 10 m: damage in 5 s (tomato) | Reach | Control |
+|---|---|---|---|---|
+| Blow Torch | about 7 to 8 s | about 660 (all four in the cone) | 11 m | burning |
+| Blender | 3.5 s (the best) | about 230 (one at a time) | 34 m | the food's sting |
+| Oven Mitt | about 8 to 9 s (the weakest) | about 380 | 70 m, over cover | drives them out of cover |
+| Ice Cream Machine | about 5.5 s | about 315, all four frozen | a throw | freezes (the best) |
+| Popcorn Popper | about 5 s | about 710 (the best) | a throw (about 22 m with a tomato) | knock-back |
+
+The food matters too: with soda (every piece a little blast) the group numbers climb to 500 to 800 for all but the Blender. The Blender owns single targets and range-locked duels; the Popcorn Popper and the Blow Torch own groups (the Popper from a throw away, the Torch only up close); the Oven Mitt owns distance and cover; the Ice Cream Machine owns control. Real fights add movement (the Blender's beam slips, Mitt bursts get walked out of, waves get jumped), which pulls the best cases closer together.
 
 ---
 

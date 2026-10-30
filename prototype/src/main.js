@@ -12,7 +12,7 @@ import { titanPreview } from './actors.js';
 import { TITANS } from './game.js';
 import { BOT_LEVELS } from './bots.js';
 import { MAPS } from './world.js';
-import { TEAMS, TEAM_LABEL, teamCount, cleanSize } from './teams.js';
+import { TEAMS, TEAM_LABEL, TEAM_SIZES, teamCount, cleanSize } from './teams.js';
 import { Net, roomAvailable, cleanRoom, netPref, setNetPref } from './net.js';
 import { colliders, solidAt, groundHeight, raycastWorld, __rayOne } from './core.js';
 
@@ -181,7 +181,7 @@ function boot() {
   }).join('');
 
   // ... and the support utensils, with the same art as the design sheet
-  $('ulegend').innerHTML = UTENSILS.map((u) => `<li><img src="${utensilIcon(u.id)}" alt=""><div><b>${u.name} · ${u.role}</b><span>${u.buff}</span><em>${u.trade}</em></div></li>`).join('');
+  $('ulegend').innerHTML = UTENSILS.map((u) => `<li><img src="${utensilIcon(u.id)}" alt=""><div><b>${u.name} · ${u.role}${u.legendary ? ' · King of the Utensil only' : ''}</b><span>${u.buff}</span><em>${u.trade}</em></div></li>`).join('');
 
   const menu = $('menu'), pause = $('pause'), end = $('end'), touch = $('touch');
   let playing = false;
@@ -195,7 +195,8 @@ function boot() {
     menu.hidden = true; end.hidden = true; pause.hidden = true;
     hud.show(true);
     touch.hidden = !input.isTouch;
-    $('tLadle').hidden = $('tTurret').hidden = game.mode !== 'pots';
+    $('tLadle').hidden = game.mode !== 'pots' && game.mode !== 'king'; $('tTurret').hidden = game.mode !== 'pots';
+    $('tLadle').textContent = game.mode === 'king' ? 'Drop' : 'Ladle'; // (0.54: King of the Utensil: drop the Legendary in hand)
     if (lock && !input.isTouch) input.requestLock(true);
   }
   let matchOpts = {}; // what "Play again" repeats
@@ -205,12 +206,13 @@ function boot() {
   try {
     const v = localStorage.getItem('tt-bots'); if (BOT_LEVELS[v]) botLevel = v;
     const o = localStorage.getItem('tt-online-bots'); if (BOT_LEVELS[o] || o === 'off') onlineBots = o;
-    const m = localStorage.getItem('tt-mode') || localStorage.getItem('tt-online-mode'); if (['classic', 'chef', 'pots'].includes(m)) selMode = m;
+    const m = localStorage.getItem('tt-mode') || localStorage.getItem('tt-online-mode'); if (['classic', 'chef', 'pots', 'squads', 'king'].includes(m)) selMode = m;
     teamSize = cleanSize(localStorage.getItem('tt-team'), selMode);
     myTeamPick = Number(localStorage.getItem('tt-myteam') ?? -1);
     if (!Number.isInteger(myTeamPick)) myTeamPick = -1;
   } catch { /* storage blocked */ }
   const save = (k, v) => { try { localStorage.setItem(k, String(v)); } catch { /* storage blocked */ } };
+  let pickedSize = TEAM_SIZES.includes(teamSize) ? teamSize : 1; // (the team size picked for the modes that let you pick)
   const settings = $('match-settings');
   const forOnline = () => settings.classList.contains('online');
   const TEAM_NOTE = {
@@ -218,18 +220,20 @@ function boot() {
     2: '6 teams of 2. Teammates can\'t hurt each other; the last team standing wins.',
     3: '4 teams of 3. Teammates can\'t hurt each other; the last team standing wins.',
     4: '3 teams of 4. Teammates can\'t hurt each other; the last team standing wins.',
+    6: 'Squads: everyone is put into two equal teams (bots make up the numbers).',
   };
   const syncLevel = () => {
     const lv = forOnline() ? onlineBots : botLevel;
-    teamSize = cleanSize(teamSize, selMode);
+    teamSize = cleanSize(pickedSize, selMode); // (0.54: Squads always two teams, King always solo; the pick stays for the other modes)
     document.querySelectorAll('#botlevel button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.level === lv)));
     document.querySelectorAll('#mappick button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.map === mapId)));
     document.querySelectorAll('#onlinemode button, .modes .mode').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === selMode)));
+    const fixed = selMode === 'squads' || selMode === 'king'; // (0.54: two teams, or every Titan for themselves)
     document.querySelectorAll('#teamsize button').forEach((b) => {
       b.setAttribute('aria-pressed', String(+b.dataset.team === teamSize));
-      b.disabled = selMode === 'pots' && b.dataset.team === '1'; // Cooking Pot Wars is a team game
+      b.disabled = (selMode === 'pots' && b.dataset.team === '1') || fixed; // Cooking Pot Wars is a team game
     });
-    $('team-note').textContent = TEAM_NOTE[teamSize] + (selMode === 'pots' ? ' Cooking Pot Wars needs teams.' : '');
+    $('team-note').textContent = selMode === 'king' ? 'King of the Utensil: every Titan for themselves.' : TEAM_NOTE[teamSize] + (selMode === 'pots' ? ' Cooking Pot Wars needs teams.' : '');
     $('map-note').textContent = MAPS[mapId].blurb;
     renderTeamPick();
     $('chef').hidden = selMode !== 'chef';
@@ -239,8 +243,8 @@ function boot() {
   // Your team (Play vs bots): a team, or "Any" (the emptiest one, with bots for teammates).
   function renderTeamPick() {
     const n = teamCount(teamSize);
-    $('teampick-row').hidden = !n;
-    if (!n) return;
+    $('teampick-row').hidden = !n || selMode === 'squads';
+    if (!n || selMode === 'squads') return; // (Squads: the game splits everyone into two teams)
     if (myTeamPick >= n) myTeamPick = -1;
     const html = `<button type="button" data-t="-1" aria-pressed="${myTeamPick < 0}"><b>Any team</b><small>The game picks</small></button>`
       + TEAMS.slice(0, n).map((T, t) => `<button type="button" data-t="${t}" aria-pressed="${myTeamPick === t}" style="--c:${T.color}"><b>${T.short}</b><small>You + ${teamSize - 1} bot${teamSize > 2 ? 's' : ''}</small></button>`).join('');
@@ -259,13 +263,13 @@ function boot() {
     else { botLevel = b.dataset.level; save('tt-bots', botLevel); }
     syncLevel();
   });
-  const pickMode = (m) => { selMode = m; save('tt-mode', selMode); if (m === 'pots' && teamSize < 2) { teamSize = 3; save('tt-team', 3); } syncLevel(); };
+  const pickMode = (m) => { selMode = m; save('tt-mode', selMode); if (m === 'pots' && pickedSize < 2) { pickedSize = 3; save('tt-team', 3); } syncLevel(); };
   $('onlinemode').addEventListener('click', (e) => { const b = e.target.closest('button[data-mode]'); if (b) pickMode(b.dataset.mode); });
   for (const b of document.querySelectorAll('.modes .mode')) b.addEventListener('click', () => pickMode(b.dataset.mode));
   $('teamsize').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-team]');
     if (!b || b.disabled) return;
-    teamSize = +b.dataset.team; save('tt-team', teamSize);
+    pickedSize = teamSize = +b.dataset.team; save('tt-team', teamSize);
     syncLevel();
   });
   // Picking a map rebuilds the kitchen (or the yard) right away: the bots behind the menu move there too.
@@ -319,10 +323,10 @@ function boot() {
   // The Start button says what it starts (Chef's Choice needs 3 foods first).
   function renderStart() {
     const btn = $('play-start'), left = 3 - chefPick.length;
-    const name = { classic: 'Classic', chef: "Chef's Choice", pots: 'Cooking Pot Wars' }[selMode];
+    const name = { classic: 'Classic', chef: "Chef's Choice", pots: 'Cooking Pot Wars', squads: 'Squads', king: 'King of the Utensil' }[selMode];
     const potLeft = selMode === 'pots' ? 5 - potPick.length : 0;
     btn.disabled = (selMode === 'chef' && left > 0) || potLeft > 0;
-    btn.textContent = potLeft > 0 ? `Pick ${potLeft} more food${potLeft > 1 ? 's' : ''} for your pot` : btn.disabled ? `Pick ${left} more food${left > 1 ? 's' : ''}` : `Start ${name}${teamSize > 1 ? ` · ${TEAM_LABEL[teamSize]}` : ''}`;
+    btn.textContent = potLeft > 0 ? `Pick ${potLeft} more food${potLeft > 1 ? 's' : ''} for your pot` : btn.disabled ? `Pick ${left} more food${left > 1 ? 's' : ''}` : `Start ${name}${teamSize > 1 && teamSize < 6 ? ` · ${TEAM_LABEL[teamSize]}` : ''}`;
   }
   $('play-start').addEventListener('click', () => {
     if (selMode === 'chef' && chefPick.length !== 3) return;
@@ -537,7 +541,7 @@ function boot() {
   try { chefUtensil = UTENSIL_BY_ID[localStorage.getItem('tt-utensil')] ? localStorage.getItem('tt-utensil') : ''; } catch { /* storage blocked */ }
   const uGrids = [$('chef-utensils'), $('lo-utensils')];
   const uHtml = `<button type="button" data-id="" aria-pressed="false"><span>None</span><small>Find one on the map</small></button>`
-    + UTENSILS.map((u) => `<button type="button" data-id="${u.id}" aria-pressed="false" title="${u.buff} Trade-off: ${u.trade}"><img src="${utensilIcon(u.id)}" alt=""><span>${u.name}</span><small>${u.role}</small></button>`).join('');
+    + UTENSILS.filter((u) => !u.legendary).map((u) => `<button type="button" data-id="${u.id}" aria-pressed="false" title="${u.buff} Trade-off: ${u.trade}"><img src="${utensilIcon(u.id)}" alt=""><span>${u.name}</span><small>${u.role}</small></button>`).join(''); // (0.54: never a Legendary)
   for (const el of uGrids) el.innerHTML = uHtml;
   const syncUtensils = () => { for (const grid of uGrids) for (const b of grid.children) b.setAttribute('aria-pressed', String(b.dataset.id === chefUtensil)); };
   for (const grid of uGrids) {
@@ -561,11 +565,14 @@ function boot() {
     $('lo-count').textContent = left > 0 ? `${left} more to pick` : 'all set';
     const bots = rs.bots === 'off' ? 'no bots' : `${rs.bots[0].toUpperCase()}${rs.bots.slice(1)} bots`;
     const mode = rs.mode === 'chef' ? "Chef's Choice: your 3 foods never run out" : rs.mode === 'pots' ? 'Cooking Pot Wars: you start with a stack of each; guard your pot, smash theirs'
+      : rs.mode === 'squads' ? 'Squads: two teams, the most team splats in 4 minutes wins; you respawn'
+      : rs.mode === 'king' ? 'King of the Utensil: two Legendary utensils in the middle, no other utensils; the most splats in 4 minutes wins; you respawn'
       : 'Classic: you start with a stack of each, and find more';
     const size = cleanSize(rs.team, rs.mode);
     const room = `Room <b>${esc(net.roomName)}</b> · ${MAPS[rs.map]?.name || 'The Grand Kitchen'} · ${TEAM_LABEL[size]} · ${bots}. ${mode}.`;
     if ($('lo-room').innerHTML !== room) $('lo-room').innerHTML = room;
-    renderLoTeams(size);
+    renderLoTeams(rs.mode === 'squads' ? 1 : size); // (Squads: the game splits everyone into two teams)
+    $('lo-utensils').parentElement.hidden = rs.mode === 'king'; // (King of the Utensil: only the Legendaries)
     $('lo-potmenu-row').hidden = rs.mode !== 'pots';
     let note;
     if (!R || R.id < 0) note = 'Finding the room…';
