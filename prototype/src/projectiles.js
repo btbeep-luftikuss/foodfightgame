@@ -187,10 +187,15 @@ export class Projectiles {
   _bananaSteer(p, dt) {
     const o = p.owner;
     if (p.phase === 'out') {
+      // (0.58) out almost dead straight (a slight drift), easing off near the far end, then home
       const a = p.curve * dt, c = Math.cos(a), s = Math.sin(a);
       const x = p.vel.x * c - p.vel.z * s, z = p.vel.x * s + p.vel.z * c;
       p.vel.x = x; p.vel.z = z;
-      if (p.life > 0.8) { p.phase = 'back'; p.hitSet.clear(); }
+      const R = p.speed * (FOODS.banana.reach || 1.1);
+      p.outDist = (p.outDist || 0) + p.vel.length() * dt;
+      const k = Math.max(0.3, 1 - 0.7 * Math.min(1, p.outDist / R) ** 3);
+      p.vel.setLength(p.speed * k);
+      if (p.outDist >= R) { p.phase = 'back'; p.hitSet.clear(); }
       if (p.life % 0.3 < dt) this.game.sfx.play('whirr', p.pos, 0.5);
       return false;
     }
@@ -213,8 +218,8 @@ export class Projectiles {
       this._end(p);
       return true;
     }
-    _t.multiplyScalar(30 / d);
-    p.vel.lerp(_t, 1 - Math.exp(-5 * dt));
+    _t.multiplyScalar(Math.max(8, p.speed * 1.05) / d); // (0.58: straight back, as fast as it's still going)
+    p.vel.lerp(_t, 1 - Math.exp(-9 * dt));
     return false;
   }
 

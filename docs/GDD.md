@@ -204,7 +204,7 @@ Every food uses one of six launch profiles. This lets animation, prediction and 
 | **Lob** | Ballistic arc, hold to charge power | Tomato, Egg, Broccoli, Pineapple |
 | **Line** | Fast, flat, low gravity, precision | Carrot, Hard-boiled Egg, Avocado Pit |
 | **Spray** | Rapid-fire or scatter pellets | Corn Cob, Grapes |
-| **Return** | Curving boomerang path | Banana, Pizza Slice |
+| **Return** | Boomerang path: straight out, straight back | Banana, Pizza Slice |
 | **Roll** | Ground-hugging physics body | Watermelon, Cheese Wheel, Donut |
 | **Seek** | Homing | Chili (manual lock), Cookie (auto-seek) |
 
@@ -329,7 +329,7 @@ Values are for the **Fresh** tier. Speeds are in player-scale m/s. "Upgrades" re
 - **Feedback:** squash-stretch at impact, a seed-and-juice burst with ribbon streaks, a lingering red splat decal, and a wet "SPLUT".
 
 #### 2. Banana: *Boomerang / Trap / Heal*
-- **Primary (Return):** curves out up to 35 m and returns. 28 damage outbound, 18 on the return pass (it can hit twice). Catching it refunds it.
+- **Primary (Return):** a real boomerang: fast (38 m/s) and almost dead straight a long way out (about 42 m, easing off at the far end), then straight back to the thrower's hand. 28 damage outbound, 18 on the return pass (it can hit twice). Catching it refunds it. A wall bounces it back toward home, a third slower each time; its third bounce (or once it's too slow to fly) drops it as a pickup anyone can grab (prototype 0.58: 22 out, 12 back).
 - **Alt (Eat, 1 s):** +15 HP. You keep the **Peel**.
 - **Peel (Place):** a classic slip trap. An enemy stepping on it is *Tripped* for 1.0 s and slides 6 m in their direction of travel. Maximum 2 active peels per player, 40 s lifetime. Peels are visible within 15 m and can be shot away.
 - **Counterplay:** watch the ground; shoot peels; the returning banana can be dodged by strafing.

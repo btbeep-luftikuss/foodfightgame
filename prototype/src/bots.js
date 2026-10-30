@@ -19,7 +19,7 @@ export const BOT_NAMES = ['Pip', 'Crouton', 'Waffles', 'Nibbles', 'Sprout', 'Moc
 // Preferred engagement ranges per food [min, max, score].
 const RANGE = {
   carrot: [20, 70, 3.2], tomato: [6, 28, 2.6], ice: [5, 24, 2.3], soda: [5, 22, 2.5],
-  banana: [4, 20, 1.9], cheese: [4, 20, 2.4], peel: [0, 7, 1.2],
+  banana: [5, 34, 2.1], cheese: [4, 20, 2.4], peel: [0, 7, 1.2],
   grapes: [2, 14, 2.6], chili: [6, 40, 2.5], cookie: [5, 30, 1.9], watermelon: [4, 22, 2.4],
   pineapple: [6, 24, 2.4], jelly: [5, 22, 2.1], blueberry: [2, 35, 2.7],
 };
@@ -336,7 +336,7 @@ export class BotBrain {
         a.aimDir.y += 0.15; a.aimDir.normalize();
       } else if (food.profile === 'return') {
         a.aimDir.subVectors(_aim, from).normalize();
-        const off = -1.3 * (d / speed) * 0.5; // counter the banana's curve
+        const off = -(food.curve || 0) * (d / speed) * 0.5; // counter the banana's drift
         const c = Math.cos(off), s = Math.sin(off);
         const x = a.aimDir.x * c - a.aimDir.z * s, z = a.aimDir.x * s + a.aimDir.z * c;
         a.aimDir.x = x; a.aimDir.z = z; a.aimDir.normalize();

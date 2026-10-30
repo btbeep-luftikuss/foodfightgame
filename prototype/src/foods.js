@@ -391,17 +391,19 @@ export const FOODS = {
 
   banana: {
     name: 'Banana', role: 'Boomerang · heal', maxStack: 2, give: 1, weight: 18,
-    profile: 'return', charge: 0, speed: 28, recovery: 0.7, radius: 0.4, pierce: true, verb: 'boomeranged',
+    // (0.58) a real boomerang: fast, a long way out almost dead straight (a slight drift), slowing at the far end,
+    // then straight back to your hand. reach: how far out, in seconds of its starting speed (38 m/s: about 42 m)
+    profile: 'return', charge: 0, speed: 38, curve: 0.12, reach: 1.1, recovery: 0.7, radius: 0.4, pierce: true, verb: 'boomeranged',
     altLabel: 'Eat: +30 HP, keep the peel',
-    hint: 'Curves out and comes back. Catch it to throw again (it bruises: 3 throws max).',
+    hint: 'Flies fast and far, almost straight, and comes back. Catch it to throw again (it bruises: 3 throws max).',
     release(a, c, game) {
       const dir = a.isBot ? a.aimDir.clone() : _v.subVectors(a.aimPoint, a.handPos()).normalize().clone();
       dir.y = Math.max(-0.08, Math.min(0.25, dir.y)); // boomerangs fly flat
       dir.normalize();
-      const curve = a.isBot ? (a.bananaCurve || 1.3) : 1.3;
+      const curve = this.curve;
       const slot = a.selected();
       const bruise = (slot && slot.bruise) || 0;
-      game.projectiles.launch({ food: 'banana', owner: a, pos: a.handPos(), vel: dir.multiplyScalar(this.speed), gravity: 0, life: 3.4, curve, spin: 14, bruise });
+      game.projectiles.launch({ food: 'banana', owner: a, pos: a.handPos(), vel: dir.multiplyScalar(this.speed), gravity: 0, life: 4.5, curve, spin: 18, bruise });
       a.consume(1);
       game.sfx.play('whirr', a.pos);
     },
@@ -414,12 +416,23 @@ export const FOODS = {
         game.sfx.play('thud', hit.point, 0.8);
         return false; // keeps flying
       }
-      if (hit.world && hit.top) { // skim off floors and tabletops instead of stopping
+      if (hit.world && hit.top) { // skim off floors and tabletops instead of stopping (a little slower each time)
         p.pos.y = hit.point.y + 0.5;
         p.vel.y = Math.abs(p.vel.y) * 0.4 + 1;
+        p.speed *= 0.95;
         return false;
       }
-      // hit a wall: drop to the ground as a pickup anyone can grab
+      // (0.58) a wall: it bounces off and heads home, a third slower each time (out or back: on the way home a
+      // wall in the way can bounce it back and forth). Its third bounce, or too slow to fly: it drops below
+      // as a pickup anyone can grab.
+      p.bounceN = (p.bounceN || 0) + 1; p.speed *= 0.65;
+      if (p.bounceN < 3 && p.speed >= 12) {
+        if (p.phase === 'out') { p.phase = 'back'; p.hitSet.clear(); }
+        if (hit.from) p.pos.copy(hit.from);
+        p.vel.multiplyScalar(-1).setLength(p.speed * 0.6);
+        game.fx.burst('banana', hit.point, 0.5); game.sfx.play('thud', hit.point, 0.6);
+        return false;
+      }
       game.items.share(p.owner, 'banana', 1, hit.point);
       game.sfx.play('thud', hit.point, 0.6);
       return true;

@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.58: the banana flies like a real boomerang** (`src/foods.js`, `src/projectiles.js`, `src/bots.js`, `src/net.js`)
+
+- **Faster, much further, much straighter:** it leaves your hand at 38 m/s (was 28) and flies almost dead straight (a slight drift: it used to curve round by about 60°) a long way out, about 42 m (was about 22), easing off at the far end, then comes straight back to your hand, as fast as it went out. Measured in the Test World: 42 m out, 1.8 m off the line at most, back in your hand 2.6 s after the throw, hitting three dummies in a line on the way.
+- **Bounces off walls and loses momentum:** a wall on the way out bounces it back toward you instead of dropping it; each wall bounce costs it a third of its speed (38, then 25, then 16 m/s); its third bounce, or once it's too slow to fly, drops it as a pickup anyone can grab. Skimming off floors and table tops costs it a little too.
+- Bots throw it from further away (up to 34 m) and no longer aim off for a curve it doesn't have. Online version 58.
+
 **Version 0.57: the King of the Utensil update (a Legendary Grater, a new Legendary Oven Mitt), a Blender that keeps its ramp, a gentler Popper for its thrower, one Pot Wars button on touch screens** (`src/legendary.js`, `src/utensils.js`, `src/utensil-models.js`, `src/bots.js`, `src/game.js`, `src/potwars.js`, `src/main.js`, `src/net.js`, `index.html`)
 
 - **Legendary Grater** (in place of the old Oven Mitt's burst rain): where your food lands or hits a Titan, a cloud of the food's colour gathers overhead (up to 8 m up, under any ceiling or table top) and rains little pieces of that food down over a 5 m circle for 3.5 s (16 a second, half damage each; a raindrop on the floor makes a light splash, not a whole splat). A cloud over a Titan you hit drifts after them at 4 m/s, slower than they run. Up to 3 of your clouds at once (a 4th replaces the oldest); with blueberries, one berry in every 1.2 s makes a cloud. Tomato on still Titans: one at 10 m splatted in 5.3 s, 470 to a group of four in 5 s.
