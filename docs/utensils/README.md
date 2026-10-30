@@ -43,10 +43,10 @@ balance numbers are in the [GDD, section 10.3](../GDD.md#103-the-five-legendary-
 | Blender | Sustained ramping laser | Hold for a thin laser of the food, liquefied, that ramps from 14 to 40 to 120 damage a second the longer it stays on one Titan (like the Inferno Tower). Uses very little food. | Narrow: it needs precise tracking, and the ramp resets when it breaks contact. |
 | Oven Mitt | Wide-area burst rain | A burst of 14 of the food rains down at blinding speed over a wide spot where you aim (up to 70 m, over cover). | A short cooldown after every burst: no continuous fire. |
 | Ice Cream Machine | Freeze shockwave zoning | Every food lands with an expanding ring of ice: anyone it catches on the ground is frozen. | Only the wave freezes (not the food in flight), and it can be jumped. |
-| Popcorn Popper | 5-stage cluster cascade | The food flies twice as big and bursts into minis of itself that burst again, five ever-faster rounds in all. | The giant food is slow and predictable, and the outer rings unfold over a moment. |
+| Popcorn Popper | 5-stage cluster cascade | The food flies twice as big and bursts into minis of itself that burst again, five ever-faster rounds in all. | The giant food is big and easy to see coming, and the outer rings unfold over a moment. |
 
-In the game they're the everyday utensil's model with its steel turned gold, a floating gold crown ring and
-glowing gems; their flat icon is the everyday art in a gold ring with a crown.
+In the game they're the everyday utensil's model recoloured: its steel and dark trim lime green, its body teal
+blue (no crown, nothing floating round your head); their flat icon is the everyday art in a lime and teal ring.
 
 ## In the game
 

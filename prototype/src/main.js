@@ -14,6 +14,7 @@ import { BOT_LEVELS } from './bots.js';
 import { MAPS } from './world.js';
 import { TEAMS, TEAM_LABEL, TEAM_SIZES, teamCount, cleanSize } from './teams.js';
 import { Net, roomAvailable, cleanRoom, netPref, setNetPref } from './net.js';
+import { Sandbox } from './sandbox.js';
 import { colliders, solidAt, groundHeight, raycastWorld, __rayOne } from './core.js';
 
 const PUBLIC_URL = 'https://btbeep-luftikuss.github.io/foodfightgame/play/';
@@ -197,6 +198,7 @@ function boot() {
     touch.hidden = !input.isTouch;
     $('tLadle').hidden = game.mode !== 'pots' && game.mode !== 'king'; $('tTurret').hidden = game.mode !== 'pots';
     $('tLadle').textContent = game.mode === 'king' ? 'Drop' : 'Ladle'; // (0.54: King of the Utensil: drop the Legendary in hand)
+    $('sb-open').hidden = game.mode !== 'sandbox'; $('sandbox').hidden = true; // (0.55: the Test World's tools)
     if (lock && !input.isTouch) input.requestLock(true);
   }
   let matchOpts = {}; // what "Play again" repeats
@@ -290,7 +292,7 @@ function boot() {
   game.onMapChange = () => applyQuality(qKey); // fog distance, shadows and atmosphere for the new map
   function start(opts = matchOpts) {
     game.botLevel = botLevel;
-    game.setMap(mapId);
+    game.setMap(opts.map || mapId); // (0.55: the Test World has its own map)
     sfx.unlock();
     matchOpts = opts;
     game.newMatch(true, opts);
@@ -334,6 +336,39 @@ function boot() {
     start({ mode: selMode, team: teamSize, myTeam: myTeamPick, potMenu: [...potPick], ...(selMode === 'chef' ? { loadout: [...chefPick], utensil: chefUtensil || null } : {}) });
   });
   $('again').addEventListener('click', () => start());
+
+  // (0.55) The Test World: a sandbox in a huge white box, and its tools (sandbox.js)
+  $('test-open').addEventListener('click', () => start({ mode: 'sandbox', map: 'test' }));
+  const sbPanel = $('sandbox');
+  $('sb-body').innerHTML = Sandbox.panelHtml(utensilIcon, (id) => icons[id] || '');
+  const sbShow = (on) => {
+    if (game.mode !== 'sandbox' || !playing) on = false;
+    sbPanel.hidden = !on;
+    if (on) input.exitLock(); else if (!input.isTouch && playing && pause.hidden && game.mode === 'sandbox') input.requestLock(true);
+  };
+  $('sb-open').addEventListener('click', () => sbShow(sbPanel.hidden));
+  $('sb-close').addEventListener('click', () => sbShow(false));
+  addEventListener('keydown', (e) => { if (e.code === 'KeyT' && playing && game.mode === 'sandbox' && pause.hidden) { sbShow(sbPanel.hidden); e.preventDefault(); } });
+  sbPanel.addEventListener('click', (e) => {
+    const S = game.sandbox, b = e.target.closest('button');
+    if (!b || !S.active) return;
+    const act = b.dataset.sb;
+    if (act === 'dummy') S.spawnDummy('still'); else if (act === 'walk') S.spawnDummy('walk'); else if (act === 'bot') S.spawnDummy('bot');
+    else if (['wall', 'pillar', 'box', 'steps'].includes(act)) S.build(act);
+    else if (act === 'heal') S.healDummies(); else if (act === 'clear') S.clear();
+    else if (b.dataset.food) S.giveFood(b.dataset.food);
+    else if (b.dataset.ut) S.giveUtensil(b.dataset.ut);
+  });
+  sbPanel.addEventListener('change', (e) => {
+    const t = e.target.dataset?.sbt;
+    if (t === 'god') game.sandbox.god = e.target.checked;
+    if (t === 'endless') game.sandbox.setEndless(e.target.checked);
+  });
+  setInterval(() => { // the damage meter
+    if (sbPanel.hidden || !game.sandbox.active) return;
+    const m = game.sandbox.meter(), txt = `Damage to dummies: ${m.d} in the last 5 s (${m.dps} a second)`;
+    if ($('sb-meter').textContent !== txt) $('sb-meter').textContent = txt;
+  }, 300);
 
   // Locker: pick a skin. Remembered on this device and shown to everyone online.
   // 0.30: coins and skin packs. Pack skins are bought with coins (one by one, or the rest of the pack
@@ -683,13 +718,13 @@ function boot() {
   });
   $('spectate').addEventListener('click', () => { end.hidden = true; });
   $('resume').addEventListener('click', () => { pause.hidden = true; game.paused = false; if (!input.isTouch && !game.spectator.active) input.requestLock(true); });
-  input.wantLock = () => playing && !game.paused && pause.hidden && end.hidden && loadout.hidden && !game.spectator.active && !input.isTouch && !game.highlights.playing; // (not under a reel: Esc skips it, and would unlock the mouse into the pause menu)
-  input.blockClicks = () => game.spectator.active || !loadout.hidden || !!game.highlights.playing; // clicks there are for the spectator bar, the card, the reel's buttons
+  input.wantLock = () => playing && !game.paused && pause.hidden && end.hidden && loadout.hidden && $('sandbox').hidden && !game.spectator.active && !input.isTouch && !game.highlights.playing; // (not under a reel: Esc skips it, and would unlock the mouse into the pause menu)
+  input.blockClicks = () => game.spectator.active || !loadout.hidden || !!game.highlights.playing || !$('sandbox').hidden; // clicks there are for the spectator bar, the card, the reel's buttons
 
 
   input.onLockChange = (locked) => {
     if (!playing || input.isTouch) return;
-    if (!locked && game.state !== 'over' && game.player?.alive && end.hidden) { game.paused = !game.online; pause.hidden = false; } // online games keep running
+    if (!locked && game.state !== 'over' && game.player?.alive && end.hidden && $('sandbox').hidden) { game.paused = !game.online; pause.hidden = false; } // online games keep running (and the Test World's tools are open)
   };
   addEventListener('keydown', (e) => {
     if (e.code === 'KeyP' && playing && !input.isTouch && !game.online) { game.paused = !game.paused; pause.hidden = !game.paused; }

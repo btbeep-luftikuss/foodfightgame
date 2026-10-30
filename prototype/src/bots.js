@@ -7,7 +7,6 @@ import {
 import { FOODS } from './foods.js';
 import { MAX_HP } from './actors.js';
 import { isLegendary } from './utensils.js';
-import { BAL } from './legendary.js';
 
 // (0.54) Where a bot wants to be with a Legendary in hand (min, max metres), and how far it fires it.
 const LEG_RANGE = { 'gold-torch': [3, 9, 11], 'gold-blender': [8, 26, 33], 'gold-mitt': [18, 55, 68] };
@@ -322,8 +321,7 @@ export class BotBrain {
       _aim.copy(t.pos).setY(t.pos.y + (food.profile === 'line' ? 1.0 : 0.8));
       const d = from.distanceTo(_aim);
       let speed = food.speed || 25;
-      if (a.utensil === 'gold-popper' && g.utensils.works(a, slot.id)) speed = Math.min(speed * BAL.popper.speed, BAL.popper.maxSpeed); // (the giant flies slower)
-      else if (a.utensil === 'gold-cream' && g.utensils.works(a, slot.id)) speed *= 0.92;
+      if (a.utensil === 'gold-cream' && g.utensils.works(a, slot.id)) speed *= 0.92;
       const tFlight = d / speed;
       _aim.addScaledVector(t.vel, tFlight * this.skill).add(this.aimErr);
       a.botTarget = t;

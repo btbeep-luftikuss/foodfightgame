@@ -6,6 +6,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G, COUNTER, FLOOR_Y, addBox, addCyl, clearColliders, groundHeight, rand, clamp, withSeed } from './core.js';
 import { Stains } from './stains.js';
 import { buildBackyard, BACKYARD_REGIONS } from './map-backyard.js';
+import { buildTestWorld, TEST_REGIONS } from './map-test.js';
 import { buildRestaurant, RESTAURANT_REGIONS } from './map-restaurant.js';
 
 // ---------------------------------------------------------------------------
@@ -219,6 +220,7 @@ export const MAPS = {
   kitchen: { name: 'The Grand Kitchen', blurb: 'Counters, a sink and stove, a dining table to hide under and a floor the size of a town.' },
   backyard: { name: 'The Backyard BBQ', blurb: 'A picnic table on the lawn, a smoking grill, a cooler, a kiddie pool and a picnic spread under the open sky.' },
   restaurant: { name: 'Chez Titan, the Restaurant', blurb: 'A candle-lit restaurant: a long buffet with a cake to climb, the bar and its stools, a sizzling kitchen pass, booths, round tables and a grand piano on the stage.' },
+  test: { name: 'The Test World', blurb: 'A huge white box to try things in: spawn dummies, walls and anything else.', hidden: true }, // (0.55: Test World only)
 };
 
 export class World {
@@ -249,6 +251,9 @@ export class World {
     if (this.mapId === 'backyard') {
       this.regions = BACKYARD_REGIONS; this.playerRegion = 'table';
       buildBackyard(this);
+    } else if (this.mapId === 'test') {
+      this.regions = TEST_REGIONS; this.playerRegion = 'floor';
+      buildTestWorld(this);
     } else if (this.mapId === 'restaurant') {
       this.regions = RESTAURANT_REGIONS; this.playerRegion = 'buffet';
       buildRestaurant(this);

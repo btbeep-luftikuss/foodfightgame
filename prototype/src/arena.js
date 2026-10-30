@@ -14,7 +14,7 @@
 //        of their hands, toward you (they can't grab it back for 2 s).
 //      - A Legendary left lying for 30 s flies back to the middle; one that's gone missing (its holder left
 //        the room) comes back there too. They never wear out.
-//    Whoever holds one wears a gold crown and a gold beam of light over their head, for everyone to see.
+//    Whoever holds one has a beam of light over their head (the Legendary's colour), for everyone else to see.
 //  - A tie when the clock runs out: sudden death, the next splat wins (a draw after another minute).
 //  - Respawning: in your team's half (Squads) or wherever no enemy is close (King), with 2 tomatoes and a
 //    random food, and 2 s of spawn protection (gone as soon as you throw).
@@ -30,14 +30,14 @@ export const ARENA_MODES = new Set(['squads', 'king']);
 export const MATCH_LEN = 240, OVERTIME = 60, RESPAWN = 4, SPAWN_SHIELD = 2, LEGEND_IDLE = 30;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const _v = new THREE.Vector3();
-let BEAM_GEO = null, CROWN_GEO = null;
+let BEAM_GEO = null;
 
 export class Arena {
   constructor(game) {
     this.game = game;
     this.active = false; this.mode = null;
     this.score = [0, 0]; this.t = 0; this.over = false; this.legendsAt = 0; this.missing = new Map();
-    this.marks = new Map(); // holder -> crown and beam meshes
+    this.marks = new Map(); // holder -> the beam over them
   }
   get king() { return this.active && this.mode === 'king'; }
   get squads() { return this.active && this.mode === 'squads'; }
@@ -288,7 +288,7 @@ export class Arena {
     const it = U.drop(id, at, a);
     it.noPickUntil = g.time + 2;
   }
-  // a gold crown and a beam of light over every Titan holding a Legendary
+  // a beam of light over every Titan holding a Legendary (0.55: no crown; not your own: it'd be in your way)
   _marks() {
     const g = this.game, t = g.time;
     const seen = new Set();
@@ -299,13 +299,9 @@ export class Arena {
       let m = this.marks.get(a);
       if (!m) {
         BEAM_GEO ||= new THREE.CylinderGeometry(0.35, 0.8, 40, 12, 1, true).translate(0, 20, 0);
-        CROWN_GEO ||= new THREE.CylinderGeometry(0.42, 0.34, 0.32, 7, 1, true);
         m = new THREE.Group();
         const color = UTENSIL_BY_ID[ids[0]].color;
         m.add(new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true })));
-        const crown = new THREE.Mesh(CROWN_GEO, new THREE.MeshStandardMaterial({ color: '#ffcf3a', metalness: 0.8, roughness: 0.25, emissive: '#6a4a00', emissiveIntensity: 0.5, side: THREE.DoubleSide }));
-        crown.position.y = 2.35;
-        m.add(crown);
         m.userData.id = ids[0];
         g.scene.add(m);
         this.marks.set(a, m);
@@ -313,7 +309,6 @@ export class Arena {
       m.visible = true;
       m.children[0].visible = a !== g.player; // (your own beam would only get in your way: the others see it)
       m.position.copy(a.pos);
-      m.children[1].rotation.y = t * 1.5;
       m.children[0].material.opacity = 0.16 + Math.sin(t * 3) * 0.06;
     }
     for (const [a, m] of this.marks) if (!seen.has(a)) { g.scene.remove(m); this.marks.delete(a); }

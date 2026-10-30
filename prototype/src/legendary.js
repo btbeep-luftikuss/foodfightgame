@@ -9,7 +9,7 @@
 //   Oven Mitt          fair             great (8.5 m     70 m, over     drives them out   a burst every 2.6 s
 //                                       spot)            cover          of cover
 //   Ice Cream Machine  fair (+ shatter) good (9 m wave)  a throw        best (freezes)    jump the wave
-//   Popcorn Popper     good up close    best (5 rounds   a throw        some              slow giant food, one
+//   Popcorn Popper     good up close    best (5 rounds   a throw        some              a big target to see, one
 //                                       of blasts)                                        every 1.1 s, outer rings late
 //
 // (The numbers are in BAL; legendary tests in the test folder measure time-to-splat on one Titan and
@@ -25,7 +25,7 @@
 //    where you aim; each lands with a small slam besides its own splat. One burst every 2.6 s.
 //  - Ice Cream Machine: each food you throw lands with a ring of ice rolling out 9 m along the floor; it
 //    freezes whoever it catches on the ground (and does a little damage). Jump it.
-//  - Popcorn Popper: the food flies twice as big and slower; where it lands it bursts into minis of itself,
+//  - Popcorn Popper: the food flies twice as big (at its own speed); where it lands it bursts into minis of itself,
 //    each of which bursts again: five rounds of explosions, each sooner than the last.
 //
 // Online, nothing new goes over the line but one flag: a Titan using a torch or blender has it in its
@@ -41,7 +41,7 @@ export const BAL = {
   blender: { range: 34, width: 0.5, stages: [[0, 14], [1.2, 40], [2.4, 120]], gap: 0.25, useEvery: 3.5, dripEvery: 1.2 },
   mitt: { n: 14, r: 8.5, cd: 2.4, range: 70, slamR: 3, slamDmg: 22, m: 0.9, height: 24 },
   cream: { r: 9, pelletR: 5, speed: 12, freeze: 1.5, dmg: 10, jump: 0.7, lock: 0.7 },
-  popper: { lock: 1.1, speed: 0.7, maxSpeed: 40, size: 2, rounds: [
+  popper: { lock: 1.1, speed: 1, size: 2, rounds: [ // (0.55: speed 1: as fast as the food always flies)
     { r: 4.0, dmg: 34, force: 9, kids: 6, fuse: 0.55, out: [6, 9] },
     { r: 2.8, dmg: 14, force: 6, kids: 2, fuse: 0.4, out: [4, 7] },
     { r: 2.3, dmg: 10, force: 4, kids: 2, fuse: 0.28, out: [3.5, 6] },

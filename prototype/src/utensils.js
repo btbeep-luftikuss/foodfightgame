@@ -90,16 +90,16 @@ export const UTENSILS = [
   // legendary.js for the numbers and how they are kept even): area burn, melting one Titan, raining
   // on an area from afar, freezing whoever is on the ground, chain explosions. They still only buffer
   // the food in them: it's always that food that flies, splats and does what it does.
-  { id: 'gold-torch', base: 'blow-torch', legendary: true, tip: 'Hold: a spiral cone of flame and food', name: 'Legendary Blow Torch', role: 'Spiral Flame Cone', color: '#ff9a1a', works: THROWN,
+  { id: 'gold-torch', base: 'blow-torch', legendary: true, tip: 'Hold: a spiral cone of flame and food', name: 'Legendary Blow Torch', role: 'Spiral Flame Cone', color: '#7cf03a', works: THROWN,
     buff: 'Hold the throw for a spiralling cone of flame: everyone in it burns, while pieces of your food fly out along the spiral and hit as that food does. Mid-range, many Titans at once.', trade: 'The cone only reaches 11 m and is narrow: keep it on them. It burns a food every second.' },
-  { id: 'gold-blender', base: 'blender', legendary: true, tip: 'Hold: a laser of liquefied food that ramps up', name: 'Legendary Blender', role: 'Ramping Juice Laser', color: '#ff4f8b', works: THROWN,
+  { id: 'gold-blender', base: 'blender', legendary: true, tip: 'Hold: a laser of liquefied food that ramps up', name: 'Legendary Blender', role: 'Ramping Juice Laser', color: '#19c8d6', works: THROWN,
     buff: 'Hold the throw for a laser of your food, liquefied. The longer it stays on the same Titan, the harder it hits: 14, then 40, then 120 damage a second. Melts the toughest Titan. One food lasts 3.5 s.', trade: 'A thin beam: it only hurts the Titan it touches, and the ramp starts over the moment it slips off.' },
-  { id: 'gold-mitt', base: 'oven-mitt', legendary: true, tip: 'Click: a burst of your food rains down on your aim', name: 'Legendary Oven Mitt', role: 'Burst Rain', color: '#ff5d5d', works: THROWN,
+  { id: 'gold-mitt', base: 'oven-mitt', legendary: true, tip: 'Click: a burst of your food rains down on your aim', name: 'Legendary Oven Mitt', role: 'Burst Rain', color: '#7cf03a', works: THROWN,
     buff: 'Hurls a burst of 12 of your food into the sky: they rain down at blinding speed all over an 8.5 m wide spot where you aim, up to 70 m away, behind cover too.', trade: 'One burst every 2.6 s, with nothing in between: time them.' },
-  { id: 'gold-cream', base: 'ice-cream-machine', legendary: true, tip: 'Freeze wave where your food lands · jump it!', name: 'Legendary Ice Cream Machine', role: 'Freeze Shockwave', color: '#6fe0ff', works: THROWN,
+  { id: 'gold-cream', base: 'ice-cream-machine', legendary: true, tip: 'Freeze wave where your food lands · jump it!', name: 'Legendary Ice Cream Machine', role: 'Freeze Shockwave', color: '#19c8d6', works: THROWN,
     buff: 'Every food you throw lands with a ring of ice that rolls out 9 m across the floor: everyone it catches on the ground is frozen solid.', trade: 'Only the wave freezes (not the food in the air), and a jump at the right moment clears it.' },
-  { id: 'gold-popper', base: 'popcorn-popper', legendary: true, tip: 'Giant food · bursts 5 times over', name: 'Legendary Popcorn Popper', role: '5-Stage Cluster Cascade', color: '#ffd23a', works: THROWN,
-    buff: 'Your food flies twice as big and bursts where it lands into mini versions of itself, which burst again, and again: five ever-faster rounds of explosions spreading out.', trade: 'The giant food is slow and easy to see coming, and the outer rings take a moment: quick Titans get out.' },
+  { id: 'gold-popper', base: 'popcorn-popper', legendary: true, tip: 'Giant food · bursts 5 times over', name: 'Legendary Popcorn Popper', role: '5-Stage Cluster Cascade', color: '#7cf03a', works: THROWN,
+    buff: 'Your food flies twice as big and bursts where it lands into mini versions of itself, which burst again, and again: five ever-faster rounds of explosions spreading out.', trade: 'The giant food is easy to see coming, it reloads for 1.1 s, and the outer rings take a moment: quick Titans get out.' },
 ];
 export const UTENSIL_BY_ID = Object.fromEntries(UTENSILS.map((u) => [u.id, u]));
 export const UTENSIL_IDS = UTENSILS.map((u) => u.id); // (the Legendary ones last: online kit codes count on the order)
@@ -117,13 +117,12 @@ export function setUtensilIcons(map) { for (const [id, url] of Object.entries(ma
 export function utensilIcon(id) {
   return (urlCache[id] ||= `data:image/svg+xml;charset=utf-8,${encodeURIComponent(UTENSIL_ART[id] || legendArt(id))}`);
 }
-// (0.54) A Legendary's flat art: its everyday utensil's, in a gold ring with a crown.
-const CROWN = '<g><circle cx="200" cy="205" r="178" fill="none" stroke="#ffcf3a" stroke-width="14" opacity="0.9"/><circle cx="200" cy="205" r="178" fill="none" stroke="#fff3b0" stroke-width="4" opacity="0.9"/>'
-  + '<path d="M150 70 L162 22 L186 52 L200 12 L214 52 L238 22 L250 70 Z" fill="#ffcf3a" stroke="#2b1633" stroke-width="7" stroke-linejoin="round"/><circle cx="200" cy="52" r="7" fill="#ff4f8b"/></g>';
+// (0.54) A Legendary's flat art: its everyday utensil's, in a lime green and teal ring (0.55: no crown).
+const RING = '<g><circle cx="200" cy="205" r="178" fill="none" stroke="#7cf03a" stroke-width="14" opacity="0.9"/><circle cx="200" cy="205" r="164" fill="none" stroke="#19b8c8" stroke-width="8" opacity="0.9"/></g>';
 function legendArt(id) {
   const base = UTENSIL_BY_ID[id]?.base;
   const svg = (base && UTENSIL_ART[base]) || '';
-  return svg ? svg.replace(/<\/svg>\s*$/, `${CROWN}</svg>`) : '';
+  return svg ? svg.replace(/<\/svg>\s*$/, `${RING}</svg>`) : '';
 }
 const imgCache = {};
 function withArt(id, draw) { // draws the utensil art once it has loaded
@@ -147,7 +146,7 @@ const MAT = {
   shield: new THREE.MeshBasicMaterial({ color: '#9fe8ff', transparent: true, opacity: 0.22, depthWrite: false }),
   hex: new THREE.MeshBasicMaterial({ color: '#6fd8f0', wireframe: true, transparent: true, opacity: 0.6 }),
   vortex: new THREE.MeshBasicMaterial({ color: '#b98cff', transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide }),
-  gold: new THREE.MeshBasicMaterial({ color: '#ffcf3a', transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }), // (0.54) a Legendary's glow
+  gold: new THREE.MeshBasicMaterial({ color: '#5ff0b0', transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }), // (0.54) a Legendary's glow (0.55: lime and teal)
 };
 const col = (hex) => new THREE.Color(hex);
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _c = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
@@ -274,8 +273,7 @@ const RULES = {
     launch(o, a, rel, I) {
       if (I.k > 0 && !rel.auto) return []; // (a volley is one giant grape)
       if (rel.auto) { const s = a.uState, t = a.game.time; if (t - (s.popAt ?? -9) < 0.6) return []; s.popAt = t; } // (blueberries: one giant every 0.6 s)
-      const v = o.vel.clone().multiplyScalar(BAL.popper.speed);
-      if (v.length() > BAL.popper.maxSpeed) v.setLength(BAL.popper.maxSpeed); // (a giant carrot or berry is slow and easy to see too)
+      const v = o.vel.clone().multiplyScalar(BAL.popper.speed); // (0.55: the food's own speed)
       const q = { ...clone(o), vel: v, radius: radiusOf(o) * BAL.popper.size, x: { cs: 0, sc: BAL.popper.size } };
       if (q.seek) q.turn = (q.turn || 1) * 0.6; // (a giant chili turns slowly)
       return [q];
@@ -1323,7 +1321,7 @@ export class Utensils {
   _deliveries(dt) {
     const g = this.game, t = g.time;
     if (t >= this.nextDrop && g.state !== 'over') {
-      if (this.boxes.length < MAX_BOXES && g.mode !== 'king') this._deliver(false); // (King of the Utensil: no utensil but the two Legendaries)
+      if (this.boxes.length < MAX_BOXES && g.mode !== 'king' && g.mode !== 'sandbox') this._deliver(false); // (King of the Utensil: no utensil but the two Legendaries)
       this.nextDrop = t + rand(16, 24);
     }
     for (let i = this.boxes.length - 1; i >= 0; i--) {
@@ -1382,7 +1380,7 @@ export class Utensils {
     this.pending.length = 0;
     for (const b of this.boxes) this._removeBox(b);
     this.boxes.length = 0;
-    if (g.mode !== 'king') for (let i = 0; i < 3; i++) this._deliver(true); // a few boxes are already waiting (0.54: none in King of the Utensil)
+    if (g.mode !== 'king' && g.mode !== 'sandbox') for (let i = 0; i < 3; i++) this._deliver(true); // a few boxes are already waiting (0.54: none in King of the Utensil)
     this.nextDrop = g.time + rand(7, 10);
     this.legend.reset();
     this.gone = new Set(); // (online) keys of utensils or boxes someone took before they showed up here
@@ -1397,16 +1395,16 @@ export class Utensils {
     const model = makeUtensilMesh(id); // the real thing, big enough to spot, spinning over its ring
     model.scale.setScalar(gold ? 3.2 : 2.2);
     const ring = new THREE.Mesh(new THREE.RingGeometry(gold ? 1.5 : 1.0, gold ? 1.9 : 1.25, 40).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: gold ? '#ffcf3a' : UTENSIL_BY_ID[id].color, transparent: true, opacity: 0.9, depthWrite: false }));
+      new THREE.MeshBasicMaterial({ color: gold ? '#7cf03a' : UTENSIL_BY_ID[id].color, transparent: true, opacity: 0.9, depthWrite: false }));
     const p = pos.clone();
     p.y = groundHeight(p.x, p.z, p.y + 1);
     if (!key && g.online) p.set(r2(p.x), r2(p.y), r2(p.z)); // (as the room gets it)
     ring.position.copy(p).setY(p.y + 0.07);
     g.scene.add(model, ring);
     const extra = [];
-    if (gold) { // (0.54) a Legendary on the floor: a gold beam of light to find it by, across the map
+    if (gold) { // (0.54) a Legendary on the floor: a beam of light to find it by, across the map (teal)
       BEAM_GEO ||= new THREE.CylinderGeometry(0.45, 1.1, 36, 12, 1, true);
-      const beam = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ color: '#ffd23a', transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }));
+      const beam = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ color: '#19c8d6', transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }));
       beam.position.set(p.x, p.y + 18, p.z);
       g.scene.add(beam); extra.push(beam);
     }

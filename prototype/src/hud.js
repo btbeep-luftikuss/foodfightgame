@@ -122,6 +122,7 @@ export class HUD {
     if (game.online && game.net && !game.net.connected) { ico = 'online'; tt = game.net.lost ? 'Offline' : 'Reconnecting'; urgent = true; tip = `Room ${game.net.roomName}`; }
     else if (game.state === 'lobby') { ico = 'online'; tt = 'Joining'; tip = `Room ${game.net?.roomName || ''}`; }
     else if (game.mode === 'pots' && game.pots.active && game.state !== 'over') { tt = game.pots.pill(); ico = 'titan'; tip = 'Cooking Pot Wars'; }
+    else if (game.sandbox?.active) { tt = 'Test World'; tip = 'T: the test tools'; ico = 'titan'; }
     else if (game.arena?.active && game.state !== 'over') { tt = game.arena.pill(); urgent = game.state === 'play' && game.arena.timeLeft() < 30; tip = 'Time left: most splats wins'; ico = 'titan'; }
     else if (game.state === 'over' && game.arena?.active && !game.online) { tt = 'Full time'; tip = 'The match is over'; }
     else if (game.state === 'over') { tt = 'Next round'; tip = 'The next round starts in a few seconds'; }
@@ -234,7 +235,7 @@ export class HUD {
   }
 
   // Online scoreboard: everyone in the room by splats (names are plain text). (0.54) Also in Squads (the two
-  // teams' scores first) and King of the Utensil (a crown by whoever holds a Legendary), online or not.
+  // teams' scores first) and King of the Utensil (a mark by whoever holds a Legendary), online or not.
   _scoreboard(game) {
     this.sbT = (this.sbT || 0) + 1;
     if (this.sbT % 20) return;
@@ -251,7 +252,7 @@ export class HUD {
       return li;
     };
     const teams = A?.squads ? A.ranking().sort((x, y) => x.team - y.team).map((r) => line(r.name, r.color, r.score, `team${game.player?.team === r.team ? ' me' : ''}`)) : [];
-    el.replaceChildren(...teams, ...rows.map((a) => line(`${A?.king && A.held(a).length ? '👑 ' : ''}${a === game.player && a.name !== 'You' ? `${a.name} (you)` : a.name}`, a.color, a.kills)));
+    el.replaceChildren(...teams, ...rows.map((a) => line(`${A?.king && A.held(a).length ? '◆ ' : ''}${a === game.player && a.name !== 'You' ? `${a.name} (you)` : a.name}`, a.color, a.kills)));
   }
 
   // Noise arrows around the crosshair: direction only (plus distance while sniffing).
