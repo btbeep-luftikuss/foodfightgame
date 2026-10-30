@@ -63,6 +63,11 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.61: the Legendary Oven Mitt's 3 shots are separate** (`src/legendary.js`, `src/utensils.js`, `src/net.js`)
+
+- **A charge loads 3 shots, fired one click each** (in place of 0.60's automatic burst): click to charge (0.8 s) and the first shot goes; after that each click fires the next shot straight away, no charge, whenever you like (at least 0.25 s apart), each aimed where you aim at that moment. After the 3rd shot it cools down for 2.2 s, and the next click charges it again. The HUD shows the shots left (●●○), then the recharge. One food a shot.
+- Each shot still flies dead straight at 120 m/s and does 1.35 times the food's damage. Tomato on still Titans, clicking as fast as it allows: one at 10 m splatted in 5.8 s, 135 to one at 30 m in 5 s. Bots fire their shots one by one when they can see you. Online version 61.
+
 **Version 0.60: the Legendary Oven Mitt fires a burst** (`src/legendary.js`, `src/utensils.js`, `src/net.js`)
 
 - **3 shots a charge:** a click still charges it (0.8 s), then it fires a burst of 3 of your food, 0.12 s apart, each dead straight at 120 m/s with no drop until it hits something. Each shot is aimed as it leaves your hand (follow a runner with your aim and the burst follows them), the 2nd and 3rd fanned a hair to either side to catch a sidestep. One food a burst, one burst every 3 s.

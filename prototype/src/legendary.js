@@ -46,7 +46,7 @@ export const BAL = {
   blender: { range: 34, width: 0.5, stages: [[0, 14], [1.2, 40], [2.4, 120]], gap: 3, useEvery: 3.5, dripEvery: 1.2 },
   grater: { lock: 0.9, autoEvery: 1.2, dur: 3.5, rate: 22, r: 5, h: 8, m: 0.5, drop: 20, follow: 4, max: 3 }, // (0.59: r 2.6 -> 5, rate 16 -> 22)
   mitt: { charge: 0.8, cd: 2.2, speed: 120, // (cd + charge: a shot every 3 s)
-          life: 2.2, m: 1.35, push: 4.5, shots: 3, gap: 0.12, fan: 0.014 }, // (0.60: a burst of 3 a charge, 1.35x each; was one shot at 3x)
+          life: 2.2, m: 1.35, push: 4.5, shots: 3, gap: 0.25 }, // (0.61: a charge loads 3 separate shots, 1.35x each, at least 0.25 s apart)
   cream: { r: 9, pelletR: 5, speed: 12, freeze: 1.5, dmg: 10, jump: 0.7, lock: 0.7 },
   popper: { lock: 1.1, speed: 1, size: 2, rounds: [ // (0.55: speed 1: as fast as the food always flies)
     { r: 4.0, dmg: 34, force: 9, kids: 6, fuse: 0.55, out: [6, 9] },
@@ -271,32 +271,21 @@ export class Legends {
 
   // ---------------------------------------------------------------- Oven Mitt (0.57): the charged shot
   // Straight from the hand to the aim point, blinding fast, no drop (the food's own throw is replaced).
-  // (0.60) A charge fires a burst: 3 shots, 0.12 s apart, each aimed as it leaves the hand (where you're aiming
-  // then), fanned a hair apart (the 2nd a touch left, the 3rd a touch right) to catch a sidestep.
-  mittBurst(o, a) {
-    const B = BAL.mitt;
-    return Array.from({ length: B.shots }, (_, i) => {
-      const q = this.mittShot(o, a, i);
-      if (i) q.delay = i * B.gap;
-      return q;
-    });
-  }
-  mittShot(o, a, i = 0) {
+  mittShot(o, a) {
     const B = BAL.mitt;
     const q = { ...o, pos: o.pos.clone(), vel: new THREE.Vector3(), gravity: 0, roll: false, seek: null, turn: 0, retarget: 0, curve: 0, bounces: 0, fuse: 0, life: B.life, spin: 0, x: { m: B.m, sc: 1.1, ms: 1 } };
-    q.orient = true; q.mi = i;
-    if (!i) this.mittAim(q, a); // (the others aim when they go: Utensils._pending)
+    q.orient = true;
+    this.mittAim(q, a);
     return q;
   }
   // a shot leaves the hand: aimed, with its flash and bang
   mittAim(q, a) {
     const B = BAL.mitt, g = this.game;
     const d = a.aimPoint && a.aimPoint.distanceToSquared(q.pos) > 1 ? _v.subVectors(a.aimPoint, q.pos).normalize() : _v.copy(a.aimDir).normalize();
-    if (q.mi) d.applyAxisAngle(_up, (q.mi % 2 ? 1 : -1) * B.fan);
     q.vel.copy(d).multiplyScalar(B.speed);
-    g.fx.jet('flames', q.pos, d, q.mi ? 500 : 900, 1 / 30, { speed: 9, spread: 0.35, life: 0.18, size: 0.2, colors: [col('#ffffff'), col('#ffe36a'), col(tintOf(q.food))], drag: 3, grow: 1.5, min: 0.6 });
-    g.sfx.play('boom', q.pos, (a === g.player ? 0.55 : 0.4) * (q.mi ? 0.7 : 1));
-    if (a === g.player) g.fx.shake(q.mi ? 0.08 : 0.15);
+    g.fx.jet('flames', q.pos, d, 900, 1 / 30, { speed: 9, spread: 0.35, life: 0.18, size: 0.2, colors: [col('#ffffff'), col('#ffe36a'), col(tintOf(q.food))], drag: 3, grow: 1.5, min: 0.6 });
+    g.sfx.play('boom', q.pos, a === g.player ? 0.55 : 0.4);
+    if (a === g.player) g.fx.shake(0.12);
   }
   // while it charges: sparks of the food's colour gather in the hand
   mittCharge(a, k) {
