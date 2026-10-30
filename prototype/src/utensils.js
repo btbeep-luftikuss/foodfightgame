@@ -98,8 +98,8 @@ export const UTENSILS = [
     buff: 'Where your food lands or hits a Titan, a cloud of its colour gathers overhead and rains that food down for 3.5 s (a cloud over a Titan drifts after them). Up to 3 clouds at once.', trade: 'The rain is little pieces, spread over a 10 m circle: run out from under it. It reloads for 0.9 s.' },
   { id: 'gold-cream', base: 'ice-cream-machine', legendary: true, tip: 'Freeze wave where your food lands · jump it!', name: 'Legendary Ice Cream Machine', role: 'Freeze Shockwave', color: '#19c8d6', works: THROWN,
     buff: 'Every food you throw lands with a ring of ice that rolls out 9 m across the floor: everyone it catches on the ground is frozen solid.', trade: 'Only the wave freezes (not the food in the air), and a jump at the right moment clears it.' },
-  { id: 'gold-mitt', base: 'oven-mitt', legendary: true, tip: 'Click: charge, then a dead-straight shot', name: 'Legendary Oven Mitt', role: 'Charged Straight Shot', color: '#19c8d6', works: THROWN,
-    buff: 'A click charges it for 0.8 s, then your food shoots out dead straight at 120 m/s, with no drop, until it hits something: three times the damage, and a hard shove.', trade: 'One shot every 3 s, and only one Titan at a time: miss and you wait.' },
+  { id: 'gold-mitt', base: 'oven-mitt', legendary: true, tip: 'Click: charge, then a burst of 3 dead-straight shots', name: 'Legendary Oven Mitt', role: 'Charged Straight Burst', color: '#19c8d6', works: THROWN,
+    buff: 'A click charges it for 0.8 s, then it fires a burst of 3 of your food, dead straight at 120 m/s, with no drop, until they hit something: 1.35 times the damage each, and a shove.', trade: 'One burst every 3 s, along one line: miss and you wait.' },
   { id: 'gold-popper', base: 'popcorn-popper', legendary: true, tip: 'Giant food · bursts 5 times over', name: 'Legendary Popcorn Popper', role: '5-Stage Cluster Cascade', color: '#7cf03a', works: THROWN,
     buff: 'Your food flies twice as big and bursts where it lands into mini versions of itself, which burst again, and again: five ever-faster rounds of explosions spreading out.', trade: 'The giant food is easy to see coming, it reloads for 1.1 s, and the outer rings take a moment: quick Titans get out.' },
 ];
@@ -269,7 +269,7 @@ const RULES = {
   'gold-mitt': { // (0.57) charge, then one dead-straight shot every 3 s (legendary.js)
     charge: () => ({ need: BAL.mitt.charge, auto: true }),
     lockFor: BAL.mitt.cd, lockAuto: true,
-    launch(o, a, rel, I) { return I.k > 0 ? [] : [a.game.utensils.legend.mittShot(o, a)]; }, // (a volley of grapes: one shot)
+    launch(o, a, rel, I) { return I.k > 0 ? [] : a.game.utensils.legend.mittBurst(o, a); }, // (0.60: a burst of 3; a volley of grapes: one burst)
     step(p, dt, U) { if (p.x.ms) U.legend.mittTrail(p, dt); },
     post(p, hit, U) { if (p.x.ms) U.once(p, 'hit', () => U.legend.mittHit(p, hit.point, hit.actor)); },
   },
@@ -1231,6 +1231,7 @@ export class Utensils {
       if (!a.alive) continue;
       const o = { ...e.o, delay: 0 };
       o.pos = a.handPos();
+      if (o.x?.ms) this.legend.mittAim(o, a); // (0.60: a Legendary Mitt burst's next shot, aimed as it goes)
       g.projectiles.launch(o);
     }
   }
@@ -1531,7 +1532,7 @@ export class Utensils {
         return st < 0 ? 'Find a target' : `Ramp ${'●'.repeat(st + 1)}${'○'.repeat(2 - st)}`;
       }
       case 'gold-torch': return a.streamOn ? 'Flame cone!' : brief ? null : u.tip;
-      case 'gold-mitt': return a.charging ? 'Charging…' : t < s.cdUntil ? `Next shot in ${Math.ceil(s.cdUntil - t)}` : brief ? null : 'Shot ready';
+      case 'gold-mitt': return a.charging ? 'Charging…' : t < s.cdUntil ? `Next burst in ${Math.ceil(s.cdUntil - t)}` : brief ? null : 'Burst ready';
       case 'gold-grater': { const n = this.legend.clouds.filter((c) => c.owner === a).length; return n ? `Clouds ${'●'.repeat(n)}${'○'.repeat(Math.max(0, BAL.grater.max - n))}` : brief ? null : u.tip; }
       case 'gold-popper': case 'gold-cream': return t < s.cdUntil - 0.05 && !food.auto ? 'Reloading' : null;
       default: return null;

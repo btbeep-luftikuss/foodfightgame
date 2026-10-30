@@ -63,6 +63,11 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.60: the Legendary Oven Mitt fires a burst** (`src/legendary.js`, `src/utensils.js`, `src/net.js`)
+
+- **3 shots a charge:** a click still charges it (0.8 s), then it fires a burst of 3 of your food, 0.12 s apart, each dead straight at 120 m/s with no drop until it hits something. Each shot is aimed as it leaves your hand (follow a runner with your aim and the burst follows them), the 2nd and 3rd fanned a hair to either side to catch a sidestep. One food a burst, one burst every 3 s.
+- Each shot does 1.35 times the food's damage (the single shot did 3 times) and a lighter shove; the tracers are thicker and in the food's colour, so you can see a burst go even against white walls. Tomato on still Titans: 101 a burst, one at 10 m splatted in 4.2 s (two bursts; was 6.9 s), 135 to one at 30 m in 5 s, 280 to a group of four in 5 s. Bots fire a full burst every 3 s. Online version 60.
+
 **Version 0.59: a much bigger, powdery Grater cloud** (`src/legendary.js`, `src/utensils.js`, `src/net.js`)
 
 - **The Legendary Grater's rain cloud** now covers a circle 10 m wide (it was 5 m), and it's powder, like the Mortar & Pestle's cloud: soft puffs of the food's colour, a lighter shade of it and white, drifting and swelling across the whole circle it rains on (thinner at the rim), with a little powder sifting down out of it, instead of a clump of solid balls. (With particles turned off, the solid cloud is still drawn.)
