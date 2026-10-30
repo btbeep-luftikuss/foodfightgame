@@ -63,6 +63,13 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.56: real fire for the Legendary Blow Torch, food-coloured Blender beams, a tidier test menu** (`src/legendary.js`, `src/fx.js`, `src/viewmodel.js`, `src/sandbox.js`, `index.html`)
+
+- **The Legendary Blow Torch's fire** is now made of hundreds of soft tongues of flame pouring out of the nozzle: a small blue jet at the nozzle, white-hot and yellow close in, orange in the middle, red at the far end, swirling round the aim (the spiral) and rising as it goes, with embers flying out, smoke curling up at the end, and fire rolling out across a wall when it hits one. A hint of the food's colour flickers in it. (Before, it was two see-through cones that turned into a white blob against light walls.) It always stays full, even on Low (the fire alone costs about 1 ms a frame there). What it does is unchanged.
+- **The Legendary Blender's beam is the food's colour:** a tomato beam is red, blueberry blue, banana yellow, jelly green, soda brown, ice pale blue; its core is a lighter shade of the same colour, with a faint glow of it round the beam and drops of it flung off along the way. (It used to be added onto what was behind it, so it came out white, or vanished on light floors.)
+- **Your own beam and flame come out of the utensil you see in your hand** in first person (they used to start from the other hand); what they hit is unchanged.
+- **Test tools menu:** the Legendary utensil buttons picked up another menu's style and their pictures spilled out of their boxes; they're back inside them, and long names wrap.
+
 **Version 0.55: lime and teal Legendaries, a full-speed Popper, and the Test World** (`src/utensil-models.js`, `src/utensils.js`, `src/legendary.js`, `src/arena.js`, `src/hud.js`, `src/bots.js`, `src/sandbox.js`, `src/map-test.js`, `src/world.js`, `src/game.js`, `src/main.js`, `index.html`)
 
 - **No more crown:** holding a Legendary no longer puts a gold ring round your head. Instead the Legendary utensils themselves are recoloured: steel and dark trim **lime green**, the body **teal blue**, in your hand, on the floor and in their icons (a lime and teal ring). The beam over a holder's head is teal (you don't see your own); the scoreboard marks holders with ◆.

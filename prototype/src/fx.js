@@ -110,13 +110,33 @@ export class FX {
     this.blobs = new ParticlePool(scene, new THREE.IcosahedronGeometry(1, 0), glossy, cap);
     this.chunks = new ParticlePool(scene, new THREE.BoxGeometry(1, 1, 1), matte, Math.round(cap * 0.6));
     this.puffs = new ParticlePool(scene, new THREE.IcosahedronGeometry(1, 1), puff, Math.round(cap * 0.5));
+    // (0.56) tongues of fire (the Legendary Blow Torch): bright, not lit, see-through enough to layer, and not
+    // added onto what's behind (that turns to white on a light wall), so the colours stay fire colours anywhere
+    // (each a soft ball: solid in the middle, fading out to nothing at its edge, so they melt into each other)
+    const flame = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, toneMapped: false,
+      uniforms: { opacity: { value: 0.85 } },
+      vertexShader: `varying vec3 vC; varying vec3 vN; varying vec3 vV;
+        void main() {
+          vec4 mv = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+          vN = normalize(normalMatrix * mat3(instanceMatrix) * normal); vV = -mv.xyz; vC = instanceColor;
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `uniform float opacity; varying vec3 vC; varying vec3 vN; varying vec3 vV;
+        void main() {
+          float f = abs(dot(normalize(vN), normalize(vV)));
+          gl_FragColor = vec4(vC, opacity * f * f);
+          #include <colorspace_fragment>
+        }`,
+    });
+    this.flames = new ParticlePool(scene, new THREE.IcosahedronGeometry(1, 1), flame, Math.round(cap * 0.4));
     this.shakeAmt = 0;
   }
   update(dt) {
-    this.blobs.update(dt); this.chunks.update(dt); this.puffs.update(dt);
+    this.blobs.update(dt); this.chunks.update(dt); this.puffs.update(dt); this.flames.update(dt);
     this.shakeAmt = Math.max(0, this.shakeAmt - dt * 2.5);
   }
-  clear() { this.blobs.clear(); this.chunks.clear(); this.puffs.clear(); }
+  clear() { this.blobs.clear(); this.chunks.clear(); this.puffs.clear(); this.flames.clear(); }
   shake(a) { this.shakeAmt = Math.min(1.2, this.shakeAmt + a); }
 
   n(count) { return this.scale <= 0 ? 0 : Math.max(1, Math.round(count * this.scale)); } // Off: no particles at all
@@ -130,6 +150,22 @@ export class FX {
       const col = colors[(Math.random() * colors.length) | 0];
       P.spawn(pos.x, pos.y, pos.z, vx * sp, vy * up + rand(0, up * 0.5), vz * sp, life * rand(0.6, 1.2),
         size * rand(0.6, 1.3), col, grav, drag, grow);
+    }
+  }
+
+  // (0.56) A jet at a steady rate (particles a second, at this quality), however long the frame was:
+  // `swirl` (a vector) is added to every particle's velocity (the Legendary torch's spiral).
+  jet(pool, pos, dir, rate, dt, { speed = 12, spread = 0.2, life = 0.5, size = 0.15, colors, grav = 0, drag = 0.5, grow = 0, jitter = 0.1, swirl = null, min = 0 }) {
+    const want = rate * dt * (this.scale > 0 ? Math.max(min, this.scale) : 0); // (min: a look that has to stay full, even on Low)
+    let n = Math.floor(want); if (Math.random() < want - n) n++;
+    const P = this[pool];
+    for (let i = 0; i < n; i++) {
+      const sp = speed * rand(0.75, 1.15), f = Math.random();
+      let vx = (dir.x + rand(-spread, spread)) * sp, vy = (dir.y + rand(-spread, spread)) * sp, vz = (dir.z + rand(-spread, spread)) * sp;
+      if (swirl) { vx += swirl.x; vy += swirl.y; vz += swirl.z; }
+      // (spread along the frame's travel, so a slow frame doesn't leave the jet in clumps)
+      P.spawn(pos.x + rand(-jitter, jitter) + vx * dt * f, pos.y + rand(-jitter, jitter) + vy * dt * f, pos.z + rand(-jitter, jitter) + vz * dt * f,
+        vx, vy, vz, life * rand(0.75, 1.2), size * rand(0.7, 1.3), colors[(Math.random() * colors.length) | 0], grav, drag, grow);
     }
   }
 

@@ -212,7 +212,7 @@ button { font: inherit; color: inherit; }
 .sb-row button:hover, .sb-grid button:hover { border-color: #7cf03a; }
 .sb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 5px; }
 .sb-grid button { display: grid; justify-items: center; gap: 2px; padding: 5px 4px; font-size: 11px; font-weight: 600; }
-.sb-grid img { width: 34px; height: 34px; object-fit: contain; } .sb-grid button.legend { border-color: #19c8d6; }
+.sb-grid img { width: 34px; height: 34px; object-fit: contain; display: block; } .sb-grid span { max-width: 100%; overflow-wrap: anywhere; line-height: 1.15; } .sb-grid button.sb-legend { border-color: #19c8d6; }
 .sb-toggles label { display: flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 700; }
 .sb-meter { margin: 4px 0 0; font-size: 12.5px; color: #7cf03a; font-weight: 700; }
 .scores li.team { font-weight: 800; font-size: 13.5px; } .scores li.team.me span::after { content: ' (you)'; color: var(--paper-dim); font-weight: 500; font-size: 11px; }
@@ -725,7 +725,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.55 · Test World</p>
+      <p class="eyebrow">Prototype 0.56 · Real fire</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in; smash the other teams' pots in Cooking Pot Wars; outsplat the other team in Squads; or fight over two Legendary utensils in King of the Utensil.</p>
       <nav class="homenav" aria-label="Main menu">

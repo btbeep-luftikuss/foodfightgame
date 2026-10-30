@@ -183,6 +183,6 @@ export class Sandbox {
       <div class="sb-row sb-toggles"><label><input type="checkbox" data-sbt="god"> God mode</label><label><input type="checkbox" data-sbt="endless"> Endless food</label></div>
       <p class="sb-meter" id="sb-meter">Damage to dummies: 0 in the last 5 s</p></div>
       <div class="sb-col"><p class="sb-h">Foods</p><div class="sb-grid">${FOOD_IDS.map((id) => b(`data-food="${id}"`, `<img src="${foodIcon(id)}" alt=""><span>${FOODS[id].name}</span>`)).join('')}</div>
-      <p class="sb-h">Utensils</p><div class="sb-grid">${UTENSILS.map((u) => b(`data-ut="${u.id}" class="${u.legendary ? 'legend' : ''}"`, `<img src="${utensilIcon(u.id)}" alt=""><span>${u.name.replace('Legendary ', '★ ')}</span>`, u.buff)).join('')}</div></div>`;
+      <p class="sb-h">Utensils</p><div class="sb-grid">${UTENSILS.map((u) => b(`data-ut="${u.id}" class="${u.legendary ? 'sb-legend' : ''}"`, `<img src="${utensilIcon(u.id)}" alt=""><span>${u.name.replace('Legendary ', '★ ')}</span>`, u.buff)).join('')}</div></div>`;
   }
 }

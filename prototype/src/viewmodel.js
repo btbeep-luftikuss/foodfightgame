@@ -121,6 +121,7 @@ export class ViewModel {
       t.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
       t.position.copy(this.fistHollow);
       this.swayL.add(t);
+      this._findTip();
     } else {
       this.armL.geometry = this.palmGeo;
       // like food in the right hand: centred over the palm, the palm one bounding radius below it
@@ -131,9 +132,33 @@ export class ViewModel {
       const c = sph.center.clone().sub(t.getWorldPosition(new THREE.Vector3()));
       t.position.copy(this.handL.position).sub(c);
       this.swayL.add(t);
+      this._findTip();
       const r = sph.radius / Math.max(1e-3, t.parent.matrixWorld.getMaxScaleOnAxis());
       this.armL.position.copy(this.handL.position).addScaledVector(this.palmNL, -(r + 0.012 * 1.3)).addScaledVector(this.armUpL, 0.07 * 1.3);
     }
+  }
+
+  // (0.56) the utensil's business end: of all its points, the one furthest out in front of you (where a
+  // Legendary torch's flame or blender's beam comes out, as you see it), kept in the hand's own frame
+  _findTip() {
+    const cam = this.camera, sw = this.swayL, v = new THREE.Vector3(), best = new THREE.Vector3();
+    cam.updateMatrixWorld(true);
+    const toCam = new THREE.Matrix4().copy(cam.matrixWorld).invert();
+    let bz = Infinity;
+    this.tool.traverse((m) => {
+      const pos = m.geometry?.attributes?.position;
+      if (!pos) return;
+      for (let i = 0; i < pos.count; i += 3) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld).applyMatrix4(toCam);
+        if (v.z < bz) { bz = v.z; best.copy(v); }
+      }
+    });
+    this.tipL = bz < Infinity ? sw.worldToLocal(best.applyMatrix4(cam.matrixWorld)) : null;
+  }
+  toolTip(out) {
+    if (!this.tool || !this.tipL || this.toolIn < 0.6 || !this.rootL.visible) return null;
+    this.swayL.updateWorldMatrix(true, false);
+    return this.swayL.localToWorld(out.copy(this.tipL));
   }
 
   // The left hand: swaps utensils by dipping out of view and back, kicks forward when the utensil fires.

@@ -83,6 +83,14 @@ const BEAM_MULT = { carrot: 1.15 }; // (a carrot beam is the sharpest)
 const _from = new THREE.Vector3(), _o = new THREE.Vector3(), _d = new THREE.Vector3(), _v = new THREE.Vector3(), _w = new THREE.Vector3(), _c = new THREE.Vector3();
 const _e = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _q = new THREE.Quaternion(), _down = new THREE.Vector3(0, -1, 0), _up = new THREE.Vector3(0, 1, 0);
 const col = (hex) => new THREE.Color(hex);
+// (0.56) the Legendary torch's fire, from the nozzle out (the out list's last colour is the food's, set each frame)
+const FIRE_COLS = {
+  hot: [col('#fffbe6'), col('#fff1a8'), col('#ffe36a')],
+  mid: [col('#ffc21a'), col('#ff9a0a'), col('#ffb02e')],
+  out: [col('#ff5a12'), col('#e8320f'), col('#ff7a1a'), col('#ff4a0a'), col('#d92a0c'), col('#ff8a2a'), col('#ff6a1a'), col('#ff7a1a')],
+  ember: [col('#ffe066'), col('#ffae00'), col('#ff6a00')],
+  smoke: [col('#4a3f3a'), col('#5e534d'), col('#3a322e')],
+};
 
 // A little seeded random (the Mitt's rain lands the same on every game).
 function seeded(seed) { let s = (seed | 0) % 2147483647; if (s <= 0) s += 2147483646; return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646; }
@@ -398,7 +406,7 @@ const UTENSIL_WORKS = (U, a, id) => U.works(a, id);
 // ---------------------------------------------------------------- what the streams look like
 // (drawn every frame for every Titan using one: a flame cone, or a juice beam that thickens as it ramps)
 const CONE_GEO = new THREE.ConeGeometry(1, 1, 28, 1, true).translate(0, -0.5, 0); // tip at the origin, opening down -y
-const BEAM_GEO = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true).translate(0, 0.5, 0);
+const BEAM_GEO = new THREE.CylinderGeometry(1, 0.35, 1, 12, 1, true).translate(0, 0.5, 0); // (0.56: thinner where it leaves the blender)
 let FLAME_TEX = null, JUICE_TEX = null;
 export function streamVisuals(L, dt) {
   const g = L.game;
@@ -415,52 +423,81 @@ export function drawStream(L, a, u, food, dt, reach, st, t) {
     let fx = L.fx.get(a);
     if (!fx) {
       FLAME_TEX ||= stripeTexture('#ff7a1a', '#ffe08a');
-      JUICE_TEX ||= stripeTexture('#ffffff', '#ffffff', 9);
+      JUICE_TEX ||= stripeTexture('#c9c9c9', '#ffffff', 9);
       const grp = new THREE.Group();
-      const outer = new THREE.Mesh(CONE_GEO, new THREE.MeshBasicMaterial({ map: FLAME_TEX, color: '#ff8a2a', transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }));
-      const inner = new THREE.Mesh(CONE_GEO, new THREE.MeshBasicMaterial({ map: FLAME_TEX, color: '#ffe36a', transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }));
-      const beam = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ map: JUICE_TEX, color: '#ffffff', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, forceSinglePass: true }));
-      const core = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, depthWrite: false }));
-      for (const m of [outer, inner, beam, core]) { m.frustumCulled = false; m.material.map && (m.material.map = m.material.map.clone()); m.material.map && (m.material.map.needsUpdate = true); }
-      grp.add(outer, inner, beam, core);
+      // (0.56) nothing here is added onto what's behind it any more (that washed out to white on light walls
+      // and floors): the fire's colours and the juice's colour show the same everywhere
+      // the torch: a faint cone (where it reaches: the fire itself is particles), and a blue jet at the nozzle
+      const outer = new THREE.Mesh(CONE_GEO, new THREE.MeshBasicMaterial({ map: FLAME_TEX, color: '#ff7a1a', transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, toneMapped: false }));
+      const inner = new THREE.Mesh(CONE_GEO, new THREE.MeshBasicMaterial({ color: '#59b8ff', transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, toneMapped: false }));
+      // the blender: the juice (the food's colour), a lighter core, a soft glow of the same colour round it
+      const beam = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ map: JUICE_TEX, color: '#ffffff', transparent: true, opacity: 0.93, depthWrite: false, forceSinglePass: true, toneMapped: false }));
+      const core = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }));
+      const glow = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.22, depthWrite: false, toneMapped: false }));
+      for (const m of [outer, inner, beam, core, glow]) { m.frustumCulled = false; m.material.map && (m.material.map = m.material.map.clone()); m.material.map && (m.material.map.needsUpdate = true); }
+      glow.renderOrder = 1; beam.renderOrder = 2; core.renderOrder = 3;
+      grp.add(outer, inner, glow, beam, core);
       g.scene.add(grp);
-      L.fx.set(a, (fx = { grp, outer, inner, beam, core }));
+      L.fx.set(a, (fx = { grp, outer, inner, beam, core, glow }));
     }
     fx.grp.visible = true;
     const tint = tintOf(food);
     L.aim(a, _d);
     const from = _o; // (aim() left the hand position in _o)
     const torch = u === 'gold-torch';
-    const len = Math.max(0.5, reach || (torch ? BAL.torch.range : BAL.blender.range));
+    let len = Math.max(0.5, reach || (torch ? BAL.torch.range : BAL.blender.range));
+    // (0.56) my own, in first person: drawn from the utensil in my hand as I see it, to the same end point
+    if (a === g.player && a.fpCam && !a.replayStream && g.viewModel?.toolTip(_tip)) {
+      const end = _e.copy(from).addScaledVector(_d, len);
+      from.copy(_tip); _d.subVectors(end, from); len = Math.max(0.5, _d.length()); _d.normalize();
+    }
     fx.outer.visible = fx.inner.visible = torch;
-    fx.beam.visible = fx.core.visible = !torch;
+    fx.beam.visible = fx.core.visible = fx.glow.visible = !torch;
     _q.setFromUnitVectors(torch ? _down : _up, _d);
     if (torch) {
-      const R = Math.tan(BAL.torch.half) * len;
-      for (const [m, k] of [[fx.outer, 1], [fx.inner, 0.55]]) {
-        m.position.copy(from); m.quaternion.copy(_q);
-        m.scale.set(R * k, len * (k === 1 ? 1 : 0.85), R * k);
-        m.material.map.offset.y = (m.material.map.offset.y - dt * (k === 1 ? 2.2 : 3.4)) % 1;
-        m.material.map.offset.x = (t * 0.6 * k) % 1;
-      }
-      fx.outer.material.color.set('#ff8a2a').lerp(_cc.set(tint), 0.25); // (a hint of the food in the fire)
-      if (g.fx.scale > 0 && Math.random() < 0.85) {
-        const s = rand(0.2, 1);
-        g.fx.spray('blobs', _v.copy(from).addScaledVector(_d, len * s * 0.7), 2, { speed: 3, up: 1.5, colors: [col('#ff3d00'), col('#ffae00'), col(tint)], size: 0.14, life: 0.35, grav: -0.4 });
+      // (0.56) The fire: tongues of flame pouring out of the nozzle. Every one starts at the nozzle and flies
+      // out, so the short-lived ones only ever fill the start of the cone: white-hot at the nozzle, yellow,
+      // orange, then red and smoke at the far end. They swirl round the aim (the spiral), rise as they go,
+      // stop at a wall (they live only as long as it takes to reach it) and roll out where they hit.
+      const R = Math.tan(BAL.torch.half) * len, part = g.fx.scale > 0, k = len / BAL.torch.range;
+      fx.outer.position.copy(from); fx.outer.quaternion.copy(_q); fx.outer.scale.set(R, len, R);
+      fx.outer.material.map.offset.y = (fx.outer.material.map.offset.y - dt * 2.6) % 1;
+      fx.outer.material.map.offset.x = (t * 0.6) % 1;
+      fx.outer.material.opacity = (part ? 0.06 : 0.4) + Math.sin(t * 31) * 0.03; // (no particles at this quality: the cone is the fire)
+      fx.outer.material.color.set('#ff7a1a').lerp(_cc.set(tint), 0.2); // (a hint of the food in the fire)
+      const J = Math.min(0.55, len * 0.3), flick = 1 + Math.sin(t * 47) * 0.12 + Math.sin(t * 23) * 0.08;
+      fx.inner.position.copy(from); fx.inner.quaternion.copy(_q); fx.inner.scale.set(0.055 * flick, J * flick, 0.055 * flick);
+      if (part) {
+        const nz = _v.copy(from).addScaledVector(_d, 0.35);
+        const side = _a.crossVectors(_d, _up); if (side.lengthSq() < 1e-4) side.set(1, 0, 0); side.normalize();
+        const sw = _b.copy(side).applyAxisAngle(_d, t * 11).multiplyScalar(2.6); // (the spiral)
+        const F = FIRE_COLS, food = col(tint);
+        g.fx.jet('flames', nz, _d, 130, dt, { speed: 20, spread: 0.08, life: 0.13 * k, size: 0.1, colors: F.hot, grav: -0.1, drag: 0.5, grow: 1.8, jitter: 0.03, min: 0.6 });
+        g.fx.jet('flames', nz, _d, 140, dt, { speed: 22, spread: 0.2, life: 0.34 * k, size: 0.2, colors: F.mid, grav: -0.3, drag: 0.8, grow: 2.6, swirl: sw, min: 0.6 });
+        g.fx.jet('flames', nz, _d, 90, dt, { speed: 24, spread: 0.3, life: 0.62 * k, size: 0.3, colors: (F.out[7] = food, F.out), grav: -0.6, drag: 1, grow: 3, swirl: sw, min: 0.6 });
+        g.fx.jet('flames', nz, _d, 34, dt, { speed: 18, spread: 0.45, life: 0.7 * k, size: 0.05, colors: F.ember, grav: -0.5, drag: 0.6, grow: 0, jitter: 0.1 }); // (embers)
+        const end = _w.copy(from).addScaledVector(_d, len * 0.92);
+        g.fx.jet('puffs', end, _up, 9, dt, { speed: 2.5, spread: 0.6, life: 1, size: 0.6, colors: F.smoke, grav: -0.25, drag: 1, grow: 2, jitter: 0.8 });
+        if (reach && reach < BAL.torch.range - 0.5) // (it's hitting a wall: the fire rolls out across it)
+          g.fx.jet('flames', end, _d.clone().negate(), 40, dt, { speed: 5, spread: 1.1, life: 0.3, size: 0.4, colors: F.mid, grav: -0.4, drag: 2, grow: 2 });
       }
     } else {
-      const w = [0.07, 0.11, 0.17][Math.max(0, st)] * (1 + Math.sin(t * 40) * 0.08);
-      for (const [m, k] of [[fx.beam, 1], [fx.core, 0.35]]) { m.position.copy(from); m.quaternion.copy(_q); m.scale.set(w * k * 1.6, len, w * k * 1.6); }
-      fx.beam.material.color.set(tint);
+      const w = [0.08, 0.12, 0.18][Math.max(0, st)] * (1 + Math.sin(t * 40) * 0.08);
+      for (const [m, k] of [[fx.glow, 2.4], [fx.beam, 1], [fx.core, 0.4]]) { m.position.copy(from); m.quaternion.copy(_q); m.scale.set(w * k * 1.6, len, w * k * 1.6); }
+      // (0.56) the beam is the food's own colour (a tomato beam red, a blueberry beam blue...): the juice that
+      // colour, its core a lighter shade of it, its glow the same colour, faint
+      fx.beam.material.color.set(tint); fx.glow.material.color.set(tint);
+      fx.core.material.color.set(tint).lerp(_cc.set('#ffffff'), 0.5);
       fx.beam.material.map.offset.y = (fx.beam.material.map.offset.y - dt * 6) % 1;
       fx.beam.material.map.repeat.set(1, Math.max(1, len / 3));
-      fx.core.material.opacity = 0.45 + 0.2 * st;
-      if (g.fx.scale > 0) { // the juice splashing where it hits
-        const end = _v.copy(from).addScaledVector(_d, len);
-        if (Math.random() < 0.8) g.fx.spray('blobs', end, 2 + st, { speed: 3 + st * 2, up: 2, colors: [col(tint), col('#ffffff')], size: 0.1 + st * 0.03, life: 0.3, grav: 1 });
+      fx.core.material.opacity = 0.55 + 0.15 * st; fx.glow.material.opacity = 0.16 + 0.06 * st;
+      if (g.fx.scale > 0) { // the juice splashing where it hits, and drops flung off along the way
+        const end = _v.copy(from).addScaledVector(_d, len), c = col(tint), light = c.clone().lerp(_cc.set('#ffffff'), 0.4);
+        if (Math.random() < 0.8) g.fx.spray('blobs', end, 2 + st, { speed: 3 + st * 2, up: 2, colors: [c, light], size: 0.1 + st * 0.03, life: 0.3, grav: 1 });
+        g.fx.jet('blobs', _w.copy(from).addScaledVector(_d, rand(1, len)), _d, 14 + 8 * st, dt, { speed: 2, spread: 1, life: 0.35, size: 0.05 + st * 0.015, colors: [c, light], grav: 1, drag: 1, jitter: 0.05 });
         if (!a.beamLock && Math.random() < dt * 3 && STAIN[food]) g.world.paintSplat(end.x, end.y, end.z, 0.8, STAIN[food]);
       }
     }
   }
 }
-const _cc = new THREE.Color();
+const _cc = new THREE.Color(), _tip = new THREE.Vector3();
