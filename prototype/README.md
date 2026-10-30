@@ -63,6 +63,11 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.59: a much bigger, powdery Grater cloud** (`src/legendary.js`, `src/utensils.js`, `src/net.js`)
+
+- **The Legendary Grater's rain cloud** now covers a circle 10 m wide (it was 5 m), and it's powder, like the Mortar & Pestle's cloud: soft puffs of the food's colour, a lighter shade of it and white, drifting and swelling across the whole circle it rains on (thinner at the rim), with a little powder sifting down out of it, instead of a clump of solid balls. (With particles turned off, the solid cloud is still drawn.)
+- To keep it even with the others over the bigger circle, it rains 22 pieces a second (was 16). Tomato on still Titans: one at 10 m splatted in 6.5 s, 600 to a group of four in 5 s (between the Popcorn Popper's 550 and the Blow Torch's 660). Online version 59.
+
 **Version 0.58: the banana flies like a real boomerang** (`src/foods.js`, `src/projectiles.js`, `src/bots.js`, `src/net.js`)
 
 - **Faster, much further, much straighter:** it leaves your hand at 38 m/s (was 28) and flies almost dead straight (a slight drift: it used to curve round by about 60°) a long way out, about 42 m (was about 22), easing off at the far end, then comes straight back to your hand, as fast as it went out. Measured in the Test World: 42 m out, 1.8 m off the line at most, back in your hand 2.6 s after the throw, hitting three dummies in a line on the way.

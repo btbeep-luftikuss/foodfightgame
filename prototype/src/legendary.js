@@ -44,7 +44,7 @@ import { FOODS } from './foods.js';
 export const BAL = {
   torch: { range: 11, half: 0.42, dps: 24, burn: 2, pieceEvery: 0.2, pieceM: 0.35, useEvery: 1.0 },
   blender: { range: 34, width: 0.5, stages: [[0, 14], [1.2, 40], [2.4, 120]], gap: 3, useEvery: 3.5, dripEvery: 1.2 },
-  grater: { lock: 0.9, autoEvery: 1.2, dur: 3.5, rate: 16, r: 2.6, h: 8, m: 0.5, drop: 20, follow: 4, max: 3 },
+  grater: { lock: 0.9, autoEvery: 1.2, dur: 3.5, rate: 22, r: 5, h: 8, m: 0.5, drop: 20, follow: 4, max: 3 }, // (0.59: r 2.6 -> 5, rate 16 -> 22)
   mitt: { charge: 0.8, cd: 2.2, speed: 120, // (cd + charge: a shot every 3 s)
           life: 2.2, m: 3, push: 9 },
   cream: { r: 9, pelletR: 5, speed: 12, freeze: 1.5, dmg: 10, jump: 0.7, lock: 0.7 },
@@ -321,7 +321,7 @@ export class Legends {
     const base = _v.set(at.x, at.y + 0.5, at.z);
     const room = raycastWorld(base, _up, B.h + 2);
     const h = room > 5 ? Math.min(B.h, room - 1.5) : Math.max(1.4, room - 0.7); // (under a table: just under its top)
-    const c = { x: at.x, y: base.y + h, z: at.z, h, owner, food, follow: follow?.alive && follow !== owner ? follow : null, born: g.time, acc: 0, mesh: this._cloudMesh(tintOf(food)) };
+    const c = { x: at.x, y: base.y + h, z: at.z, h, owner, food, cols: null, follow: follow?.alive && follow !== owner ? follow : null, born: g.time, acc: 0, mesh: this._cloudMesh(tintOf(food)) };
     this.clouds.push(c);
     c.mesh.position.set(c.x, c.y, c.z);
     g.sfx.play('whirr', at, 0.6);
@@ -358,12 +358,30 @@ export class Legends {
         }
       }
       const grow = Math.min(1, age / 0.35), fade = clamp((B.dur + 0.5 - age) / 0.5, 0, 1), k = grow * fade;
-      c.mesh.position.set(c.x, c.y + Math.sin(age * 2) * 0.15, c.z);
-      c.mesh.scale.set(B.r * 0.62 * k, B.r * 0.45 * k, B.r * 0.62 * k);
-      c.mesh.rotation.y += dt * 0.3;
+      // (0.59) the cloud is powder, like the Mortar & Pestle's: soft puffs of the food's colour and white, drifting
+      // and swelling across the whole circle it rains on, a few sifting down. (No particles at this quality: a
+      // solid cloud instead.)
+      c.mesh.visible = g.fx.scale <= 0;
+      if (c.mesh.visible) {
+        c.mesh.position.set(c.x, c.y + Math.sin(age * 2) * 0.15, c.z);
+        c.mesh.scale.set(B.r * 0.62 * k, B.r * 0.45 * k, B.r * 0.62 * k);
+        c.mesh.rotation.y += dt * 0.3;
+      } else if (age < B.dur) this._powder(c, dt, grow);
       if (age < 0.3 || age > B.dur) continue;
       c.acc += B.rate * dt;
       while (c.acc >= 1) { c.acc -= 1; this._drop(c); }
+    }
+  }
+  _powder(c, dt, k) {
+    const g = this.game, B = BAL.grater, P = g.fx.puffs, cols = c.cols ||= [col(tintOf(c.food)), col(tintOf(c.food)).lerp(_cc.set('#ffffff'), 0.45), col('#ffffff')];
+    const want = 70 * dt * Math.max(0.6, g.fx.scale) * (0.4 + 0.6 * k); // (thickening as it gathers)
+    let n = Math.floor(want); if (Math.random() < want - n) n++;
+    for (let i = 0; i < n; i++) {
+      const r = B.r * k * Math.sqrt(Math.random()), a = rand(0, Math.PI * 2), edge = r / B.r;
+      const x = c.x + Math.cos(a) * r, z = c.z + Math.sin(a) * r, y = c.y + rand(-0.5, 0.9) * (1 - edge * 0.5); // (thinner at the rim)
+      const sift = Math.random() < 0.15; // (a little powder sifting down out of it)
+      P.spawn(x, y, z, rand(-0.5, 0.5) + Math.cos(a) * 0.4, sift ? -rand(1.5, 3) : rand(-0.15, 0.25), rand(-0.5, 0.5) + Math.sin(a) * 0.4,
+        sift ? rand(0.8, 1.3) : rand(0.9, 1.4), sift ? rand(0.4, 0.7) : rand(1.1, 1.8), cols[(Math.random() * 3) | 0], 0, 1, sift ? 0.8 : 1.2);
     }
   }
   _drop(c) {

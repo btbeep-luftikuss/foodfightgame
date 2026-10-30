@@ -78,7 +78,7 @@ const MIN_SENT = 6;     // an event leaves the log once it went out this often a
 const BUDGET = 3900;    // bytes of one player's presence (the claude.ai room refuses over 4096)
 // (0.51) The game's version, in every update: players on different copies of the game (one browser still
 // showing an older one) play by different rules, so each is told to reload. Bump it with every release.
-export const NET_VERSION = 58;
+export const NET_VERSION = 59;
 // What a hit did besides its damage, merged into the claim for it (freezes add up to 3, shoves add up)
 function mergeStatus(a, s) {
   for (const [k, v] of Object.entries(s)) {
