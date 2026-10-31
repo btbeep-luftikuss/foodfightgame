@@ -309,13 +309,19 @@ export class BotBrain {
       // (0.54) a Legendary torch or blender: hold it on them (the beam: right on them; it hits at once);
       // (0.57) the Mitt: a dead-straight shot at their chest, a touch ahead of them, when it can see them
       const R = LEG_RANGE[a.utensil], from = a.handPos(_w);
-      _aim.copy(t.pos).setY(t.pos.y + 1).add(_q.copy(this.aimErr).multiplyScalar(a.utensil === 'gold-blender' ? 0.15 : 0.5));
+      _aim.copy(t.pos).setY(t.pos.y + 1).add(_q.copy(this.aimErr).multiplyScalar(a.utensil === 'gold-blender' ? 0.8 : 0.5));
+      if (a.utensil === 'gold-blender') { // (0.66) a bot's beam isn't glued on: it swings after them at a human pace and wobbles
+        if (!this.beamAim || this.beamT !== t) { this.beamAim = (this.beamAim || new THREE.Vector3()).copy(from).addScaledVector(a.aimDir, from.distanceTo(_aim)); this.beamT = t; this.beamFrom = now + 0.6 - 0.3 * this.skill; } // (and a moment to react)
+        this.beamAim.lerp(_aim, 1 - Math.exp(-(1.1 + 1.6 * this.skill) * dt)); // (a moving Titan slips off it)
+        _aim.copy(this.beamAim);
+        _aim.x += Math.sin(now * 2.7 + this.skill * 9) * 0.7; _aim.y += Math.sin(now * 3.9) * 0.4; _aim.z += Math.cos(now * 2.3) * 0.7;
+      }
       if (a.utensil === 'gold-mitt') _aim.addScaledVector(t.vel, (from.distanceTo(_aim) / BAL.mitt.speed + BAL.mitt.charge * 0.3) * this.skill);
       a.aimDir.subVectors(_aim, from).normalize(); a.aimPoint.copy(_aim);
       a.yaw = this.aimYaw = yawOf(a.aimDir.x, a.aimDir.z);
       a.botTarget = t;
       const d = from.distanceTo(_aim), sees = hasLineOfSight(from, _q.copy(t.pos).setY(t.pos.y + 1));
-      if (stream) it.primary = d <= R[2] && (sees || a.utensil === 'gold-torch' && d < 6);
+      if (stream) it.primary = d <= R[2] && (sees || a.utensil === 'gold-torch' && d < 6) && !(a.utensil === 'gold-blender' && now < (this.beamFrom || 0));
       else if (d <= R[2] && sees && now > this.nextShotAt && now >= a.recoverUntil && !a.charging) { it.primary = !a.primaryPrev; this.nextShotAt = now + 0.3; }
     } else if (t && food && a.canControl()) {
       const from = a.handPos(_w);

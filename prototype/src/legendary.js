@@ -43,7 +43,8 @@ import { FOODS } from './foods.js';
 
 export const BAL = {
   torch: { range: 11, half: 0.42, dps: 24, burn: 2, pieceEvery: 0.2, pieceM: 0.35, useEvery: 1.0 },
-  blender: { range: 34, width: 0.5, stages: [[0, 14], [1.2, 40], [2.4, 120]], gap: 3, useEvery: 3.5, dripEvery: 1.2 },
+  blender: { range: 34, width: 0.5, stages: [[0, 14], [1.2, 40], [2.4, 120]], gap: 3, botGap: 0.6, // (0.66: a bot's ramp only waits 0.6 s off target)
+            useEvery: 3.5, dripEvery: 1.2 },
   grater: { lock: 0.9, autoEvery: 1.2, dur: 3.5, rate: 22, r: 5, h: 8, m: 0.5, drop: 34, dropG: 1.5, follow: 4, max: 3 }, // (0.62: drop 20 -> 34 m/s, heavier: the rain comes down fast) // (0.59: r 2.6 -> 5, rate 16 -> 22)
   mitt: { charge: 0.8, cd: 2.2, speed: 120, // (cd + charge: a shot every 3 s)
           life: 2.2, m: 1.35, push: 4.5, shots: 4, gap: 0.25 }, // (0.61: a charge loads separate shots, 1.35x each, at least 0.25 s apart; 0.62: 4, and each food its own: MITT_FOOD)
@@ -187,6 +188,11 @@ export class Legends {
   update(dt) {
     const g = this.game, now = g.time;
     for (const a of g.actors) {
+      // (0.66) frozen or stuck in jelly: the Blender's ramp is lost (and can't build while it lasts)
+      if (a.beamLock && (a.isFrozen() || a.isRooted())) {
+        if (this.stage(a) > 0 && a === g.player) g.hud.toast('Blender ramp lost!');
+        a.beamLock = null;
+      }
       if (!a.streamOn) { a.hlStream = null; continue; }
       if (!a.alive || !this.isStream(a) || (!a.isRemote && now - (a.streamAt || 0) > 0.15) || !a.selected()) { a.streamOn = false; if (!a.alive || a.utensil !== 'gold-blender') a.beamLock = null; a.hlStream = null; continue; } // (a blender's ramp outlasts letting go: 3 s)
       const food = rootOf(a.selected().id);
@@ -258,8 +264,9 @@ export class Legends {
     // (0.57) The ramp belongs to the blender, not to the Titan it's on: off every Titan for up to 3 s (on a wall,
     // swinging to the next Titan, even letting go), it keeps its ramp and carries it to whoever it hits next.
     const L = a.beamLock;
-    if (hit) { if (L && now - L.last < B.gap) { L.t += dt; L.last = now; L.T = hit; } else a.beamLock = { T: hit, t: 0, last: now, drip: 0, acc: 0 }; }
-    else if (L && now - L.last > B.gap) a.beamLock = null;
+    const gap = a.isBot ? B.botGap : B.gap;
+    if (hit) { if (L && now - L.last < gap) { L.t += dt; L.last = now; L.T = hit; } else a.beamLock = { T: hit, t: 0, last: now, drip: 0, acc: 0 }; }
+    else if (L && now - L.last > gap) a.beamLock = null;
     if (!hit || !this._mayHit(a, hit)) return;
     const R = a.beamLock;
     let dps = 0;
@@ -276,7 +283,7 @@ export class Legends {
   // how far the Blender's ramp is on its target (0, 1, 2), as this game sees it
   stage(a) {
     const L = a?.beamLock;
-    if (!L || this.game.time - L.last > BAL.blender.gap) return -1;
+    if (!L || this.game.time - L.last > (a.isBot ? BAL.blender.botGap : BAL.blender.gap)) return -1;
     let s = 0;
     BAL.blender.stages.forEach(([t], i) => { if (L.t >= t) s = i; });
     return s;

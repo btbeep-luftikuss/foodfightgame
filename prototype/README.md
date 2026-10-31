@@ -63,6 +63,11 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.66: bots are worse with the Legendary Blender, and freezing or jelly costs you its ramp** (`src/bots.js`, `src/legendary.js`, `src/net.js`)
+
+- **Bots aim the Blender like people do:** their beam swings after you at a human pace instead of sticking to you, wobbles, starts a moment after they spot you, and their ramp only waits 0.6 s off you before it starts over (yours waits 3 s). Damage a bot's Blender does to you in 8 s (an average of 3 tries): standing still 428 (was 864), strafing side to side 240 (was 931), sprinting in a zigzag 68 (was 940). Keep moving and it can't ramp up.
+- **Frozen or jellied, the ramp is lost:** if you're frozen (ice, the Ice Cream Machine's wave) or stuck in jelly while holding a Legendary Blender, its ramp drops straight back to the start ("Blender ramp lost!") and can't build again until you're free. Online version 65.
+
 **Version 0.65: the highlight reels put carrot snipes first** (`src/highlights.js`)
 
 - A carrot is aimed all the way, so a carrot snipe (a hit from 30 m or more) now scores 30 more and ranks with the splats when a reel picks its plays; a chili or cookie homes in on its own, so their snipes score 25 and 15 less (unless a Legendary Oven Mitt fired them dead straight). Checked with a match's worth of made-up snipes: of four chili snipes (longer, harder-hitting) and three carrot snipes, the reel took all three carrot ones, ending on the best, and no plain chili snipe (a chili snipe that splats someone still shows, as every splat does).
