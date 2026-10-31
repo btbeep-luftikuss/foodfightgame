@@ -49,6 +49,11 @@ const K = 14;                 // numbers per Titan per frame: x y z yaw pitch vx
 const FL = { alive: 1, ground: 2, glide: 4, dash: 8, trip: 16, frozen: 32, rooted: 64, charging: 128, shield: 256, eating: 512, burning: 1024 };
 const KEEP = 9;               // seconds of the latest frames always kept (a throw can fly for 6 s)
 const SNIPE = 30;             // metres: a hit by a throw that flew this far is a snipe
+// (0.65) what a snipe is worth by food: a carrot is aimed all the way (the real sniper's shot: first in the reels);
+// a chili or a cookie homes in on its own, so its long hit is luckier than skilful (unless a Legendary Oven
+// Mitt fired it dead straight)
+const SNIPE_FOOD = { carrot: 30, chili: -25, cookie: -15 };
+const snipeBonus = (food, u) => { const b = SNIPE_FOOD[food] || 0; return b < 0 && u === 'gold-mitt' ? 0 : b; };
 const LONG = 13;              // metres: a hit from this far is followed through the air
 const DODGE_R = 1.1;          // a dangerous throw passing this close to a Titan's body (and missing) is a dodge
 const HELD = [...FOOD_IDS, 'peel'];
@@ -344,7 +349,7 @@ export class Highlights {
     if (old) return; // the same throw (it pierced on through someone else)
     this._add({
       kind: 'snipe', a, hits: [hit], pid: rec.pid, dist: rec.dist, food: rec.food, head: rec.head, amt: rec.amt, ko: false, count: 1, u: rec.u,
-      score: 32 + Math.min(36, (rec.dist - SNIPE) * 1.2) + (rec.head ? 15 : 0) + Math.min(20, rec.amt / 3) + this._trick(rec),
+      score: 32 + Math.min(36, (rec.dist - SNIPE) * 1.2) + (rec.head ? 15 : 0) + Math.min(20, rec.amt / 3) + this._trick(rec) + snipeBonus(rec.food, rec.u),
     });
   }
 
@@ -480,7 +485,7 @@ export class Highlights {
     pool = mode === 'me' ? pool.filter((m) => m.a === me) : pool.filter((m) => m.kind !== 'hit');
     // a dodge that was splatted straight after isn't one to show
     for (const m of pool) if (m.kind === 'dodge' && !this._aliveAt(m.a, Math.min(last, m.hits.at(-1).tk + 1.2))) m.score *= 0.4;
-    const rank = (m) => (m.ko ? 0 : m.kind === 'dodge' ? 2 : 1);
+    const rank = (m) => (m.ko || (m.kind === 'snipe' && m.food === 'carrot') ? 0 : m.kind === 'dodge' ? 2 : 1); // (0.65: a carrot snipe ranks with the splats)
     pool.sort((p, q) => rank(p) - rank(q) || q.score - p.score);
     const max = opts.max || (mode === 'me' ? 5 : 6), kinds = {}, out = [];
     if (opts.mine) { const i = pool.findIndex((m) => m.a === me); if (i > 0) pool.unshift(...pool.splice(i, 1)); }

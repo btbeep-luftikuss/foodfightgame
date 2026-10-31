@@ -63,6 +63,10 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.65: the highlight reels put carrot snipes first** (`src/highlights.js`)
+
+- A carrot is aimed all the way, so a carrot snipe (a hit from 30 m or more) now scores 30 more and ranks with the splats when a reel picks its plays; a chili or cookie homes in on its own, so their snipes score 25 and 15 less (unless a Legendary Oven Mitt fired them dead straight). Checked with a match's worth of made-up snipes: of four chili snipes (longer, harder-hitting) and three carrot snipes, the reel took all three carrot ones, ending on the best, and no plain chili snipe (a chili snipe that splats someone still shows, as every splat does).
+
 **Version 0.64: the Toaster's push back can't run away any more** (`src/utensils.js`, `src/net.js`)
 
 - In 0.63 every throw added its push on top of the last, and a push stops your feet gripping the floor for a moment, so quick throws snowballed: 3 s of tomatoes as fast as they go shot you back 106 m, at 99 m/s, and held blueberries reached 15 m/s.
