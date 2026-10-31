@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.74: one steady aim line** (`src/game.js`)
+
+- **Always one line:** the Knife's fan of three (and any volley) now shows a single line, down the middle.
+- **No more shaking on fast turns:** the dots used the aim from the frame before while the hand used the camera of this frame, so a quick turn dragged them sideways, and they were spaced by time so they jumped about as the path got longer or shorter. Now the line is aimed from the view about to be drawn and its dots sit at fixed distances along the path, so they slide smoothly with your aim. Checked with a fast 230°-a-second turn at uneven frame rates: the dots used to wobble about 11 pixels on screen from frame to frame, now 0.
+- **Longer straight shots:** up to 60 dots, spaced wider for fast throws, so an Oven Mitt shot or a ricochet shows more of its path. Still checked against real flights: 0.1 to 0.5 m off on average.
+
 **Version 0.73: the yellow aim dots follow the real flight, utensil and all** (`src/game.js`, `src/utensils.js`)
 
 - **What changed:** the dotted aim line used to draw a plain lob for every utensil, so with an Oven Mitt, a Rolling Pin or a Mortar & Pestle the food flew somewhere else. Now, while you charge, the game does a silent practice throw of the food in hand (nothing is thrown, used up or heard; no "too hot" chili, no cookie lost, no shield dropped) and bends it the same way the utensil will: faster and flatter with the Oven Mitt (only when its power throw is ready), a high lob that drops right on your aim with the Mortar & Pestle, dead straight with the Legendary Oven Mitt, floor bounces with the Toaster, wall ricochets with the Rolling Pin and Spatula, a fan of three with the Knife, short shreds with the Grater and Spoon, slower with the Whisk and the Ice Cream Machine, a mid-air pop with the Popcorn Popper.

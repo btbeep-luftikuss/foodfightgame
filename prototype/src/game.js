@@ -50,7 +50,7 @@ const cleanMode = (m) => (MODES.includes(m) ? m : 'classic');
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const _d = new THREE.Vector3(), _o = new THREE.Vector3(), _c = new THREE.Vector3(), _f = new THREE.Vector3();
-const _r = new THREE.Vector3(), _t = new THREE.Vector3(), _v = new THREE.Vector3();
+const _r = new THREE.Vector3(), _t = new THREE.Vector3(), _v = new THREE.Vector3(), _pm = new THREE.Vector3(), _pn = new THREE.Vector3();
 const _frus = new THREE.Frustum(), _pv = new THREE.Matrix4();
 
 export class Game {
@@ -95,7 +95,7 @@ export class Game {
     this.highlights = new Highlights(this); // (0.36) records the match for the highlight reels
 
     // aim-preview dots for lobbed foods (GDD 5.1: arc shows the first part of the path only)
-    this.previewDots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffd447', transparent: true, opacity: 0.85, depthWrite: false }), 40);
+    this.previewDots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffd447', transparent: true, opacity: 0.85, depthWrite: false }), 60);
     this.previewDots.frustumCulled = false;
     this.previewDots.count = 0;
     scene.add(this.previewDots);
@@ -1152,15 +1152,17 @@ export class Game {
 
   // (0.73) The aim preview while you charge a throw: where it will actually fly, with the utensil in hand
   // (faster and flatter with the Oven Mitt, a high lob onto your aim with the Mortar, dead straight with the
-  // Legendary Mitt, a fan of three with the Knife, bounces off the floor or walls, shreds that fall apart).
+  // Legendary Mitt, bounces off the floor or walls, shreds that fall apart).
   // The food's own throw comes from a dry run of its release (nothing is thrown, used or heard); the utensil's
   // change from Utensils.previewPaths. Lobs show the first half of the arc (GDD 5.1); other paths in full.
+  // (0.74) Always one line (a Knife fan or a grape volley: its middle), aimed from the camera as drawn this
+  // frame (no lag behind a fast turn), with its dots at fixed distances along the path (no shimmer).
   _dryThrow(p, food, c) {
     const out = [], P = this.projectiles;
     const stubs = [[P, 'launch', (o) => { out.push(o); return null; }], [P, 'list', []], [p, 'consume', () => {}], [this.sfx, 'play', () => {}],
       [this.fx, 'burst', () => {}], [this.fx, 'spray', () => {}], [this.abilities, 'spicy', () => {}], [this.items, 'addTrap', () => {}]];
     const saved = stubs.map(([o, k, v]) => { const own = Object.prototype.hasOwnProperty.call(o, k), was = o[k]; o[k] = v; return [o, k, own, was]; });
-    const rnd = Math.random, shield = p.shieldUp; Math.random = () => 0.99; // (no 30% "too hot" chili in a preview)
+    const rnd = Math.random, shield = p.shieldUp; Math.random = () => 0.5; // (no random spread, no 30% "too hot" chili)
     try { food.release(p, c, this); } catch { /* a food that can't be previewed */ } finally {
       Math.random = rnd; p.shieldUp = shield;
       for (const [o, k, own, was] of saved) { if (own) o[k] = was; else delete o[k]; }
@@ -1173,37 +1175,45 @@ export class Game {
     if (!food || !p.charging || food.profile === 'place' || food.auto) { this.previewDots.count = 0; return; }
     // a lob always shows its arc; a straight throw only when the utensil in hand bends it
     if (food.profile !== 'lob' && !(p.utensil && this.utensils.works(p, p.selected()?.id))) { this.previewDots.count = 0; return; }
+    if (this.state !== 'menu') this._playerAim(); // the aim of the view about to be drawn (the step's is a frame old)
     const c = food.charge > 0 ? clamp(p.chargeT / food.charge, 0, 1) : 1;
-    const throws = this._dryThrow(p, food, c).slice(0, 5);
-    const paths = [];
-    for (const o of throws) for (const q of this.utensils.previewPaths(p, o)) if (paths.length < 3) paths.push(q);
-    const lob = food.profile === 'lob';
-    let n = 0;
-    const max = 40, per = Math.floor(max / Math.max(1, paths.length));
-    for (const q of paths) {
-      const pos = q.pos.clone(), vel = q.vel.clone(), pts = [], dt = 0.03;
-      let wb = q.wb, fb = q.fb, life = 0;
-      for (let i = 0; i < 120 && life < q.life; i++) {
-        life += dt;
-        const prev = pos.clone();
-        vel.y -= G * q.gravity * dt; pos.addScaledVector(vel, dt);
-        const s = solidAt(pos);
-        if (s) {
-          const top = prev.y >= s.groundY - 0.05;
-          if (top && fb > 0) { fb--; pos.y = s.groundY + 0.3; vel.y = Math.abs(vel.y) * 0.55 + 5; } // (a toasted bounce)
-          else if (!top && wb > 0) { wb--; pos.copy(prev); if (solidAt(_o.set(pos.x + vel.x * dt, pos.y, pos.z))) vel.x = -vel.x; else vel.z = -vel.z; } // (a ricochet)
-          else { pts.push(top ? pos.setY(s.groundY + 0.05).clone() : prev); break; }
-        }
-        pts.push(pos.clone());
+    const all = [];
+    for (const o of this._dryThrow(p, food, c).slice(0, 9)) all.push(...this.utensils.previewPaths(p, o));
+    if (!all.length) { this.previewDots.count = 0; return; }
+    // one line: the one closest to the middle of the fan or volley
+    _pm.set(0, 0, 0); for (const r of all) _pm.add(_pn.copy(r.vel).normalize());
+    let q = all[0], best = -9;
+    for (const r of all) { const d = _pn.copy(r.vel).normalize().dot(_pm); if (d > best + 1e-6) { best = d; q = r; } }
+    // fly it: gravity, its life, a toasted floor bounce, a ricochet off a wall, else it stops where it hits
+    const pos = q.pos.clone(), vel = q.vel.clone(), pts = [pos.clone()], dt = 0.03;
+    let wb = q.wb, fb = q.fb, life = 0;
+    for (let i = 0; i < 160 && life < q.life; i++) {
+      life += dt;
+      const prev = pos.clone();
+      vel.y -= G * q.gravity * dt; pos.addScaledVector(vel, dt);
+      const s = solidAt(pos);
+      if (s) {
+        const top = prev.y >= s.groundY - 0.05;
+        if (top && fb > 0) { fb--; pos.y = s.groundY + 0.3; vel.y = Math.abs(vel.y) * 0.55 + 5; } // (a toasted bounce)
+        else if (!top && wb > 0) { wb--; pos.copy(prev); if (solidAt(_o.set(pos.x + vel.x * dt, pos.y, pos.z))) vel.x = -vel.x; else vel.z = -vel.z; } // (a ricochet)
+        else { pts.push(top ? pos.setY(s.groundY + 0.05).clone() : prev); break; }
       }
-      // a lob: the first half of its arc; a shot that flies flat or bounces: all of it (spaced out)
-      const shown = lob && !q.wb && !q.fb && q.gravity > 0.3 ? Math.ceil(pts.length * 0.5) : pts.length;
-      const step = Math.max(1, Math.ceil(shown / per));
-      for (let i = 1; i < shown && n < max; i += step) {
-        const k = 1 - (i / (shown + 4)) * 0.7;
-        this._m.makeScale(k, k, k).setPosition(pts[i]);
-        this.previewDots.setMatrixAt(n++, this._m);
-      }
+      pts.push(pos.clone());
+    }
+    // dots every `gap` metres along the path (steady while you aim: they slide with it, never jump);
+    // a lob shows the first half of its arc, a shot that flies flat or bounces all of it
+    const gap = clamp(q.vel.length() * 0.035, 0.8, 2.6);
+    let total = 0; for (let i = 1; i < pts.length; i++) total += pts[i].distanceTo(pts[i - 1]);
+    const showLen = food.profile === 'lob' && !q.wb && !q.fb && q.gravity > 0.3 ? total * 0.5 : total;
+    let n = 0, seg = 1, at = 0; // `at`: the path length at the start of pts[seg - 1] -> pts[seg]
+    for (let d = gap; d <= showLen && n < 60; d += gap) {
+      while (seg < pts.length && at + pts[seg].distanceTo(pts[seg - 1]) < d) { at += pts[seg].distanceTo(pts[seg - 1]); seg++; }
+      if (seg >= pts.length) break;
+      const L = pts[seg].distanceTo(pts[seg - 1]) || 1;
+      _o.lerpVectors(pts[seg - 1], pts[seg], (d - at) / L);
+      const k = 1 - (d / Math.max(showLen, gap)) * 0.7;
+      this._m.makeScale(k, k, k).setPosition(_o);
+      this.previewDots.setMatrixAt(n++, this._m);
     }
     this.previewDots.count = n;
     this.previewDots.instanceMatrix.needsUpdate = true;
