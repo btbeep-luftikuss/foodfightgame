@@ -309,7 +309,7 @@ export class Projectiles {
       const head = headHit && food.profile === 'line';
       game.highlights?.onProjectileHit(p, a, head);
       const done = this._impact(p, food, { point: p.pos.clone(), actor: a, head, world: false });
-      if (p.x.pc > 0 && !p.attached && !p.stuck) { p.x.pc--; continue; } // Colander: pierces on through
+      if (p.x.pc > 0 && !p.attached && !p.stuck) { p.x.pc--; continue; } // a piercing shot (a Legendary Oven Mitt carrot) goes on through
       if (done) return true;
       if (p.attached || p.stuck) return false;
       if (!food.pierce) return true;

@@ -316,7 +316,7 @@ export class Highlights {
     }
     // how far: the length of its flight, up and down included (0.40); else thrower to target
     const dist = P ? flownTo(P, ti) : p.hl.from.distanceTo(a.pos);
-    p.hl.hits++; // (a Colander throw goes on through: the 2nd, 3rd Titan it skewers)
+    p.hl.hits++; // (a piercing shot goes on through: the 2nd, 3rd Titan it skewers)
     this.pending = { victim: a, by: p.owner, t, launchT: p.hl.t, dist, pid: p.hl.id, head: !!head, food: p.food, path: P, ti, u: p.u || '', bank: p.hl.bank, nth: p.hl.hits };
   }
 
@@ -335,7 +335,7 @@ export class Highlights {
   }
 
   _hit(rec) { return { tk: rec.t, tt: rec.launchT, ti: rec.ti ?? rec.t, b: this.idx.get(rec.victim), pid: rec.pid, path: rec.path || null, head: !!rec.head, dist: rec.dist, food: rec.food, u: rec.u || '', bank: rec.bank || 0, nth: rec.nth || 1 }; }
-  // (0.50) a throw's trick shots: banked off a wall (Rolling Pin, Spatula), on through another Titan (Colander)
+  // (0.50) a throw's trick shots: banked off a wall (Rolling Pin, Spatula), on through another Titan (a piercing shot)
   _trick(rec) { return (rec?.bank ? 16 : 0) + ((rec?.nth || 1) > 1 ? 14 : 0); }
 
   _snipe(rec) {

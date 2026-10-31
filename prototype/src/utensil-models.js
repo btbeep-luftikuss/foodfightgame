@@ -6,7 +6,7 @@
 //  - 'grip' (knife, spoon, whisk...): the handle runs along +y through the origin, where the fist
 //    closes. Handles are thin (HANDLE_R) so they fit the hollow inside the fist (GRIP in human.js)
 //    and the fingers wrap round them instead of through them; the business end points up (+y).
-//  - 'palm' (the gadgets: microwave, toaster, blender...): no handle; the gadget rests on the open
+//  - 'palm' (the gadgets: toaster, blender...): no handle; the gadget rests on the open
 //    palm, its bottom on the hand, like food in the right hand.
 // The front faces +z. Models are about 0.7 tall.
 import * as THREE from 'three';
@@ -104,8 +104,8 @@ const G = { grip: true };
 // How each utensil is held (see the top of this file).
 export const HOLD = {
   knife: 'grip', spoon: 'grip', 'blow-torch': 'grip', whisk: 'grip', 'rolling-pin': 'grip', spatula: 'grip',
-  'deep-fryer': 'grip', colander: 'grip', peeler: 'grip', pan: 'grip',
-  'ice-cream-machine': 'palm', blender: 'palm', microwave: 'palm', grater: 'palm', 'mortar-and-pestle': 'palm',
+  'deep-fryer': 'grip', peeler: 'grip', pan: 'grip',
+  'ice-cream-machine': 'palm', blender: 'palm', grater: 'palm', 'mortar-and-pestle': 'palm',
   toaster: 'palm', 'cotton-candy-machine': 'palm', 'popcorn-popper': 'palm', mixer: 'palm', 'oven-mitt': 'palm',
 };
 const MAKERS = {
@@ -157,12 +157,6 @@ const MAKERS = {
     k.add(cyl(0.09, 0.09, 0.44, 20), (x, y) => (Math.abs(y) > 0.2 ? WOOD_D : WOOD), 'matte', { p: [0, 0.4, 0] });
     k.add(caps(HANDLE_R, 0.12), WOOD_D, 'matte', { p: [0, 0.7, 0] });
   },
-  microwave(k) {
-    k.add(rbox(0.36, 0.25, 0.25, 0.05), '#ffc93f', 'gloss', { p: [0, 0.125, 0] });
-    k.add(rbox(0.2, 0.15, 0.02, 0.02), '#ffe58a', 'glow', { p: [-0.05, 0.125, 0.125] });
-    k.add(cyl(0.035, 0.035, 0.02, 12), '#ff9f1c', 'glow', { p: [-0.05, 0.125, 0.135], r: [Math.PI / 2, 0, 0] });
-    for (let i = 0; i < 3; i++) k.add(cyl(0.012, 0.012, 0.02, 8), DARK, 'gloss', { p: [0.12, 0.175 - i * 0.045, 0.125], r: [Math.PI / 2, 0, 0] });
-  },
   grater(k) { // a box grater with a loop on top (rests on the palm)
     k.add(new THREE.CylinderGeometry(0.085, 0.125, 0.4, 4, 32), (x, y) => (Math.abs(y) < 0.17 && ((y * 80) % 2 + 2) % 2 < 0.8 ? '#4e5868' : STEEL), 'metal', { p: [0, 0.2, 0], r: [0, Math.PI / 4, 0] });
     k.add(new THREE.CylinderGeometry(0.13, 0.13, 0.03, 4), '#2bbfae', 'gloss', { p: [0, 0.015, 0], r: [0, Math.PI / 4, 0] });
@@ -203,16 +197,6 @@ const MAKERS = {
     }
     k.add(rbox(0.03, 0.05, 0.05, 0.01), '#ff8a2e', 'gloss', { p: [0.18, 0.16, 0] });
     k.add(cyl(0.02, 0.02, 0.02, 10), '#ff8a2e', 'gloss', { p: [0.08, 0.06, 0.105], r: [Math.PI / 2, 0, 0] });
-  },
-  colander(k) {
-    grip(k, '#e8475a', 0.3);
-    const holes = (x, y, z) => { // rows of round holes
-      const row = Math.round(y * 60), a = Math.atan2(z, x) * 7 + (row % 2) * 0.5;
-      return y > 0.03 && y < 0.17 && row % 2 === 0 && Math.abs(a - Math.round(a)) < 0.26 ? '#7a1622' : '#e8475a';
-    };
-    const b = bowlPts(0.08, 0.21, 0.2, 24);
-    for (const pts of [b, inner(b)]) k.add(lathe(pts, 56), holes, 'gloss', { p: [0, 0.42, -0.06], r: [Math.PI / 2 - 0.5, 0, 0] });
-    k.add(tor(0.215, 0.014, Math.PI * 2, 40), '#e8475a', 'gloss', { p: [0, 0.42, -0.06], r: [-0.5, 0, 0] });
   },
   'cotton-candy-machine'(k) {
     k.add(lathe([[0.0, 0], [0.12, 0], [0.16, 0.12], [0.14, 0.12], [0.11, 0.02], [0.0, 0.02]], 24), (x, y, z) => (Math.round(Math.atan2(z, x) * 3) % 2 ? '#ffffff' : '#ff9cc8'), 'gloss');

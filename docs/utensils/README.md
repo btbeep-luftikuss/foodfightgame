@@ -1,6 +1,6 @@
 # Utensil Buffers
 
-Twenty support utensils for Kitchen Chaos: Tiny Titans Food Fight. A utensil never replaces the food:
+Twenty support utensils for Kitchen Chaos: Tiny Titans Food Fight (18 of them in the game: the Microwave and the Colander were taken out in prototype 0.63; their art stays here). A utensil never replaces the food:
 the food stays the projectile, keeps its own look and effect, and the utensil adds one boost at one cost.
 
 - `svg/`: one transparent 400×400 SVG per utensil (the source art)
@@ -16,13 +16,13 @@ the food stays the projectile, keeps its own look and effect, and the utensil ad
 | 05 | Whisk | Vortex Spinner | Grapes | Whips your food into a spinning vortex that tugs enemies in and hits them again and again. | The vortex drifts slowly and fades after a few seconds, so timing matters. |
 | 06 | Blender | Particle Stream | Tomato | Purees your food into a pressure jet that coats the floor with the food's effect. | You move slower while spraying, and the jet drains ammo every second. |
 | 07 | Rolling Pin | Kinetic Disc Ricochet | Cookie | Flattens your food into fast discs that ricochet off walls with full effect and knockback. | Discs hit lighter, and a bad angle can bounce one straight back at you. |
-| 08 | Microwave | Charged Plasma | Cheese | Charges your food for 1–2 seconds into a glowing orb that detonates with splash damage. | You must charge it first, and holding too long overcharges it so it pops on you. |
+| 08 | ~~Microwave~~ (not in the game since 0.63) | Charged Plasma | Cheese | Charges your food for 1–2 seconds into a glowing orb that detonates with splash damage. | You must charge it first, and holding too long overcharges it so it pops on you. |
 | 09 | Grater | Flechette Cloud | Carrot | Shreds your food into a dense, fast cloud that tears through groups up close. In the game (0.49) grated cheese slows, grated chili burns, grated ice chills; soft food mushes into slippery blobs instead. | The shreds lose power quickly with distance and chew through ammo. |
 | 10 | Spatula | Ricochet Crit | Jelly | Flips your food for a guaranteed critical hit that can bank off walls. | The crit only lands on a well-aimed flip; miss the angle and the shot is wasted. |
 | 11 | Deep Fryer | Napalm Coater | Chili | Coats your food in hot oil that leaves burning slicks carrying the food's effect. | The slicks are slippery for you too, and the fryer overheats if used back to back. |
 | 12 | Mortar & Pestle | Powder Mortar | Ice | Grinds your food into powder shells that lob far and leave lingering clouds of its effect. | The shells fly slowly, and wind can blow the cloud away from its target. |
-| 13 | Toaster | Scorched Bounce | Cheese | Toasts your food crispy-hot: it bounces twice and leaves a scorched trail. | Each bounce hits a little softer, and it stops after two. |
-| 14 | Colander | Piercing Stream | Soda | Strains your food into a needle-tight stream that pierces through several enemies in a line. | The recoil slows you while firing, and the thin stream needs precise aim. |
+| 13 | Toaster | Scorched Bounce | Cheese | Toasts your food crispy-hot: it bounces twice and leaves a scorched trail. In the game (0.63) every throw also pops you back: a hop backward, away from where you aim. | Each bounce hits a little softer, and it stops after two. |
+| 14 | ~~Colander~~ (not in the game since 0.63) | Piercing Stream | Soda | Strains your food into a needle-tight stream that pierces through several enemies in a line. | The recoil slows you while firing, and the thin stream needs precise aim. |
 | 15 | Cotton Candy Machine | Sticky Web | Blueberries | Spins your food into sweet, sticky webs that slow and trap enemies. | Webs take a moment to set, and enemies can burn them or wash them off. |
 | 16 | Popcorn Popper | Cluster Burst | Watermelon | Heats your food until it pops mid-flight into a cluster of exploding pieces. | The short fuse can pop it early, and the pieces scatter in random directions. |
 | 17 | Peeler | Layered Multi-Stage | Banana | Each hit on the same target peels off another layer for bigger and bigger damage. | Early layers hit softly, and after the last layer it must cool down before peeling again. |

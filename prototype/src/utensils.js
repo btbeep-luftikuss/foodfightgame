@@ -59,8 +59,6 @@ export const UTENSILS = [
     buff: 'Purees your food into a stream of 7 droplets that slick the floor; grapes and blueberries fly in a dead-straight jet.', trade: 'You slow down while spraying, and it uses 1 extra food.' },
   { id: 'rolling-pin', tip: 'Ricochets off walls', name: 'Rolling Pin', role: 'Kinetic Disc Ricochet', color: '#d9a464', works: THROWN,
     buff: 'Flattens your food into a fast disc that ricochets off 2 walls and knocks back. Wheels and melons roll out faster.', trade: 'Hits a bit softer, and after a bounce the disc can hit you too.' },
-  { id: 'microwave', tip: 'Hold 1–2 s, let go before 2.4 s', name: 'Microwave', role: 'Charged Plasma', color: '#ffc23a', works: THROWN,
-    buff: 'Hold the throw 1 to 2 s to charge a glowing orb that explodes on impact. With blueberries, every 1.5 s of fire sends a plasma berry.', trade: 'Hold it past 2.4 s and it overcharges and pops on you.' },
   { id: 'grater', tip: '8 shreds up close · cheese, ice, chili shreds bite', name: 'Grater', role: 'Flechette Cloud', color: '#ff9d3a', works: THROWN,
     buff: 'Shreds firm food into a fast, dense cloud of 8 shreds up close. Grated cheese sticks and slows, grated ice is a snow blast that chills (slows) on top of its freeze, grated chili burns. Soft food is too squishy to grate: it mushes into 5 blobs that leave slippery splats.', trade: 'Shreds fall apart after a few metres, and it uses 1 extra food.' },
   { id: 'spatula', tip: 'Every hit crits · banks off a wall', name: 'Spatula', role: 'Ricochet Crit', color: '#3fd0bf', works: THROWN,
@@ -69,10 +67,8 @@ export const UTENSILS = [
     buff: 'Coats your food in hot oil: it sets targets on fire and leaves a burning slick. A dropped peel sits in an oil slick.', trade: 'The slick is slippery for you too, and frying too fast overheats it for 5 s.' },
   { id: 'mortar-and-pestle', tip: 'Lands right on your aim point', peelTip: 'Your peel lands on your aim point', name: 'Mortar & Pestle', role: 'Powder Mortar', color: '#9fc4e6', works: WITH_PEEL.filter((f) => f !== 'banana'),
     buff: 'Lobs your food high onto your aim point; it bursts into a lingering cloud of its effect. It even lobs a peel trap.', trade: 'The shell is slow to land, homing food stops homing, and the wind blows the cloud away.' },
-  { id: 'toaster', tip: 'Bounces twice', name: 'Toaster', role: 'Scorched Bounce', color: '#ff7a3a', works: THROWN,
-    buff: 'Toasts your food crispy: it bounces twice, splashing and scorching each time. Rolled food leaves a scorched trail and burns.', trade: 'Each hit is softer, and it stops after 2 bounces.' },
-  { id: 'colander', tip: 'Pierces through Titans · recoil', name: 'Colander', role: 'Piercing Stream', color: '#ff5f6d', works: THROWN,
-    buff: 'Strains your food into a needle-fast shot that pierces up to 3 Titans (grapes and berries pierce 1).', trade: 'The recoil shoves and slows you, and the thin shot needs precise aim.' },
+  { id: 'toaster', tip: 'Bounces twice · pops you back', name: 'Toaster', role: 'Scorched Bounce', color: '#ff7a3a', works: THROWN,
+    buff: 'Toasts your food crispy: it bounces twice, splashing and scorching each time. Rolled food leaves a scorched trail and burns. Every throw pops you back like toast out of a toaster: a hop backward, away from trouble.', trade: 'Each hit is softer, it stops after 2 bounces, and the pop back can throw you off a ledge.' },
   { id: 'cotton-candy-machine', tip: 'Sticky web where it lands', peelTip: 'Your peel lands in a sticky web', name: 'Cotton Candy Machine', role: 'Sticky Web', color: '#ff8fc8', works: WITH_PEEL,
     buff: 'Spins a sticky web where your food lands that slows and traps enemies; direct hits root. Works around a dropped peel too.', trade: 'The web takes a moment to set, and fire or water destroys it.' },
   { id: 'popcorn-popper', tip: 'Pops into pieces mid-air', name: 'Popcorn Popper', role: 'Cluster Burst', color: '#ffd23a', works: THROWN,
@@ -142,7 +138,6 @@ const TORUS = new THREE.TorusGeometry(1, 0.32, 8, 22);
 const ICO = new THREE.IcosahedronGeometry(1, 1);
 const MAT = {
   cream: new THREE.MeshStandardMaterial({ color: '#fffaf2', roughness: 0.45, emissive: '#d8f3ff', emissiveIntensity: 0.25 }),
-  plasma: new THREE.MeshBasicMaterial({ color: '#ffd84a', transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false }),
   flame: new THREE.MeshBasicMaterial({ color: '#ff6a1f', transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }),
   oil: new THREE.MeshStandardMaterial({ color: '#ffc23a', roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.4, depthWrite: false }),
   shield: new THREE.MeshBasicMaterial({ color: '#9fe8ff', transparent: true, opacity: 0.22, depthWrite: false }),
@@ -405,20 +400,6 @@ const RULES = {
       if (hit.actor && p.x.kb) hit.actor.knock(_v.copy(p.vel).setY(0).normalize().multiplyScalar(8).setY(3));
     },
   },
-  microwave: {
-    charge: () => ({ need: 1, auto: false, over: 2.4 }),
-    launch(o, a, rel, I) {
-      if (rel.auto) { // blueberries: every 1.5 s of steady fire, one berry comes out as a small plasma orb
-        const s = a.uState;
-        if (s.fire - s.lastOrb < 1.5) return null;
-        s.lastOrb = s.fire;
-        return [{ ...clone(o), x: { m: 1, sm: 1 } }];
-      }
-      return rel.t >= 1 ? [lead({ ...clone(o), x: { m: 1.1 } }, I)] : null;
-    },
-    post(p, hit, U) { if (!p.x.nf) U.once(p, 'boom', () => U.plasma(hit.point, p)); },
-    expire(p, U) { if (p.roll && !p.x.nf) U.once(p, 'boom', () => U.plasma(p.pos, p)); },
-  },
   grater: {
     cost: 1,
     launch(o, a, rel, I) {
@@ -502,6 +483,15 @@ const RULES = {
       return true; // keeps flying
     },
     post(p, hit) { if (hit.actor && p.x.tr) hit.actor.burn(1.5); },
+    // (0.63, from the old Colander's recoil) every throw pops you back: a hop backward, away from where you aim
+    // (rapid fire: a steady little push)
+    released(a, U, rel) {
+      const back = _w.copy(a.aimDir).setY(0);
+      if (back.lengthSq() < 1e-4) forwardOf(a.yaw, back);
+      back.normalize().multiplyScalar(rel.auto ? -0.8 : -9);
+      a.knock(back.setY(rel.auto ? 0 : 6));
+      if (!rel.auto) { U.game.fx.burst('ember', a.pos, 0.4); U.game.sfx.play('dodge', a.pos, 0.5); }
+    },
     step(p, dt, U) { // a toasted wheel scorches the floor it rolls over
       if (!p.x.tr || !p.roll) return;
       p.uScorch = (p.uScorch || 0) - dt;
@@ -510,22 +500,6 @@ const RULES = {
       const gy = groundHeight(p.pos.x, p.pos.z, p.pos.y);
       U.game.world.paintSplat(p.pos.x, gy, p.pos.z, p.radius * 1.3, 'soda');
       U.game.fx.burst('ember', _v.set(p.pos.x, gy + 0.2, p.pos.z), 0.5);
-    },
-  },
-  colander: {
-    launch(o, a, rel, I) {
-      if (I.kind === 'roll') return [{ ...clone(o), vel: o.vel.clone().multiplyScalar(1.9), x: { m: 0.9 } }];
-      if (I.kind === 'pellet') return [{ ...clone(o), vel: o.vel.clone().multiplyScalar(1.4), gravity: (o.gravity ?? 1) * 0.5, radius: radiusOf(o) * 0.7, x: { m: 0.9, pc: 1 } }];
-      const v = o.vel.clone();
-      if (v.length() < 70) v.multiplyScalar(1.9);
-      return [{ ...clone(o), vel: v, gravity: (o.gravity ?? 1) * 0.25, radius: radiusOf(o) * 0.5, x: { m: 0.9, pc: 3 } }];
-    },
-    released(a, U, rel) {
-      const back = _w.copy(a.aimDir).setY(0);
-      if (back.lengthSq() < 1e-4) forwardOf(a.yaw, back);
-      back.normalize().multiplyScalar(rel.auto ? -0.9 : -5);
-      a.knock(back.setY(rel.auto ? 0 : 0.5));
-      a.surfaceSlow = 0.35; a.surfaceSlowUntil = U.game.time + 0.6;
     },
   },
   'cotton-candy-machine': {
@@ -737,7 +711,6 @@ export class Utensils {
     if (u.legendary) return this._legendStatus(a, u, food, false) || u.tip;
     const firing = t - s.autoAt < 0.3;
     if (food.auto && u.id === 'blow-torch') return firing && s.fire >= 3 ? 'Berries ablaze!' : firing ? `Keep firing: ${s.fire.toFixed(1)} / 3 s` : 'Keep firing 3 s to ignite';
-    if (food.auto && u.id === 'microwave') return 'Every 1.5 s of fire: a plasma berry';
     if (u.id === 'oven-mitt' && !food.auto && t < s.cdUntil) return `Power throw in ${Math.ceil(s.cdUntil - t)} s`;
     if (u.id === 'peeler' && t < s.peel.cdUntil) return `Re-peel in ${Math.ceil(s.peel.cdUntil - t)} s`;
     if (u.id === 'mixer') { const i = this.mixSlot(a); return i < 0 ? 'Carry a second food to mix' : `Mixing in ${FOODS[a.inv[i].id].name}`; }
@@ -950,7 +923,6 @@ export class Utensils {
     switch (u) {
       case 'ice-cream-machine': add('cream', TORUS, MAT.cream, Math.max(0.3, r * 1.25)); break;
       case 'blow-torch': add('flame', SPHERE, MAT.flame, Math.max(0.35, r * 1.9)); break;
-      case 'microwave': add('plasma', SPHERE, MAT.plasma, Math.max(0.4, r * (x.sm ? 3 : 2.2))); break;
       case 'deep-fryer': add('oil', SPHERE, MAT.oil, Math.max(0.28, r * 1.3)); break;
       case 'oven-mitt': add('shield', SPHERE, MAT.shield, Math.max(0.45, r * 2)); add('hex', ICO, MAT.hex, Math.max(0.46, r * 2.02)); break;
       case 'gold-cream': add('cream', TORUS, MAT.cream, Math.max(0.35, r * 1.4)); add('gold', SPHERE, MAT.gold, Math.max(0.3, r * 1.5)); break;
@@ -1004,14 +976,12 @@ export class Utensils {
     switch (u) {
       case 'blow-torch': case 'toaster': P.spray('blobs', p.pos, 2, { speed: 1, up: 1, colors: [col('#ff3d00'), col('#ffae00')], size: 0.1, life: 0.35, grav: -0.3 }); break;
       case 'ice-cream-machine': P.spray('puffs', p.pos, 1, { speed: 0.4, up: 0.2, colors: [col('#ffffff'), col('#dff6ff')], size: 0.3, life: 0.4, grav: 0.2, grow: 0.5 }); break;
-      case 'microwave': P.spray('blobs', p.pos, 2, { speed: 2, up: 1, colors: [col('#fff6a8'), col('#ffd23a')], size: 0.08, life: 0.3, grav: 0 }); break;
       case 'deep-fryer': P.spray('blobs', p.pos, 1, { speed: 0.5, up: 0, colors: [col('#ffc23a')], size: 0.09, life: 0.5, grav: 1 }); break;
       case 'oven-mitt': P.spray('puffs', p.pos, 1, { speed: 0.3, up: 0.3, colors: [col('#ffffff')], size: 0.35, life: 0.3, grav: -0.2, grow: 0.8 }); break;
       case 'whisk': P.spray('puffs', p.pos, 1, { speed: 1.2, up: 0.4, colors: [col('#b98cff')], size: 0.25, life: 0.35, grav: 0, grow: 0.6 }); break;
       case 'cotton-candy-machine': P.spray('puffs', p.pos, 1, { speed: 0.4, up: 0.2, colors: [col('#ff8fc8'), col('#9fd6ff')], size: 0.3, life: 0.45, grav: 0, grow: 0.6 }); break;
       case 'mortar-and-pestle': P.spray('puffs', p.pos, 1, { speed: 0.4, up: 0.2, colors: [col(TINT[p.food] || '#ffffff')], size: 0.3, life: 0.5, grav: 0, grow: 0.8 }); break;
       case 'spatula': if (Math.random() < 0.5) P.spray('blobs', p.pos, 1, { speed: 1, up: 1, colors: [col('#fff6a8')], size: 0.07, life: 0.3, grav: 0 }); break;
-      case 'colander': P.spray('blobs', p.pos, 1, { speed: 0.3, up: 0, colors: [col(TINT[p.food] || '#ffffff')], size: 0.07, life: 0.25, grav: 0 }); break;
       case 'popcorn-popper': if (!p.x.pp) P.spray('blobs', p.pos, 1, { speed: 1.5, up: 1.5, colors: [col('#fff3c0')], size: 0.08, life: 0.3, grav: 0.5 }); break;
       case 'gold-popper': if (!p.x.cs) P.spray('blobs', p.pos, 2, { speed: 2, up: 1.5, colors: [col('#ffd23a'), col('#fff3c0')], size: 0.12, life: 0.4, grav: 0.5 }); break;
       case 'gold-cream': P.spray('puffs', p.pos, 1, { speed: 0.5, up: 0.2, colors: [col('#ffffff'), col('#bff3ff')], size: 0.4, life: 0.45, grav: 0.2, grow: 0.5 }); break;
@@ -1092,13 +1062,6 @@ export class Utensils {
     if (this.stampGround(pt, 3, 'slick', 6) === false) return;
     this.addZone('fire', pt, p, 6, 2.8);
     this.game.world.paintSplat(pt.x, pt.y, pt.z, 2.6, 'cheese');
-  }
-  plasma(pt, p) { // Microwave: the charged orb goes off
-    const g = this.game, sm = !!p.x.sm;
-    g.explode(pt, sm ? 2.4 : 3.5, sm ? 12 : 22, p.owner, ROOT[p.food] || p.food, sm ? 5 : 9);
-    g.fx.burst('fire', pt, sm ? 0.6 : 1.1);
-    g.fx.spray('puffs', pt, sm ? 5 : 10, { speed: 4, up: 3, colors: [col('#fff3a8'), col('#ffd23a')], size: sm ? 0.6 : 0.9, life: 0.5, grav: 0, grow: 1.6 });
-    g.sfx.play('boom', pt, sm ? 0.45 : 0.8);
   }
 
   // ------------------------------------------------------------------ zones

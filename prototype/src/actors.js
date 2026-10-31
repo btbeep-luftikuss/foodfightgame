@@ -544,7 +544,7 @@ export class Actor {
       return;
     }
     if (!ready) { this.primaryPrev = it.primary; return; }
-    // a utensil can ask for a longer hold (Blow Torch, Microwave, Ice Cream Machine, Mixer)
+    // a utensil can ask for a longer hold (Blow Torch, Ice Cream Machine, Mixer, the Legendary Oven Mitt)
     const rule = this.chargeRule = g.utensils.chargeRule(this, food);
     const chargeLen = this.chargeLen = Math.max(food.charge, rule ? rule.need : 0);
     if (food.auto) { // rapid fire: keeps firing while held

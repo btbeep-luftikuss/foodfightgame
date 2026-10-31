@@ -63,6 +63,11 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.63: no more Microwave or Colander, and the Toaster pops you back** (`src/utensils.js`, `src/utensil-models.js`, `src/utensil-art.js`, `docs/utensils/build.mjs`, `src/net.js`)
+
+- **The Microwave and the Colander are gone** from the game: no more delivery boxes, pickups, loadout picks, Test World buttons or bot kits with them (a remembered loadout pick of either falls back to none). 18 everyday utensils and 6 Legendary ones now. Their art stays in the utensil docs; the game's build leaves it out.
+- **The Toaster pops you back:** every throw now hops you backward, away from where you aim, like toast popping out of a toaster (it was the Colander's recoil): about 4.8 m back and 0.8 m up from one tomato, a steady push (about 2.7 m a second) while firing blueberries. Its food still bounces twice, splashing and scorching. Mind ledges. Online version 63.
+
 **Version 0.62: Popcorn Popper minis burst on the floor, faster Grater rain, a Legendary Oven Mitt for every food** (`src/legendary.js`, `src/utensils.js`, `src/net.js`)
 
 - **Legendary Popcorn Popper:** every mini bomb now lands on the floor and bursts there (no more bursting in mid-air on a fuse); a mini that hits a wall drops down it to the floor first. Measured: all 90 minis of a cascade burst at floor height, out in the open and against a wall. The rings were pulled in a little so they still land among the Titans: tomato, one at 10 m splatted in 4.0 s (was 4.6), 630 to a group of four in 5 s (was 550).
