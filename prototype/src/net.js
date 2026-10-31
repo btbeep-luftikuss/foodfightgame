@@ -48,6 +48,14 @@
 // Low player 10 times a second too (only the latest of each). Remote Titans are drawn a little
 // further ahead when updates come less often.
 //
+// The lobby (0.68): a room starts in its lobby. Everyone votes on the game (lv: mode, map, team size,
+// bots), picks a team (tp), says they're ready (w) and chats ('ch' events). The host counts the votes
+// (the settings with the most; a tie keeps what was winning, else the host's vote, else the first) and
+// shares the result for the next round (nx) besides this round's settings (rs), and the lobby clock (lb:
+// 0 in the lobby or 1 in a match, and the seconds left of the countdown). The match starts once everyone
+// is ready (a 5 s countdown) or when the host says so (3 s); every round after uses the votes as they are
+// then; the host can take everyone back to the lobby (no round: rd is null).
+//
 // Teams and Cooking Pot Wars (0.26): the room settings carry the mode and the team size; every
 // Titan's state carries its team and the pot on its back. Players pick their team (state), the host
 // fills the rest with bots. In Cooking Pot Wars the host owns the pots and shares them (pw); players
@@ -78,7 +86,7 @@ const MIN_SENT = 6;     // an event leaves the log once it went out this often a
 const BUDGET = 3900;    // bytes of one player's presence (the claude.ai room refuses over 4096)
 // (0.51) The game's version, in every update: players on different copies of the game (one browser still
 // showing an older one) play by different rules, so each is told to reload. Bump it with every release.
-export const NET_VERSION = 66;
+export const NET_VERSION = 68;
 // What a hit did besides its damage, merged into the claim for it (freezes add up to 3, shoves add up)
 function mergeStatus(a, s) {
   for (const [k, v] of Object.entries(s)) {
@@ -102,6 +110,10 @@ const cleanRS = (rs) => { // eslint-disable-line arrow-body-style
   const mode = MODES_OK.includes(rs.mode) ? rs.mode : 'classic';
   return { map: MAPS_OK.includes(rs.map) ? rs.map : 'kitchen', mode, team: cleanSize(rs.team, mode), bots: BOTS_OK.includes(rs.bots) ? rs.bots : 'medium', since: num(rs.since, 0, 1e15) };
 };
+// (0.68) A player's votes in the lobby: [mode, map, team size, bots] ('' or 0: no vote)
+const cleanVotes = (v) => (Array.isArray(v) ? { mode: MODES_OK.includes(v[0]) ? v[0] : '', map: MAPS_OK.includes(v[1]) ? v[1] : '', team: [1, 2, 3, 4].includes(v[2]) ? v[2] : 0, bots: BOTS_OK.includes(v[3]) ? v[3] : '' } : { mode: '', map: '', team: 0, bots: '' });
+export const VOTE_OPTIONS = { mode: MODES_OK, map: MAPS_OK, team: [1, 2, 3, 4], bots: BOTS_OK };
+const cleanChat = (s) => String(s || '').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 140);
 const STATES = ['drop', 'play', 'over'];
 const cleanRD = (rd) => (Array.isArray(rd) ? [num(rd[0], 0, 1e6) | 0, STATES.includes(rd[1]) ? rd[1] : 'play',
   num(rd[2], -300, 300), num(rd[3], -300, 300), num(rd[4], 0, 400, 330), num(rd[5], 0, 10) | 0, rd[6] === 'shrink' ? 'shrink' : 'wait',
@@ -245,6 +257,12 @@ export class Net {
     this.loadout = null;          // my 3 foods (picked after joining)
     this.utensil = null;          // ... and my utensil
     this.ready = false;           // I want to play (false: only watching)
+    this.votes = { mode: '', map: '', team: 0, bots: '' }; // (0.68) my votes in the lobby
+    this.chat = []; this.chatV = 0; this.chatAt = 0; // (0.68) the room's chat as I've seen it (newest last), a change counter, my last message
+    this.startReq = false;        // (0.68, host) start the match now
+    this.lobbyAt = null;          // (0.68, host) when the countdown ends (game time), or null
+    this.matchSettings = null;    // (0.68, host) the settings of the round on now
+    this.hostLobby = null; this.hostNext = null; // (0.68) the room's lobby clock and next settings, from the host
     this.isHost = false; this.hostPeer = null; this.hostSince = 0;
     this.hostSettings = null; this.hostRound = null; // the room's, from the host
     this.botProxies = new Map();  // `${hostPeer}|b${id}` -> proxy of one of the host's bots
@@ -257,7 +275,65 @@ export class Net {
   get low() { const m = netPref(); return m === 'low' || (m === 'auto' && (this.autoLow || slowDevice())); }
   newKey() { return `${this.tag}${(++this.keyN).toString(36)}`; }
 
-  roomSettings() { return this.hostSettings ? { ...this.hostSettings } : { ...this.settings }; }
+  // The settings of the round on now (in the lobby: what the votes say)
+  roomSettings() {
+    if (this.isHost) return this.game.round?.id >= 0 && this.matchSettings ? { ...this.matchSettings } : this.tally();
+    return this.hostSettings ? { ...this.hostSettings } : { ...this.settings };
+  }
+  // (0.68) The settings the next round (or match) gets: the votes, as the host counts them
+  nextSettings() {
+    if (this.isHost) return this.tally();
+    return this.hostNext ? { ...this.hostNext } : this.roomSettings();
+  }
+  // Everyone in the room, me first: { peer, name, ready, votes, team (picked, -1 any), host, me }
+  people() {
+    const out = [{ peer: this.myPeer, name: this.name, ready: this.ready, votes: this.votes, team: this.teamPick, host: this.isHost, me: true, color: this.color }];
+    for (const [peer, pr] of this.proxies) out.push({ peer, name: pr.actor.name, ready: !!pr.ready, votes: pr.votes || cleanVotes(null), team: pr.teamPick ?? -1, host: peer === this.hostPeer && !this.isHost, me: false, color: pr.actor.ownColor || pr.actor.color });
+    return out;
+  }
+  // (host) count the votes: the most votes wins; a tie keeps what was winning, else my vote, else the first option
+  tally() {
+    const prev = this.lastTally || this.settings, people = this.people(), out = {};
+    for (const [k, opts] of Object.entries(VOTE_OPTIONS)) {
+      const n = new Map();
+      for (const p of people) if (p.votes[k]) n.set(p.votes[k], (n.get(p.votes[k]) || 0) + 1);
+      const top = Math.max(0, ...n.values());
+      const tied = opts.filter((o) => (n.get(o) || 0) === top && top > 0);
+      out[k] = !tied.length ? this.settings[k] : tied.includes(prev[k]) ? prev[k] : tied.includes(this.votes[k]) ? this.votes[k] : tied[0];
+    }
+    this.lastTally = cleanRS(out);
+    return { ...this.lastTally };
+  }
+  // how many vote for each option of each setting
+  voteCounts() {
+    const c = { mode: {}, map: {}, team: {}, bots: {} };
+    for (const p of this.people()) for (const k of Object.keys(c)) if (p.votes[k]) c[k][p.votes[k]] = (c[k][p.votes[k]] || 0) + 1;
+    return c;
+  }
+  // in the lobby right now (no round on), and the countdown (seconds, or null)
+  inLobby() { return (this.game.round?.id ?? -1) < 0; }
+  countdown() {
+    if (this.isHost) return this.lobbyAt == null ? null : Math.max(0, this.lobbyAt - this.game.time);
+    const L = this.hostLobby;
+    return L && L.phase === 0 && L.count >= 0 ? L.count : null;
+  }
+  // (host) is everyone in the room ready?
+  allReady() { const p = this.people(); return p.length > 0 && p.every((x) => x.ready); }
+  // (0.68) Chat: say something to the room
+  say(text) {
+    const t = cleanChat(text), now = performance.now();
+    if (!t || now - this.chatAt < 600) return false;
+    this.chatAt = now;
+    this.event('ch', t);
+    this._heard(this.name, this.color, t, true);
+    return true;
+  }
+  _heard(name, color, text, mine = false) {
+    this.chat.push({ name, color, text, mine, at: Date.now() });
+    if (this.chat.length > 60) this.chat.shift();
+    this.chatV++;
+    this.onChat?.(this.chat.at(-1));
+  }
 
   async connect(lobby, roomName, name, settings = {}) {
     this.settings = cleanRS({ ...this.settings, ...settings });
@@ -368,7 +444,9 @@ export class Net {
     this.frame = (this.frame + 1) % 1e6;
     this._flushClaims();
     // every field, every time: what isn't mine (any more) goes out as null, which takes it off my presence
-    const msg = { v: NET_VERSION, n: this.name, c: this.color, k: this.game.playerSkin, w: this.ready ? 1 : 0, hl: g.highlights.playing?.live ? 1 : 0, s: this._stateOf(p, this.game.input.pitch), pm: null, rs: null, rd: null, b: null, pw: null, e: [] };
+    const V = this.votes;
+    const msg = { v: NET_VERSION, n: this.name, c: this.color, k: this.game.playerSkin, w: this.ready ? 1 : 0, hl: g.highlights.playing?.live ? 1 : 0, s: this._stateOf(p, this.game.input.pitch), pm: null, rs: null, rd: null, b: null, pw: null, e: [],
+      lv: V.mode || V.map || V.team || V.bots ? [V.mode, V.map, V.team, V.bots] : null, tp: this.teamPick >= 0 ? this.teamPick : null, nx: null, lb: null }; // (0.68: my votes, my team pick)
     if (g.mode === 'pots') msg.pm = (g.potMenu || []).map((id) => FOOD_IDS.indexOf(id).toString(36)).join(''); // my pick for my pot's menu
     if (this.isHost && g.pots.active) msg.pw = [Math.max(0, g.round.id), ...g.pots.state()]; // Cooking Pot Wars: the pots
     msg.sp = this.isHost && g.round.id >= 0 ? [g.round.id, g.items.spawnerCode()] : null; // (0.44) which food spots hold food
@@ -385,7 +463,9 @@ export class Net {
     if (this.isHost) {
       const R = g.round, T = g.tide, to = T.to || { x: T.x, z: T.z, r: T.r };
       msg.rs = { ...this.roomSettings(), since: this.hostSince };
-      msg.rd = [Math.max(0, fin(R.id)), STATES.includes(R.state) ? R.state : 'drop', r2(T.x), r2(T.z), r2(T.r), fin(T.phase), T.mode === 'shrink' ? 'shrink' : 'wait', r2(Math.max(0, T.t)), R.winner || '', r2(R.t), r2(to.x), r2(to.z), r2(to.r), R.fresh ? 1 : 0, r2(R.playAt ?? 0), g.arena.score[0] | 0, g.arena.score[1] | 0];
+      msg.nx = this.tally(); // (0.68) what the votes say, for the next round
+      msg.lb = [R.id >= 0 ? 1 : 0, this.lobbyAt == null ? -1 : r1(Math.max(0, this.lobbyAt - t))]; // (0.68) lobby or match; the countdown
+      msg.rd = R.id < 0 ? null : [Math.max(0, fin(R.id)), STATES.includes(R.state) ? R.state : 'drop', r2(T.x), r2(T.z), r2(T.r), fin(T.phase), T.mode === 'shrink' ? 'shrink' : 'wait', r2(Math.max(0, T.t)), R.winner || '', r2(R.t), r2(to.x), r2(to.z), r2(to.r), R.fresh ? 1 : 0, r2(R.playAt ?? 0), g.arena.score[0] | 0, g.arena.score[1] | 0];
       // a bot's name, colour and skin only every 10th update (receivers keep them)
       msg.b = this._localBots().map((a) => [a.id, (this.frame + a.id) % 10 ? 0 : [a.name, a.color, a.skinId || 'chef'], ...this._stateOf(a, Math.asin(clamp(a.aimDir.y, -1, 1)))]);
     }
@@ -414,6 +494,7 @@ export class Net {
   // fewer players (then fewer Titans), and stays on it.
   _squadTeams() {
     const g = this.game, map = (this.teamMap ||= new Map());
+    if (g.round.id < 0) map.clear(); // (0.68: in the lobby the sides follow the picks as they change)
     const ready = new Map([[this.myPeer, this.ready]]);
     for (const [peer, pr] of this.proxies) ready.set(peer, pr.ready);
     for (const peer of [...map.keys()]) if (!ready.get(peer)) map.delete(peer);
@@ -423,6 +504,8 @@ export class Net {
       if (own?.alive && (own.team === 0 || own.team === 1)) { map.set(peer, own.team); continue; } // (already playing on a side: it stays)
       const n = [0, 0];
       for (const t of map.values()) n[t]++;
+      const want = peer === this.myPeer ? this.teamPick : this.proxies.get(peer)?.teamPick ?? -1; // (0.68: a side picked in the lobby, while it has room)
+      if ((want === 0 || want === 1) && n[want] < 6) { map.set(peer, want); continue; }
       const titans = [0, 1].map((t) => g.actors.filter((a) => a.alive && a.team === t).length);
       map.set(peer, n[0] !== n[1] ? (n[0] < n[1] ? 0 : 1) : titans[0] <= titans[1] ? 0 : 1);
     }
@@ -543,6 +626,9 @@ export class Net {
       if (this.hostPeer !== top[0]) { this.hostPeer = top[0]; for (const key of [...this.botProxies.keys()]) if (!key.startsWith(`${top[0]}|`)) this._dropBot(key); }
       this.hostSettings = top[3];
       this.hostRound = cleanRD(top[2].rd);
+      this.hostNext = cleanRS(top[2].nx); // (0.68) the votes, as the host counts them
+      const lb = top[2].lb;
+      this.hostLobby = Array.isArray(lb) ? { phase: lb[0] === 1 ? 1 : 0, count: num(lb[1], -1, 30, -1) } : null;
       const tm = top[2].tm; // (0.54) Squads: the teams the host split the players into
       this.hostTeams = tm && typeof tm === 'object' && !Array.isArray(tm) ? tm : null;
       this._syncBots(top[0], top[2].b);
@@ -658,6 +744,8 @@ export class Net {
     this._checkVersion(pr, pres.v);
     if (/^#[0-9a-f]{6}$/i.test(pres.c)) pr.actor.ownColor = pres.c;
     pr.potMenu = typeof pres.pm === 'string' && pres.pm.length <= 5 ? [...pres.pm].map((c) => FOOD_IDS[parseInt(c, 36)]).filter(Boolean) : null;
+    pr.votes = cleanVotes(pres.lv); // (0.68) their votes and team pick in the lobby
+    pr.teamPick = typeof pres.tp === 'number' ? num(pres.tp, 0, 5) | 0 : -1;
     this._applyState(pr, pres.s);
 
     // events we haven't seen yet (0.33: they may come in any order: each is numbered, and we keep the
@@ -766,6 +854,14 @@ export class Net {
       return;
     }
     let a = pr.actor;
+    if (type === 'ch') { // (0.68) a chat message (plain text, at most 5 every 4 s from one player)
+      const t = cleanChat(d[0]), now = this.game.time;
+      pr.chatTimes = (pr.chatTimes || []).filter((x) => now - x < 4);
+      if (!t || pr.chatTimes.length >= 5) return;
+      pr.chatTimes.push(now);
+      this._heard(a.name, a.ownColor || a.color, t);
+      return;
+    }
     if (type === 't') {
       const o = d[0];
       if (!o || typeof o !== 'object') return;

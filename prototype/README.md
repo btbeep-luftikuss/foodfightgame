@@ -63,6 +63,15 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.68: a lobby for every online room** (`src/net.js`, `src/game.js`, `src/main.js`, `src/hud.js`, `src/input.js`, `index.html`)
+
+- **Meet in the lobby first:** everyone who joins the same room code lands in the room's lobby instead of straight in a round. The lobby lists who's there (the host, their team, ready or not), and nobody has to pick the same settings any more.
+- **Vote on the game:** everyone votes on the mode (Classic, Chef's Choice, Pot Wars, Squads, King of the Utensil), the map, the team size (Solo, Duos, Trios, Quads) and the bots (none, easy, medium, hard). The option with the most votes wins (each shows its count, the winner is outlined); a tie keeps what was winning, else the host's vote. Press your vote again to take it back. With no votes the host's menu settings are used. Votes count for every round after: change them during a match and the next round plays what they say then.
+- **Pick your team in the lobby:** the teams of the winning mode and size, with who picked which; Squads sides can be picked too (the host keeps you there while it has room, up to 6).
+- **Chat:** a chat box in the lobby, and in a match press **Enter** to say something (Enter sends, Esc cancels); what others say shows in the feed. Plain text only, up to 140 characters, at most 5 messages every 4 s from one player.
+- **Ready up:** pick 3 foods (and a utensil) and press **Ready**. The match starts by itself 5 s after everyone is ready, or 3 s after the host presses **Start now** (anyone not ready watches and can drop in). During a match the host can take **everyone back to the lobby** (from the pause menu's **Lobby & chat**, which anyone can open to vote and chat). Players who join mid-match get the card to drop in, as before.
+- Tested with three players in a test room: votes (Squads on the Backyard with hard bots won 2–1), team picks carried into the match, lobby and in-match chat (HTML shows as plain text), the countdown only once all three were ready, back to the lobby and Start now. Online version 68 (older copies are told to reload).
+
 **Version 0.67: a much better Legendary Grater** (`src/legendary.js`, `src/utensils.js`, `src/net.js`)
 
 - **Clouds hunt:** a cloud that lands near someone (within 7 m) goes after the nearest enemy, not just the Titan it hit, and follows at 6.5 m/s (was 4): faster than a walk (5.6), still slower than a sprint (8.5), so you can get out from under it if you run.

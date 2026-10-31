@@ -392,7 +392,39 @@ button { font: inherit; color: inherit; }
 .tbtn.ladle { width: 54px; height: 54px; right: calc(170px + var(--sr)); bottom: calc(196px + var(--sb)); background: #f3c89a; font-size: 10px; }
 @media (max-width: 560px) { .touchui .tbtn.ladle { width: 48px; height: 48px; right: calc(160px + var(--sr)); bottom: calc(262px + var(--sb)); } .touchui .pots ul { gap: 6px; } .touchui .pots li { font-size: 11px; } .touchui .php { width: 30px; } }
 /* the loadout card: what you bring into an online round */
-.card.loadout { width: min(880px, 100%); gap: 10px; padding: 20px 22px 0; }
+.card.loadout { width: min(1040px, 100%); gap: 10px; padding: 20px 22px 0; }
+/* (0.68) the room lobby: players, votes, chat */
+.card p.lo-status { margin: -4px 0 0; font-weight: 800; color: var(--butter); font-size: 14px; }
+.lo-top { display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: 12px; align-items: stretch; }
+@media (max-width: 860px) { .lo-top { grid-template-columns: 1fr 1fr; } .lo-chatbox { grid-column: 1 / -1; } }
+@media (max-width: 560px) { .lo-top { grid-template-columns: 1fr; } }
+.lo-box { display: grid; align-content: start; gap: 4px; padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); min-width: 0; }
+.lo-players { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 210px; overflow: auto; }
+.lo-players li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 7px; font-size: 13.5px; font-weight: 700; min-width: 0; }
+.lo-players li .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.lo-players li .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 4ch; max-width: 100%; }
+.lo-players li .tag { font-size: 11px; font-weight: 800; padding: 1px 6px; border-radius: 8px; background: rgba(255,255,255,0.1); color: var(--paper-dim); flex: none; }
+.lo-players li .tag.ok { background: color-mix(in srgb, #7cf03a 25%, transparent); color: #b9ff8f; }
+.lo-players li .tag.host { background: color-mix(in srgb, var(--butter) 25%, transparent); color: var(--butter); }
+.lo-players li .tag.team { background: color-mix(in srgb, var(--c) 30%, transparent); color: var(--paper); }
+.lo-votes { display: grid; gap: 6px; }
+.lo-vrow { display: grid; grid-template-columns: 52px 1fr; gap: 6px; align-items: start; }
+.lo-vrow > span { font-size: 12px; font-weight: 800; color: var(--paper-dim); padding-top: 5px; }
+.lo-vrow > div { display: flex; flex-wrap: wrap; gap: 4px; }
+.lo-votes button { position: relative; padding: 4px 9px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.14); background: var(--ink); color: var(--paper); font: inherit; font-weight: 700; font-size: 12px; cursor: pointer; }
+.lo-votes button.win { border-color: var(--butter); color: var(--butter); }
+.lo-votes button[aria-pressed="true"] { background: color-mix(in srgb, var(--butter) 22%, #22142a); }
+.lo-votes button b { margin-left: 4px; font-size: 10.5px; padding: 0 5px; border-radius: 7px; background: rgba(255,255,255,0.14); color: var(--paper); }
+.lo-votes button:disabled { opacity: 0.4; cursor: default; }
+.lo-votes .lo-vnote { grid-column: 2; font-size: 11.5px; color: var(--paper-dim); margin: -2px 0 0; }
+.lo-chat { list-style: none; margin: 0; padding: 0; display: grid; align-content: end; gap: 3px; height: 150px; overflow: auto; font-size: 13px; overflow-wrap: anywhere; }
+.lo-chat li b { margin-right: 5px; }
+.lo-chat li.sys { color: var(--paper-dim); font-style: italic; }
+.lo-chatform { display: flex; gap: 6px; }
+.lo-chatform input, .chatbar input { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.16); background: rgba(0,0,0,0.25); color: var(--paper); font: inherit; font-size: 13.5px; }
+.btn.small { padding: 6px 12px; font-size: 13px; }
+.chatbar { position: absolute; left: 16px; bottom: 120px; width: min(460px, calc(100vw - 32px)); display: flex; pointer-events: auto; z-index: 40; }
+.chatbar input { background: var(--ink-glass); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); border-color: var(--butter); }
 .card.loadout h3 { font-size: 34px; }
 .card.loadout .lo-acts { position: sticky; bottom: -16px; z-index: 1; margin: 0 -22px; padding: 10px 22px 16px; border-radius: 0 0 22px 22px; background: var(--ink); box-shadow: 0 -12px 14px -8px var(--ink); }
 .lo-cols { display: grid; grid-template-columns: 1fr 1.25fr; gap: 16px; align-items: start; }
@@ -643,6 +675,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
 <canvas id="game" aria-label="Tiny Titans Food Fight game view"></canvas>
 
 <div id="hud" hidden>
+  <form id="chatbar" class="chatbar" hidden autocomplete="off"><input id="chatbar-in" maxlength="140" placeholder="Chat to the room · Enter to send · Esc to cancel" aria-label="Chat message"></form>
   <button id="sb-open" class="sb-open" type="button" hidden>Test tools <kbd>T</kbd></button>
   <div id="sandbox" class="sandbox" hidden role="dialog" aria-label="Test tools">
     <header><b>Test tools</b><span>Things spawn 10 m ahead of where you face</span><button type="button" id="sb-close" aria-label="Close">✕</button></header>
@@ -728,7 +761,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.67 · Better Grater</p>
+      <p class="eyebrow">Prototype 0.68 · Room lobby</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in; smash the other teams' pots in Cooking Pot Wars; outsplat the other team in Squads; or fight over two Legendary utensils in King of the Utensil.</p>
       <nav class="homenav" aria-label="Main menu">
@@ -862,6 +895,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
         <dt><kbd>V</kbd></dt><dd>Switch first / third person</dd>
         <dt><kbd>G</kbd></dt><dd>Cooking Pot Wars: set your team's pot down (first 30 s), then swing your ladle at enemy pots</dd>
         <dt><kbd>T</kbd></dt><dd>Cooking Pot Wars: climb into (or out of) your pot's turret, then aim and throw from it</dd>
+        <dt><kbd>Enter</kbd></dt><dd>Online: chat to the room (Enter sends, Esc cancels); the pause menu's Lobby &amp; chat opens the room lobby</dd>
         <dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd>Pause</dd>
       </dl>
       <dl class="keys touch-only">
@@ -886,10 +920,26 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
   <p class="live">Bots are fighting live behind this menu</p>
 </section>
 
-<section id="loadout" class="overlay" hidden aria-label="Choose what you bring">
+<section id="loadout" class="overlay" hidden aria-label="Room lobby">
   <div class="card loadout">
-    <h3>Your loadout</h3>
+    <h3 id="lo-title">Room lobby</h3>
     <p id="lo-room" class="lo-room"></p>
+    <p id="lo-status" class="lo-status" aria-live="polite"></p>
+    <div class="lo-top">
+      <div class="lo-box">
+        <p class="lo-h"><b>Players</b><span id="lo-pcount"></span></p>
+        <ul id="lo-players" class="lo-players"></ul>
+      </div>
+      <div class="lo-box">
+        <p class="lo-h"><b>Vote on the game</b><span>the most votes wins</span></p>
+        <div id="lo-votes" class="lo-votes"></div>
+      </div>
+      <div class="lo-box lo-chatbox">
+        <p class="lo-h"><b>Chat</b><span>press Enter to chat in a match too</span></p>
+        <ul id="lo-chat" class="lo-chat" aria-live="polite"></ul>
+        <form id="lo-chatform" class="lo-chatform" autocomplete="off"><input id="lo-chatin" maxlength="140" placeholder="Say something…" aria-label="Chat message"><button class="btn small" type="submit">Send</button></form>
+      </div>
+    </div>
     <div id="lo-teams-row" class="teampick-row" hidden>
       <p class="lo-h"><b>Your team</b><span>bots fill the empty places</span></p>
       <div id="lo-teams" class="teampick" role="group" aria-label="Your team"></div>
@@ -911,6 +961,9 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
     <p id="lo-note" class="lo-note"></p>
     <div class="row lo-acts">
       <button id="lo-ready" class="btn" type="button" disabled>Pick 3 foods</button>
+      <button id="lo-start" class="btn" type="button" hidden>Start now</button>
+      <button id="lo-close" class="btn ghost" type="button" hidden>Back to the game</button>
+      <button id="lo-tolobby" class="btn ghost" type="button" hidden>Everyone back to the lobby</button>
       <button id="lo-watch" class="btn ghost" type="button">Spectate</button>
       <button id="lo-leave" class="btn ghost" type="button">Leave room</button>
     </div>
@@ -921,7 +974,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
   <div class="card">
     <h3>Paused</h3>
     <p>The food will wait for you.</p>
-    <div class="row"><button id="resume" class="btn" type="button">Resume</button><button id="leave" class="btn ghost" type="button">Main menu</button></div>
+    <div class="row"><button id="resume" class="btn" type="button">Resume</button><button id="pause-lobby" class="btn ghost" type="button" hidden>Lobby &amp; chat</button><button id="leave" class="btn ghost" type="button">Main menu</button></div>
     <div id="gfx-pause" class="gfx"></div>
   </div>
 </section>

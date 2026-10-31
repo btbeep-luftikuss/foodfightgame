@@ -150,6 +150,25 @@ export class Game {
     this.hud.banner('Online food fight', `Room "${esc(net.roomName)}" · finding the room…`, 2.4);
   }
 
+  // (0.68) Back to the room's lobby (the host decided; everyone follows): no round, no bots, everyone
+  // un-readied (they ready up again for the next match), the votes and the chat carry on.
+  toLobby() {
+    const net = this.net;
+    this.highlights.stop();
+    this.arena.clear(); this.pots.clear();
+    this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear(); this.abilities.reset(); this.utensils.reset();
+    this.brains.clear();
+    for (const a of this.botActors.slice(1)) { a.alive = false; a.hide(); a.respawnAt = 0; }
+    this.actors = [this.player, ...this.actors.filter((a) => a.isRemote)];
+    const p = this.player;
+    p.alive = false; p.hide(); p.respawnAt = 0;
+    this.round = { id: -1, state: 'lobby', t: 0, started: 0, winner: '', joined: false };
+    this.state = 'lobby'; this.stateT = 0;
+    net.ready = false; net.lobbyAt = null; net.startReq = false; net.matchSettings = null; net.teamMap = null;
+    this.spectator.reset();
+    this.hud.banner('Back in the lobby', 'Vote, pick your team, ready up', 2.6);
+    this.onMatchEvent?.('lobby');
+  }
   // Players who want to play, in the round and waiting for one (the host's view of the room).
   // (0.34) In Cooking Pot Wars a splatted player whose pot still stands (or is being carried off) is
   // still in the round: they respawn at it.
@@ -173,6 +192,7 @@ export class Game {
   // play drop in right away (see _lateJoin).
   beginRound(id, rs) {
     this.highlights.stop(); // (a reel still playing ends: a new round, maybe a new map)
+    if (this.net.isHost) this.net.matchSettings = { ...rs }; // (0.68: this round's, whatever the votes say meanwhile)
     if (rs.map) this.setMap(rs.map);
     this.mode = cleanMode(rs.mode);
     this.teamSize = cleanSize(rs.team, this.mode);
@@ -296,7 +316,13 @@ export class Game {
   // Host: the round clock (drop -> play -> over -> next round).
   _hostRound(dt) {
     const R = this.round, net = this.net;
-    if (R.id < 0) { this.beginRound(0, net.roomSettings()); return; }
+    if (R.id < 0) { // (0.68) the lobby: the match starts once everyone's ready (5 s), or when I say so (3 s)
+      const go = net.startReq || (net.allReady() && net.people().length > 0);
+      if (!go) net.lobbyAt = null;
+      else if (net.lobbyAt == null) { net.lobbyAt = this.time + (net.startReq ? 3 : 5); }
+      if (net.lobbyAt != null && this.time >= net.lobbyAt) { net.lobbyAt = null; net.startReq = false; this.beginRound(0, net.nextSettings()); }
+      return;
+    }
     R.t += dt;
     const alive = this.actors.filter((a) => a.alive).length;
     if (R.state !== 'over' && R.t < (this.pots.active ? POT_SETUP + LATE_JOIN : LATE_JOIN)) this._balanceTeams(); // players drop in early on
@@ -316,7 +342,7 @@ export class Game {
       if (R.started >= 2 && sides <= 1 && !(this.pots.active && this.pots.setup)) this._roundOver();
       else if (R.idle > (h.inRound ? 3 : 5)) this._roundOver(true);
     } else if (R.state === 'over' && R.t > OVER_FOR && (!this.watchingReel() || R.t > OVER_FOR + REEL_WAIT)) {
-      this.beginRound(R.id + 1, net.roomSettings()); // (0.38) once nobody is watching the round's highlights
+      this.beginRound(R.id + 1, net.nextSettings()); // (0.38) once nobody is watching the round's highlights (0.68: with the votes as they are now)
     }
   }
   // Host, early in a round: a player joined a team the bots had already filled. One of that team's
@@ -379,6 +405,7 @@ export class Game {
   // Everyone else: follow the host's round (rd) and settings (rs).
   _followRound(dt) {
     const net = this.net, rd = net.hostRound, rs = net.hostSettings;
+    if (!rd && net.hostLobby?.phase === 0 && this.round.id >= 0) { this.toLobby(); return; } // (0.68) the host took the room back to the lobby
     if (!rd || !rs) return;
     const [id, st, tx, tz, tr, phase, mode, t, winner, rt, toX, toZ, toR, fresh, playAt, s0, s1] = rd;
     if (id !== this.round.id) this.beginRound(id, rs);

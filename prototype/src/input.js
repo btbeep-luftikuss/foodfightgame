@@ -33,6 +33,7 @@ export class Input {
 
     addEventListener('keydown', (e) => {
       if (!this.enabled) return;
+      if (e.target?.closest?.('input, textarea, select')) return; // (0.68: typing in the chat, not playing)
       if (['Space', 'ArrowUp', 'ArrowDown', 'Tab'].includes(e.code)) e.preventDefault();
       if (e.repeat) return;
       this.keys.add(e.code);

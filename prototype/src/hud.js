@@ -120,7 +120,7 @@ export class HUD {
     let tt, urgent = false, ico = 'bubble', tip = 'Soap Tide';
     if ((game.online && game.net) || game.arena?.active) this._scoreboard(game);
     if (game.online && game.net && !game.net.connected) { ico = 'online'; tt = game.net.lost ? 'Offline' : 'Reconnecting'; urgent = true; tip = `Room ${game.net.roomName}`; }
-    else if (game.state === 'lobby') { ico = 'online'; tt = 'Joining'; tip = `Room ${game.net?.roomName || ''}`; }
+    else if (game.state === 'lobby') { const c = game.net?.countdown?.(); ico = 'online'; tt = c != null ? `Starting ${Math.ceil(c)}` : 'Lobby'; tip = `Room ${game.net?.roomName || ''}`; } // (0.68)
     else if (game.mode === 'pots' && game.pots.active && game.state !== 'over') { tt = game.pots.pill(); ico = 'titan'; tip = 'Cooking Pot Wars'; }
     else if (game.sandbox?.active) { tt = 'Test World'; tip = 'T: the test tools'; ico = 'titan'; }
     else if (game.arena?.active && game.state !== 'over') { tt = game.arena.pill(); urgent = game.state === 'play' && game.arena.timeLeft() < 30; tip = 'Time left: most splats wins'; ico = 'titan'; }
