@@ -483,14 +483,25 @@ const RULES = {
       return true; // keeps flying
     },
     post(p, hit) { if (hit.actor && p.x.tr) hit.actor.burn(1.5); },
-    // (0.63, from the old Colander's recoil) every throw pops you back: a hop backward, away from where you aim
-    // (rapid fire: a steady little push)
+    // (0.63, from the old Colander's recoil) a throw pops you back: a hop backward, away from where you aim.
+    // (0.64) It never stacks: a pop only tops your backward speed up to 7 m/s (with a little hop from the
+    // ground), at most one every 0.5 s; rapid fire is a gentle drift (up to 2.5 m/s back).
     released(a, U, rel) {
-      const back = _w.copy(a.aimDir).setY(0);
+      const g = U.game, s = a.uState, back = _w.copy(a.aimDir).setY(0);
       if (back.lengthSq() < 1e-4) forwardOf(a.yaw, back);
-      back.normalize().multiplyScalar(rel.auto ? -0.8 : -9);
-      a.knock(back.setY(rel.auto ? 0 : 6));
-      if (!rel.auto) { U.game.fx.burst('ember', a.pos, 0.4); U.game.sfx.play('dodge', a.pos, 0.5); }
+      back.normalize().negate();
+      const along = a.vel.x * back.x + a.vel.z * back.z; // (how fast you're already going backward)
+      if (rel.auto) {
+        const k = Math.min(1, 2.5 - along);
+        if (k > 0.05) a.knock(back.multiplyScalar(k).setY(0));
+        return;
+      }
+      if (g.time < (s.popAt || 0)) return;
+      s.popAt = g.time + 0.5;
+      const add = 7 - Math.max(0, along);
+      if (add <= 0.5) return;
+      a.knock(back.multiplyScalar(add).setY(a.onGround ? 3.5 : 0));
+      g.fx.burst('ember', a.pos, 0.4); g.sfx.play('dodge', a.pos, 0.5);
     },
     step(p, dt, U) { // a toasted wheel scorches the floor it rolls over
       if (!p.x.tr || !p.roll) return;

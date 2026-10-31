@@ -63,6 +63,11 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.64: the Toaster's push back can't run away any more** (`src/utensils.js`, `src/net.js`)
+
+- In 0.63 every throw added its push on top of the last, and a push stops your feet gripping the floor for a moment, so quick throws snowballed: 3 s of tomatoes as fast as they go shot you back 106 m, at 99 m/s, and held blueberries reached 15 m/s.
+- Now a throw only tops your backward speed up to 7 m/s (a sprint is 8.5), with a little hop when you're on the ground, at most one pop every 0.5 s; held blueberries are a gentle drift, up to 2.5 m/s. Measured over the same 3 s: tomatoes 16 m back at 7 m/s at most, blueberries 6.6 m at 2.5 m/s, carrots 9 m. Online version 64.
+
 **Version 0.63: no more Microwave or Colander, and the Toaster pops you back** (`src/utensils.js`, `src/utensil-models.js`, `src/utensil-art.js`, `docs/utensils/build.mjs`, `src/net.js`)
 
 - **The Microwave and the Colander are gone** from the game: no more delivery boxes, pickups, loadout picks, Test World buttons or bot kits with them (a remembered loadout pick of either falls back to none). 18 everyday utensils and 6 Legendary ones now. Their art stays in the utensil docs; the game's build leaves it out.
