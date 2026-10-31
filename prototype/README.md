@@ -63,6 +63,13 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.71: a "food only" place in the utensil kit** (`src/utensils.js`, `src/hud.js`, `src/input.js`, `src/net.js`, `src/sandbox.js`, `index.html`)
+
+- **Choose no utensil:** once you carry a utensil, the utensil bar gets a fourth place, an open hand (key **9**): your utensils go away and you throw just the food, plain. **R** comes round to it after your last utensil (knife, spoon, whisk, food only, knife...); on a phone the utensil plate has the open hand as one of its places (turn or tap to it). Picking a utensil (6–8) takes it back in hand. A toast says *Food only: no utensil*.
+- With food only, a utensil you pick up goes in an empty slot and stays put away (it doesn't jump into your hand); with the kit full, one lying on the floor stays there (a toast says to take one in hand to swap it). A Legendary still goes straight into your hand, in place of the utensil you held last.
+- Online the others see your hands empty; spectators see no utensil highlighted. Online version 71.
+- Tested on desktop (9, R round the kit and back to food only, a tomato thrown with no utensil, a Grater left on the floor with a full kit) and on a phone (the utensil plate has 4 places: knife, spoon, whisk, food only).
+
 **Version 0.70: a winner screen after every match, and the highlights only if you want them** (`src/main.js`, `src/game.js`, `index.html`, `src/net.js`)
 
 - **The winner, big and clear, in every mode:** when a match (online: a round) ends, a winner screen comes up over the kitchen: a trophy, the winner's name or team in their own colour (dark colours lifted so they read), how they won (*The Last Bite Standing*, *The last team standing*, *The last pot standing*, *7–4 in team splats*, *King of the Utensil · 6 splats*, or *It's a draw!*), the winning team's Titans with their splats, the top 3 splatters on a little podium (🥇🥈🥉), and your own result with the coins you earned (*🎉 You won! · +159 coins*), with confetti in the winner's colour. Checked in Classic (solo and Duos), Chef's Choice, Cooking Pot Wars, Squads and King of the Utensil.
