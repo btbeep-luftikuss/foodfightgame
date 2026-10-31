@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { hasLineOfSight } from './core.js';
 import { FOODS } from './foods.js';
 import { MAX_HP } from './actors.js';
-import { UTENSIL_BY_ID, utensilHeat, utensilIcon } from './utensils.js';
+import { UTENSIL_BY_ID, utensilHeat, utensilIcon, FREE } from './utensils.js';
+// (0.71) an open hand: no utensil, just your food
+const HAND_ICON = `data:image/svg+xml;charset=utf-8,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><g fill='#ffd8b0' stroke='#2b1633' stroke-width='5' stroke-linejoin='round'><rect x='24' y='18' width='13' height='42' rx='6.5'/><rect x='38' y='9' width='13' height='50' rx='6.5'/><rect x='52' y='12' width='13' height='48' rx='6.5'/><rect x='66' y='22' width='12' height='40' rx='6'/><path d='M22 48 L80 48 L80 60 Q78 90 50 91 Q22 90 22 60 Z'/><path d='M24 66 Q9 56 11 46 Q15 39 26 50'/></g><path d='M30 76 Q50 84 70 76' fill='none' stroke='#e9b48a' stroke-width='4' stroke-linecap='round'/></svg>")}`;
 import { Dial } from './dials.js';
 
 const $ = (id) => document.getElementById(id);
@@ -37,6 +39,10 @@ export class HUD {
     };
     this.slots = [0, 1, 2, 3, 4].map((i) => plate($('hotbar'), i, i + 1, `Food ${i + 1}`, (k) => { input.slot = k; }));
     this.uslots = [0, 1, 2].map((i) => plate($('ubar'), i, i + 6, `Utensil ${i + 1}`, (k) => { input.uslot = k; }));
+    // (0.71) the empty place: no utensil, just your food (there once you carry a utensil)
+    this.freeSlot = plate($('ubar'), FREE, 9, 'Food only: no utensil', (k) => { input.uslot = k; });
+    this.freeSlot.classList.add('free'); this.freeSlot.classList.remove('empty');
+    this.freeSlot.querySelector('img').src = HAND_ICON; this.freeSlot.title = 'Food only: no utensil, just your food (9)';
     this.hotSig = ''; this.uSig = '';
     this.floaters = [];
     this.plates = new Map();
@@ -73,6 +79,8 @@ export class HUD {
     const usig = (a.utensils || []).map((id) => id || '-').join('|') + `#${a.uSel}`;
     if (usig !== this.uSig) {
       this.uSig = usig;
+      this.freeSlot.hidden = !a.utensils?.some(Boolean); // (0.71)
+      tog(this.freeSlot, 'sel', a.uSel === FREE);
       this.uslots.forEach((b, i) => {
         const id = a.utensils?.[i], u = id && UTENSIL_BY_ID[id];
         tog(b, 'sel', i === a.uSel && !!u);
@@ -100,6 +108,7 @@ export class HUD {
     this.foodDial.sync(foods, a.sel);
     this.foodDial.autoAdvance(a.sel);
     const uts = (a.utensils || [null, null, null]).map((id) => id && { id, icon: utensilIcon(id), name: UTENSIL_BY_ID[id].name });
+    if (uts.some(Boolean)) uts[FREE] = { id: 'free', icon: HAND_ICON, name: 'Food only' }; // (0.71) the plate's empty place: no utensil
     this.utDial.sync(uts, a.uSel);
   }
 

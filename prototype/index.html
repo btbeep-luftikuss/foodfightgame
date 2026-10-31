@@ -151,6 +151,8 @@ button { font: inherit; color: inherit; }
 .ubar { gap: 6px; padding-left: 14px; border-left: 2px solid rgba(255,244,226,0.22); }
 .ubar .slot { width: 42px; height: 42px; }
 .ubar .slot img { width: 84%; height: 84%; margin-top: 8%; }
+.ubar .slot.free img { width: 64%; height: 64%; margin-top: 18%; } /* (0.71) food only */
+.ubar .slot.free[hidden] { display: none; }
 .ubar .slot.heat::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; background: conic-gradient(var(--tomato) calc(var(--h, 0) * 1turn), transparent 0); -webkit-mask: radial-gradient(closest-side, transparent 84%, #000 86%); mask: radial-gradient(closest-side, transparent 84%, #000 86%); pointer-events: none; }
 .sniffdot { position: relative; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 12px; color: var(--ink);
   background: conic-gradient(var(--glaze) calc(var(--p, 1) * 1turn), rgba(255,244,226,0.18) 0); box-shadow: 0 0 0 2px var(--ink-glass); align-self: center; }

@@ -129,6 +129,7 @@ export class Sandbox {
       const i = P.utensils?.findIndex((u) => UTENSIL_BY_ID[u]?.legendary) ?? -1;
       if (i >= 0) P.utensils[i] = null;
     }
+    if (P.uSel === g.utensils.constructor.FREE_SLOT && P.utensils?.every(Boolean)) g.utensils.select(P, P.uLast ?? 0); // (0.71: food only with a full kit: the test tools give it to you in hand)
     const old = g.utensils.give(P, id);
     if (old === false && P.utensils?.includes(id)) g.utensils.select(P, P.utensils.indexOf(id));
   }

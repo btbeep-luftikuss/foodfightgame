@@ -105,6 +105,7 @@ export const LEGENDARY_IDS = UTENSILS.filter((u) => u.legendary).map((u) => u.id
 export const isLegendary = (id) => !!UTENSIL_BY_ID[id]?.legendary;
 export const NORMAL_IDS = UTENSIL_IDS.filter((id) => !isLegendary(id)); // (what delivery boxes, loadouts and bots get)
 export const KIT = 3; // utensils a Titan can carry
+export const FREE = KIT; // (0.71) the hand with no utensil in it: just your food (key 9, the plate's empty place)
 export const utensilHeat = (id) => RULES[id]?.heat || null; // heat limits, for the HUD
 export const randomUtensilId = () => NORMAL_IDS[(Math.random() * NORMAL_IDS.length) | 0];
 
@@ -662,26 +663,31 @@ export class Utensils {
     return { heat: 0, overUntil: 0, cdUntil: 0, fire: 0, autoAt: -9, shots: 0, lastOrb: 0, peel: { target: null, layer: 0, hits: 0, until: 0, cdUntil: 0 } };
   }
 
+  static FREE_SLOT = FREE;
   // A Titan carries up to KIT utensils; `a.utensil` / `a.uState` are always the one in hand.
   static emptyKit(a) {
     a.utensils = new Array(KIT).fill(null);
-    a.uStates = a.utensils.map(() => Utensils.freshState());
-    a.uSel = 0; a.utensil = null; a.uState = a.uStates[0];
+    a.uStates = [...a.utensils, null].map(() => Utensils.freshState()); // (0.71: and one for food only)
+    a.uSel = 0; a.utensil = null; a.uState = a.uStates[0]; a.uLast = 0;
   }
 
-  // Take a utensil in hand (an empty slot just shows empty hands).
+  // Take a utensil in hand (an empty slot just shows empty hands; 0.71: FREE puts them all away: food only).
   select(a, i) {
-    if (!a.utensils || i < 0 || i >= KIT || i === a.uSel) return;
+    if (!a.utensils || i < 0 || i > FREE || i === a.uSel) return;
     const was = a.utensil;
-    a.uSel = i; a.utensil = a.utensils[i]; a.uState = a.uStates[i];
+    if (a.uSel < KIT && a.utensils[a.uSel]) a.uLast = a.uSel; // (the last one you held)
+    a.uStates[i] ||= Utensils.freshState();
+    a.uSel = i; a.utensil = i === FREE ? null : a.utensils[i]; a.uState = a.uStates[i];
     if (was !== a.utensil && a.charging) { a.charging = false; a.chargeT = 0; } // no carrying a charge over to another utensil
+    if (i === FREE && was && a === this.game.player) this.game.hud.toast('Food only: no utensil');
   }
+  // R: the next utensil you carry, then food only, then round again
   cycle(a, dir) {
     if (!a.utensils) return;
-    for (let k = 1; k <= KIT; k++) {
-      const i = (a.uSel + dir * k + KIT * 4) % KIT;
-      if (a.utensils[i]) { this.select(a, i); return; }
-    }
+    const order = [...a.utensils.map((id, i) => (id ? i : -1)).filter((i) => i >= 0), FREE];
+    if (order.length < 2) return;
+    const cur = order.indexOf(a.uSel);
+    this.select(a, order[cur < 0 ? (dir > 0 ? 0 : order.length - 1) : (cur + dir + order.length) % order.length]);
   }
 
   // Add a utensil to the kit: an empty slot first (taken in hand if the hand is empty), otherwise
@@ -691,9 +697,13 @@ export class Utensils {
     if (!a.utensils) Utensils.emptyKit(a);
     if (a.utensils.includes(id)) return false;
     if (isLegendary(id) && a.utensils.some(isLegendary)) return false; // (0.54) one Legendary at a time
-    let i = a.utensils[a.uSel] ? a.utensils.indexOf(null) : a.uSel;
-    const swap = i < 0;
-    if (swap) i = a.uSel;
+    // (0.71) food only: a new utensil goes in an empty slot and stays put away; the kit full, only a Legendary
+    // gets a place (the one you held last, which drops)
+    const free = a.uSel === FREE;
+    let i = free ? a.utensils.indexOf(null) : a.utensils[a.uSel] ? a.utensils.indexOf(null) : a.uSel;
+    if (free && i < 0) { if (!isLegendary(id)) return false; i = a.uLast ?? 0; }
+    const swap = (!free && i < 0) || (free && !!a.utensils[i]);
+    if (!free && i < 0) i = a.uSel;
     const old = a.utensils[i];
     a.utensils[i] = id; a.uStates[i] = Utensils.freshState();
     if (i === a.uSel) { a.utensil = id; a.uState = a.uStates[i]; a.charging = false; }
@@ -1483,6 +1493,10 @@ export class Utensils {
         const gold = isLegendary(it.id);
         if (gold && a.utensils?.some(isLegendary)) continue; // (0.54) one Legendary at a time
         if (a.isBot && a.utensil && !gold) continue; // bots keep the first utensil they find (a Legendary they always take)
+        if (a.uSel === FREE && !gold && a.utensils?.every(Boolean)) { // (0.71) food only and the kit full: it stays on the floor
+          if (a === g.player && t > (this.fullToldAt || 0)) { this.fullToldAt = t + 5; g.hud.toast('Your utensil kit is full: take one in hand (6, 7, 8) to swap it'); }
+          continue;
+        }
         g.scene.remove(it.model, it.ring, ...(it.extra || []));
         it.ring.geometry.dispose(); it.ring.material.dispose();
         this.pickups.splice(i, 1);

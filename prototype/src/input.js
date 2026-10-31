@@ -43,7 +43,7 @@ export class Input {
       if (e.code === 'KeyB' || e.code === 'KeyE') this.pressed.sniff = true;
       if (e.code === 'KeyV') this.pressed.view = true;
       if (/^Digit[1-5]$/.test(e.code)) this.slot = Number(e.code.slice(5)) - 1;
-      if (/^Digit[6-8]$/.test(e.code)) this.uslot = Number(e.code.slice(5)) - 6;
+      if (/^Digit[6-9]$/.test(e.code)) this.uslot = Number(e.code.slice(5)) - 6; // (0.71: 9: food only, no utensil)
       if (e.code === 'KeyR') this.ucycle = 1;
       if (e.code === 'KeyG') this.pressed.ladle = true;
       if (e.code === 'KeyT') this.pressed.turret = true;

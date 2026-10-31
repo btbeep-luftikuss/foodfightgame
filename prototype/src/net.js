@@ -91,7 +91,7 @@ const MIN_SENT = 6;     // an event leaves the log once it went out this often a
 const BUDGET = 3900;    // bytes of one player's presence (the claude.ai room refuses over 4096)
 // (0.51) The game's version, in every update: players on different copies of the game (one browser still
 // showing an older one) play by different rules, so each is told to reload. Bump it with every release.
-export const NET_VERSION = 70;
+export const NET_VERSION = 71;
 // What a hit did besides its damage, merged into the claim for it (freezes add up to 3, shoves add up)
 function mergeStatus(a, s) {
   for (const [k, v] of Object.entries(s)) {
@@ -162,7 +162,7 @@ function readKit(code) {
   const [list = '', sel = '0'] = code.split('|');
   const ids = list.split(',').slice(0, 3).map((t) => (t ? UTENSIL_IDS[parseInt(t, 36)] || null : null));
   while (ids.length < 3) ids.push(null);
-  return { ids, sel: clamp(parseInt(sel, 10) || 0, 0, 2) };
+  return { ids, sel: clamp(parseInt(sel, 10) || 0, 0, 3) }; // (0.71: 3: food only)
 }
 export const cleanRoom = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9_.-]/g, '').slice(0, 40) || 'kitchen';
 
