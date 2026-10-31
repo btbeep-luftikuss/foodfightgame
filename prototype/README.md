@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.62: Popcorn Popper minis burst on the floor, faster Grater rain, a Legendary Oven Mitt for every food** (`src/legendary.js`, `src/utensils.js`, `src/net.js`)
+
+- **Legendary Popcorn Popper:** every mini bomb now lands on the floor and bursts there (no more bursting in mid-air on a fuse); a mini that hits a wall drops down it to the floor first. Measured: all 90 minis of a cascade burst at floor height, out in the open and against a wall. The rings were pulled in a little so they still land among the Titans: tomato, one at 10 m splatted in 4.0 s (was 4.6), 630 to a group of four in 5 s (was 550).
+- **Legendary Grater:** the rain falls much faster (34 m/s, was 20, and heavier), so it hits almost as soon as it leaves the cloud. Tomato: one at 10 m in 6.4 s, 520 to a group of four in 5 s.
+- **Legendary Oven Mitt:** a charge now loads **4 shots** (was 3), and each food shoots its own way: **blueberries** 14 rapid shots (hold it down), **grapes** 4 triple shots (three grapes fanned a hair apart), **carrots** 3 shots that pierce two Titans, **cheese** and **watermelon** 2 heavy shots (bigger, harder, a big shove), **ice** 5 shots, **bananas** 3 (still boomerangs), **chili** 4 burning shots; everything else 4. Change food and the next click charges it afresh. The HUD says what a charge gives you ("Click to charge: 4 triple shots"), then the shots left. Splat one Titan at 10 m: tomato 5.8 s, cheese 4.7, grapes 5.5, carrot 6.1, blueberry 7.1. Online version 62.
+
 **Version 0.61: the Legendary Oven Mitt's 3 shots are separate** (`src/legendary.js`, `src/utensils.js`, `src/net.js`)
 
 - **A charge loads 3 shots, fired one click each** (in place of 0.60's automatic burst): click to charge (0.8 s) and the first shot goes; after that each click fires the next shot straight away, no charge, whenever you like (at least 0.25 s apart), each aimed where you aim at that moment. After the 3rd shot it cools down for 2.2 s, and the next click charges it again. The HUD shows the shots left (●●○), then the recharge. One food a shot.

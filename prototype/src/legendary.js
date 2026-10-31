@@ -44,19 +44,32 @@ import { FOODS } from './foods.js';
 export const BAL = {
   torch: { range: 11, half: 0.42, dps: 24, burn: 2, pieceEvery: 0.2, pieceM: 0.35, useEvery: 1.0 },
   blender: { range: 34, width: 0.5, stages: [[0, 14], [1.2, 40], [2.4, 120]], gap: 3, useEvery: 3.5, dripEvery: 1.2 },
-  grater: { lock: 0.9, autoEvery: 1.2, dur: 3.5, rate: 22, r: 5, h: 8, m: 0.5, drop: 20, follow: 4, max: 3 }, // (0.59: r 2.6 -> 5, rate 16 -> 22)
+  grater: { lock: 0.9, autoEvery: 1.2, dur: 3.5, rate: 22, r: 5, h: 8, m: 0.5, drop: 34, dropG: 1.5, follow: 4, max: 3 }, // (0.62: drop 20 -> 34 m/s, heavier: the rain comes down fast) // (0.59: r 2.6 -> 5, rate 16 -> 22)
   mitt: { charge: 0.8, cd: 2.2, speed: 120, // (cd + charge: a shot every 3 s)
-          life: 2.2, m: 1.35, push: 4.5, shots: 3, gap: 0.25 }, // (0.61: a charge loads 3 separate shots, 1.35x each, at least 0.25 s apart)
+          life: 2.2, m: 1.35, push: 4.5, shots: 4, gap: 0.25 }, // (0.61: a charge loads separate shots, 1.35x each, at least 0.25 s apart; 0.62: 4, and each food its own: MITT_FOOD)
   cream: { r: 9, pelletR: 5, speed: 12, freeze: 1.5, dmg: 10, jump: 0.7, lock: 0.7 },
   popper: { lock: 1.1, speed: 1, size: 2, rounds: [ // (0.55: speed 1: as fast as the food always flies)
-    { r: 4.0, dmg: 34, force: 9, kids: 6, fuse: 0.55, out: [6, 9] },
-    { r: 2.8, dmg: 14, force: 6, kids: 2, fuse: 0.4, out: [4, 7] },
-    { r: 2.3, dmg: 10, force: 4, kids: 2, fuse: 0.28, out: [3.5, 6] },
-    { r: 1.9, dmg: 7, force: 3, kids: 2, fuse: 0.2, out: [3, 5] },
+    { r: 4.0, dmg: 34, force: 9, kids: 6, fuse: 0.55, out: [4.8, 7.2] }, // (0.62: minis land, then burst: out speeds pulled in to keep the rings tight)
+    { r: 2.8, dmg: 14, force: 6, kids: 2, fuse: 0.4, out: [3.4, 5.5] },
+    { r: 2.3, dmg: 10, force: 4, kids: 2, fuse: 0.28, out: [2.8, 4.8] },
+    { r: 1.9, dmg: 7, force: 3, kids: 2, fuse: 0.2, out: [2.3, 4] },
     { r: 1.6, dmg: 5, force: 2, kids: 0, fuse: 0, out: [0, 0] },
   ] },
 };
 export const STREAMS = new Set(['gold-torch', 'gold-blender']);
+// (0.62) The Legendary Oven Mitt's shots, by the food in it (the rest: BAL.mitt): shots a charge, damage multiplier,
+// least gap between shots, pellets a shot (fanned), Titans each shot goes through, size, shove.
+export const MITT_FOOD = {
+  blueberry: { shots: 14, gap: 0.09, m: 1.6, note: '14 rapid shots' }, // (held down: a stream of straight berries)
+  grapes: { shots: 4, pellets: 3, fan: 0.03, m: 2.4, note: '4 triple shots' },
+  carrot: { shots: 3, m: 1.6, pierce: 2, note: '3 piercing shots' }, // (through two Titans, on to a third)
+  ice: { shots: 5, m: 1.15, note: '5 shots' },
+  cheese: { shots: 2, m: 2, sc: 1.4, push: 12, note: '2 heavy shots' },
+  watermelon: { shots: 2, m: 1.6, sc: 1.3, push: 14, note: '2 heavy shots' },
+  banana: { shots: 3, note: '3 boomerang shots' }, // (still a boomerang: out dead straight, then home)
+  chili: { shots: 4, m: 1.2, note: '4 burning shots' },
+};
+export const mittFood = (id) => ({ shots: BAL.mitt.shots, gap: BAL.mitt.gap, m: BAL.mitt.m, pellets: 1, fan: 0, pierce: 0, sc: 1.1, push: BAL.mitt.push, note: `${BAL.mitt.shots} shots`, ...MITT_FOOD[rootOf(id)] });
 
 // what flies for each food (a wheel or a melon can't be thrown in pieces of itself: its chunks do)
 const PIECE_OF = { grapes: 'grape', blueberry: 'berry', cheese: 'cheesechunk', watermelon: 'melonchunk', banana: 'bananaslice', pineapple: 'pinechunk' };
@@ -271,18 +284,25 @@ export class Legends {
 
   // ---------------------------------------------------------------- Oven Mitt (0.57): the charged shot
   // Straight from the hand to the aim point, blinding fast, no drop (the food's own throw is replaced).
-  mittShot(o, a) {
+  // One shot (0.62: as many pellets as the food fires a shot, fanned: a grape triple shot)
+  mittShots(o, a) {
+    const M = mittFood(o.food), n = M.pellets || 1;
+    return Array.from({ length: n }, (_, i) => this.mittShot(o, a, M, (i - (n - 1) / 2) * M.fan, i === 0));
+  }
+  mittShot(o, a, M = mittFood(o.food), yaw = 0, flash = true) {
     const B = BAL.mitt;
-    const q = { ...o, pos: o.pos.clone(), vel: new THREE.Vector3(), gravity: 0, roll: false, seek: null, turn: 0, retarget: 0, curve: 0, bounces: 0, fuse: 0, life: B.life, spin: 0, x: { m: B.m, sc: 1.1, ms: 1 } };
+    const q = { ...o, pos: o.pos.clone(), vel: new THREE.Vector3(), gravity: 0, roll: false, seek: null, turn: 0, retarget: 0, curve: 0, bounces: 0, fuse: 0, life: B.life, spin: 0, x: { m: M.m, sc: M.sc, ms: 1, ...(M.pierce ? { pc: M.pierce } : {}), ...(M.push !== B.push ? { mp: M.push } : {}) } };
     q.orient = true;
-    this.mittAim(q, a);
+    this.mittAim(q, a, yaw, flash);
     return q;
   }
   // a shot leaves the hand: aimed, with its flash and bang
-  mittAim(q, a) {
+  mittAim(q, a, yaw = 0, flash = true) {
     const B = BAL.mitt, g = this.game;
     const d = a.aimPoint && a.aimPoint.distanceToSquared(q.pos) > 1 ? _v.subVectors(a.aimPoint, q.pos).normalize() : _v.copy(a.aimDir).normalize();
+    if (yaw) d.applyAxisAngle(_up, yaw);
     q.vel.copy(d).multiplyScalar(B.speed);
+    if (!flash) return;
     g.fx.jet('flames', q.pos, d, 900, 1 / 30, { speed: 9, spread: 0.35, life: 0.18, size: 0.2, colors: [col('#ffffff'), col('#ffe36a'), col(tintOf(q.food))], drag: 3, grow: 1.5, min: 0.6 });
     g.sfx.play('boom', q.pos, a === g.player ? 0.55 : 0.4);
     if (a === g.player) g.fx.shake(0.12);
@@ -311,7 +331,7 @@ export class Legends {
   }
   mittHit(p, at, actor) {
     const g = this.game;
-    if (actor?.alive) actor.knock(_v.copy(p.vel).setY(0).normalize().multiplyScalar(BAL.mitt.push).setY(3));
+    if (actor?.alive) actor.knock(_v.copy(p.vel).setY(0).normalize().multiplyScalar(p.x.mp || BAL.mitt.push).setY(3));
     g.fx.burst(burstOf(p.food), at, 1.2);
     g.fx.spray('puffs', at, 6, { speed: 4, up: 1, colors: [col('#ffffff'), col(tintOf(p.food))], size: 0.5, life: 0.35, grav: 0, grow: 1.6 });
     g.sfx.play('thud', at, 1);
@@ -396,7 +416,7 @@ export class Legends {
     g.projectiles.launch({
       food: pid, owner: c.owner, local: true, u: 'gold-grater', x: { m: B.m, sc: pid === root ? 0.55 : 0.85, cr: 1 },
       pos: new THREE.Vector3(c.x + Math.cos(ang) * r, c.y - 0.8, c.z + Math.sin(ang) * r), vel: new THREE.Vector3(rand(-0.5, 0.5), -B.drop, rand(-0.5, 0.5)),
-      gravity: 1, radius: Math.max(0.15, (f.radius || 0.3) * 0.6), life: 2.2, spin: 8, charge: 0.5,
+      gravity: B.dropG, orient: true, radius: Math.max(0.15, (f.radius || 0.3) * 0.6), life: 2.2, spin: 8, charge: 0.5,
     });
   }
   // a raindrop hits the floor or a wall: a light splash (not the food's whole splat: there are a lot of them)
@@ -501,9 +521,9 @@ export class Legends {
       const q = g.projectiles.launch({
         food: pid, owner: p.owner, local: true, u: 'gold-popper', x: { cs: s + 1, m: 0.15, sc: Math.max(0.3, (pid === root ? 0.75 : 1.1) - s * 0.12), pp: 1, cx: c0 ? c0.x : pt.x, cz: c0 ? c0.z : pt.z },
         pos: pt.clone(), vel: new THREE.Vector3(Math.cos(ang) * sp, rand(4.5, 7) - s * 0.6, Math.sin(ang) * sp),
-        gravity: 1, radius: Math.max(0.1, (f.radius || 0.3) * (0.6 - s * 0.08)), life: R.fuse, spin: 12, charge: 0.5,
+        gravity: 1, radius: Math.max(0.1, (f.radius || 0.3) * (0.6 - s * 0.08)), life: 3, spin: 12, charge: 0.5, // (0.62: no fuse: life is only a fallback)
       });
-      if (q) for (const b of g.actors) q.hitSet.add(b); // (minis burst on their fuse or the floor: not on the Titans they fly past)
+      if (q) for (const b of g.actors) q.hitSet.add(b); // (0.62: minis land on the floor and burst there: not on the Titans they fly past, nor in the air)
     }
   }
 }

@@ -25,7 +25,7 @@ const r2 = (v) => Math.round(v * 100) / 100;
 import { FOODS, makeFoodMesh } from './foods.js';
 import { UTENSIL_ART } from './utensil-art.js';
 import { makeUtensilMesh } from './utensil-models.js';
-import { Legends, BAL, streamVisuals, rootOf } from './legendary.js';
+import { Legends, BAL, streamVisuals, rootOf, mittFood } from './legendary.js';
 
 const SINGLE = ['tomato', 'carrot', 'ice', 'soda', 'chili', 'jelly', 'cookie', 'pineapple', 'banana'];
 const ROLL = ['cheese', 'watermelon'];
@@ -98,8 +98,8 @@ export const UTENSILS = [
     buff: 'Where your food lands or hits a Titan, a cloud of its colour gathers overhead and rains that food down for 3.5 s (a cloud over a Titan drifts after them). Up to 3 clouds at once.', trade: 'The rain is little pieces, spread over a 10 m circle: run out from under it. It reloads for 0.9 s.' },
   { id: 'gold-cream', base: 'ice-cream-machine', legendary: true, tip: 'Freeze wave where your food lands · jump it!', name: 'Legendary Ice Cream Machine', role: 'Freeze Shockwave', color: '#19c8d6', works: THROWN,
     buff: 'Every food you throw lands with a ring of ice that rolls out 9 m across the floor: everyone it catches on the ground is frozen solid.', trade: 'Only the wave freezes (not the food in the air), and a jump at the right moment clears it.' },
-  { id: 'gold-mitt', base: 'oven-mitt', legendary: true, tip: 'Charge once, then 3 dead-straight shots', name: 'Legendary Oven Mitt', role: 'Charged Straight Shots', color: '#19c8d6', works: THROWN,
-    buff: 'A click charges it for 0.8 s and loads 3 shots: the charge fires the first, then each click fires the next at once. Your food flies dead straight at 120 m/s, with no drop, until it hits something: 1.35 times the damage, and a shove.', trade: 'After the 3rd shot it cools down for 2.2 s, then needs charging again: one Titan a shot, so make them count.' },
+  { id: 'gold-mitt', base: 'oven-mitt', legendary: true, tip: 'Charge once, then 4 dead-straight shots (each food its own)', name: 'Legendary Oven Mitt', role: 'Charged Straight Shots', color: '#19c8d6', works: THROWN,
+    buff: 'A click charges it for 0.8 s and loads 4 shots: the charge fires the first, then each click fires the next at once. Your food flies dead straight at 120 m/s, with no drop, until it hits something: 1.35 times the damage, and a shove. Each food shoots its own way: 14 rapid blueberries, 4 grape triple shots, 3 carrots that pierce, 2 heavy cheese or melon shots, 5 ice shots, 3 boomerang bananas.', trade: 'After the last shot it cools down for 2.2 s, then needs charging again: one Titan a shot, so make them count.' },
   { id: 'gold-popper', base: 'popcorn-popper', legendary: true, tip: 'Giant food · bursts 5 times over', name: 'Legendary Popcorn Popper', role: '5-Stage Cluster Cascade', color: '#7cf03a', works: THROWN,
     buff: 'Your food flies twice as big and bursts where it lands into mini versions of itself, which burst again, and again: five ever-faster rounds of explosions spreading out.', trade: 'The giant food is easy to see coming, it reloads for 1.1 s, and the outer rings take a moment: quick Titans get out.' },
 ];
@@ -269,13 +269,16 @@ const RULES = {
   'gold-mitt': { // (0.57) charge, then dead-straight shots (legendary.js). (0.61) A charge loads 3 shots: the
     // charge fires the first, then each click fires the next straight away (no charge); after the third it
     // cools down, and the next click charges it again.
-    charge: (a) => (a.uState.mittAmmo > 0 ? null : { need: BAL.mitt.charge, auto: true }),
-    lockFor: (a) => (a.uState.mittAmmo > 0 ? BAL.mitt.gap : BAL.mitt.cd), lockAuto: true,
+    // (0.62) 4 shots a charge, or the food's own (MITT_FOOD: 14 rapid blueberries, 4 grape triple shots, 3 piercing
+    // carrots, 2 heavy cheeses...). Loaded with one food: change food and the next click charges it afresh.
+    charge: (a) => (a.uState.mittAmmo > 0 && a.uState.mittFood === rootOf(a.selected()?.id) ? null : { need: BAL.mitt.charge, auto: true }),
+    lockFor: (a) => (a.uState.mittAmmo > 0 ? mittFood(a.uState.mittFood).gap : BAL.mitt.cd), lockAuto: true,
     launch(o, a, rel, I) {
-      if (I.k > 0) return []; // (a volley of grapes: one shot)
-      const s = a.uState;
-      s.mittAmmo = s.mittAmmo > 0 ? s.mittAmmo - 1 : BAL.mitt.shots - 1;
-      return [a.game.utensils.legend.mittShot(o, a)];
+      if (I.k > 0) return []; // (a volley of grapes: one shot, of its own pellets)
+      const s = a.uState, root = rootOf(o.food);
+      if (s.mittAmmo > 0 && s.mittFood === root) s.mittAmmo--;
+      else { s.mittFood = root; s.mittAmmo = mittFood(root).shots - 1; }
+      return a.game.utensils.legend.mittShots(o, a);
     },
     step(p, dt, U) { if (p.x.ms) U.legend.mittTrail(p, dt); },
     post(p, hit, U) { if (p.x.ms) U.once(p, 'hit', () => U.legend.mittHit(p, hit.point, hit.actor)); },
@@ -296,7 +299,14 @@ const RULES = {
       if (q.seek) q.turn = (q.turn || 1) * 0.6; // (a giant chili turns slowly)
       return [q];
     },
-    // the giant (or a mini) bursts where it lands: the food's own splat first, then the blast and the next round
+    // (0.62) a mini that hits a wall drops down it to the floor (it only ever bursts on the floor)
+    pre(p, hit) {
+      if (!p.x.cs || !hit.world || hit.top) return false;
+      if (hit.from) p.pos.copy(hit.from);
+      p.vel.x *= -0.15; p.vel.z *= -0.15;
+      return true;
+    },
+    // the giant (or a mini, on the floor) bursts where it lands: the food's own splat first, then the blast and the next round
     post(p, hit, U) {
       U.once(p, 'pop', () => { if (!p.x.cs && FOODS[p.food].detonate) FOODS[p.food].detonate(p, U.game); U.legend.cascade(p, hit.point); });
       p.done = true;
@@ -911,6 +921,7 @@ export class Utensils {
     if (x.pa !== undefined) out.pa = n(x.pa, 0, 2);
     for (const k of ['fl', 'pi', 'pp', 'nf', 'ns', 'sl', 'sp', 'sm', 'kb', 'tr', 'ps', 'pe', 'mb', 'gl', 'wk', 'gr', 'lw', 'tf', 'gc', 'ms']) if (x[k]) out[k] = 1;
     if (x.cs !== undefined) out.cs = n(x.cs, 0, 4) | 0; // (a Popper round)
+    if (x.mp !== undefined) out.mp = n(x.mp, 0, 20); // (0.62: a Legendary Mitt shot's shove)
     if (typeof x.mx === 'string' && Object.values(MIX_IMPACT).includes(x.mx)) out.mx = x.mx;
     return out;
   }
@@ -1540,9 +1551,9 @@ export class Utensils {
       }
       case 'gold-torch': return a.streamOn ? 'Flame cone!' : brief ? null : u.tip;
       case 'gold-mitt': {
-        const n = s.mittAmmo || 0, B = BAL.mitt;
-        if (n > 0) return `Shots ${'●'.repeat(n)}${'○'.repeat(B.shots - n)}`;
-        return a.charging ? 'Charging…' : t < s.cdUntil ? `Recharge in ${Math.ceil(s.cdUntil - t)}` : brief ? null : 'Click to charge 3 shots';
+        const n = s.mittAmmo || 0, M = mittFood(s.mittFood || food.id), N = M.shots;
+        if (n > 0 && s.mittFood === rootOf(a.selected()?.id)) return N > 6 ? `Shots ${n}/${N}` : `Shots ${'●'.repeat(n)}${'○'.repeat(N - n)}`;
+        return a.charging ? 'Charging…' : t < s.cdUntil ? `Recharge in ${Math.ceil(s.cdUntil - t)}` : brief ? null : `Click to charge: ${mittFood(a.selected()?.id).note}`;
       }
       case 'gold-grater': { const n = this.legend.clouds.filter((c) => c.owner === a).length; return n ? `Clouds ${'●'.repeat(n)}${'○'.repeat(Math.max(0, BAL.grater.max - n))}` : brief ? null : u.tip; }
       case 'gold-popper': case 'gold-cream': return t < s.cdUntil - 0.05 && !food.auto ? 'Reloading' : null;
