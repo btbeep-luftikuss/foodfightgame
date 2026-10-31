@@ -716,6 +716,65 @@ export class Utensils {
     return swap ? old : null;
   }
 
+  // (0.73) The aim preview: how the utensil in hand changes the flight of a throw `o` (the food's own, before the
+  // utensil), with no side effects (no ammo, no cooldowns, no sounds). The same rules as the launches above:
+  // [{ pos, vel, gravity, life, wb (wall bounces), fb (floor bounces) }], one per path worth drawing.
+  previewPaths(a, o) {
+    const id = a.utensil, root = ROOT[o.food] || o.food, g = this.game, t = g.time, s = a.uState || {};
+    const base = { pos: o.pos.clone(), vel: o.vel.clone(), gravity: o.gravity ?? 1, life: o.life ?? 6, wb: 0, fb: 0 };
+    const R = id && RULES[id];
+    if (!R || R.stream || !UTENSIL_BY_ID[id].works.includes(root)) return [base];
+    const kind = ROLL.includes(o.food) ? 'roll' : PELLET.includes(o.food) ? 'pellet' : 'single';
+    const v = base.vel, scale = (k, gk = 1) => { v.multiplyScalar(k); base.gravity *= gk; return [base]; };
+    const asPiece = (opts) => { // what pieces() makes of it (a wheel or melon: its chunks), without the jitter
+      const pf = PIECE[o.food];
+      const q = pf ? { ...base, pos: a.handPos(), vel: (() => { const d = aimOf(a); d.y += 0.08; return d.normalize().multiplyScalar(26); })(), gravity: pf === 'bananaslice' ? 0.35 : 1, life: 4 } : { ...base, vel: base.vel.clone() };
+      if (opts.speed) q.vel.multiplyScalar(opts.speed);
+      if (opts.grav !== undefined) q.gravity *= opts.grav;
+      if (opts.life) q.life = opts.life;
+      return q;
+    };
+    switch (id) {
+      case 'gold-mitt': { // dead straight, at the aim point
+        const d = a.aimPoint && a.aimPoint.distanceToSquared(base.pos) > 1 ? a.aimPoint.clone().sub(base.pos).normalize() : aimOf(a);
+        return [{ ...base, vel: d.multiplyScalar(BAL.mitt.speed), gravity: 0, life: BAL.mitt.life }];
+      }
+      case 'gold-cream': return scale(0.92);
+      case 'gold-popper': return scale(BAL.popper.speed);
+      case 'ice-cream-machine': return scale(0.72, 0.85);
+      case 'whisk': return scale(0.78);
+      case 'oven-mitt':
+        if (t < (s.overUntil || 0)) return [base];
+        if (o.auto) return scale(1.5);
+        return t < (s.cdUntil || 0) ? [base] : scale(1.7, 0.55);
+      case 'rolling-pin':
+        if (kind === 'roll') return scale(1.35);
+        if (kind === 'pellet') { v.multiplyScalar(1.2); base.wb = 1; return [base]; }
+        v.multiplyScalar(1.35); base.gravity *= 0.45; base.wb = 2; return [base];
+      case 'spatula': if (kind !== 'roll') base.wb = 1; return [base];
+      case 'toaster': if (kind !== 'roll') base.fb = 2; return [base];
+      case 'mortar-and-pestle': { // a high lob that comes down on the aim point
+        const tgt = a.aimPoint ? a.aimPoint.clone() : base.pos.clone().addScaledVector(aimOf(a), 20);
+        base.gravity *= 0.75; base.vel = arcTo(base.pos, tgt, base.gravity); return [base];
+      }
+      case 'blender':
+        if (kind === 'pellet') return [{ ...base, vel: aimOf(a).setLength(v.length() * 1.1) }];
+        return [asPiece({ speed: 1.15, grav: 0.7 })];
+      case 'knife':
+        if (kind === 'pellet') return [base];
+        if (kind === 'roll') return [-2, 0, 2].map((k) => ({ ...base, vel: v.clone().applyAxisAngle(_up, k * 0.17).multiplyScalar(1.03), life: 4.5 }));
+        return [-1, 0, 1].map((k) => { const q = asPiece({}); q.vel.applyAxisAngle(_up, k * 0.11); return q; }); // a fan of 3
+      case 'spoon':
+        if (kind === 'pellet') return [{ ...base, vel: aimOf(a).setLength(v.length()) }];
+        return [asPiece({ speed: 1.05, life: 0.75 })]; // (a scoop: it falls apart after 0.75 s)
+      case 'grater':
+        if (kind === 'pellet') return [{ ...base, vel: v.multiplyScalar(1.3), life: 0.4 }];
+        return [FIRM.has(o.food) ? asPiece({ speed: 1.5, grav: 0.4, life: 0.34 }) : asPiece({ speed: 1.1, grav: 0.8, life: 0.55 })];
+      case 'popcorn-popper': base.life = Math.min(base.life, 0.5); return [base]; // (it pops in mid-air)
+      default: return [base];
+    }
+  }
+
   works(a, foodId) {
     const u = a.utensil && UTENSIL_BY_ID[a.utensil];
     return !!u && u.works.includes(foodId);

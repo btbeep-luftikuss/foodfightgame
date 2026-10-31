@@ -1150,26 +1150,60 @@ export class Game {
     this.sfx.setListener(cam.position, p ? _r : _r.set(1, 0, 0));
   }
 
+  // (0.73) The aim preview while you charge a throw: where it will actually fly, with the utensil in hand
+  // (faster and flatter with the Oven Mitt, a high lob onto your aim with the Mortar, dead straight with the
+  // Legendary Mitt, a fan of three with the Knife, bounces off the floor or walls, shreds that fall apart).
+  // The food's own throw comes from a dry run of its release (nothing is thrown, used or heard); the utensil's
+  // change from Utensils.previewPaths. Lobs show the first half of the arc (GDD 5.1); other paths in full.
+  _dryThrow(p, food, c) {
+    const out = [], P = this.projectiles;
+    const stubs = [[P, 'launch', (o) => { out.push(o); return null; }], [P, 'list', []], [p, 'consume', () => {}], [this.sfx, 'play', () => {}],
+      [this.fx, 'burst', () => {}], [this.fx, 'spray', () => {}], [this.abilities, 'spicy', () => {}], [this.items, 'addTrap', () => {}]];
+    const saved = stubs.map(([o, k, v]) => { const own = Object.prototype.hasOwnProperty.call(o, k), was = o[k]; o[k] = v; return [o, k, own, was]; });
+    const rnd = Math.random, shield = p.shieldUp; Math.random = () => 0.99; // (no 30% "too hot" chili in a preview)
+    try { food.release(p, c, this); } catch { /* a food that can't be previewed */ } finally {
+      Math.random = rnd; p.shieldUp = shield;
+      for (const [o, k, own, was] of saved) { if (own) o[k] = was; else delete o[k]; }
+    }
+    return out;
+  }
   _preview() {
     const p = this.player;
     const food = p && p.alive ? p.selectedFood() : null;
-    const id = p?.selected()?.id;
-    if (!food || food.profile !== 'lob' || !p.charging) { this.previewDots.count = 0; return; }
-    const c = clamp(p.chargeT / food.charge, 0, 1);
-    const pos = p.handPos(_o);
-    const vel = lobDir(p, _v).multiplyScalar(lobSpeed(id, c));
-    const pts = [];
-    for (let i = 0; i < 90; i++) {
-      vel.y -= G * 0.03; pos.addScaledVector(vel, 0.03);
-      if (solidAt(pos)) break;
-      pts.push(pos.clone());
-    }
-    const shown = Math.min(40, Math.ceil(pts.length * 0.5)); // only the first half of the arc
+    if (!food || !p.charging || food.profile === 'place' || food.auto) { this.previewDots.count = 0; return; }
+    // a lob always shows its arc; a straight throw only when the utensil in hand bends it
+    if (food.profile !== 'lob' && !(p.utensil && this.utensils.works(p, p.selected()?.id))) { this.previewDots.count = 0; return; }
+    const c = food.charge > 0 ? clamp(p.chargeT / food.charge, 0, 1) : 1;
+    const throws = this._dryThrow(p, food, c).slice(0, 5);
+    const paths = [];
+    for (const o of throws) for (const q of this.utensils.previewPaths(p, o)) if (paths.length < 3) paths.push(q);
+    const lob = food.profile === 'lob';
     let n = 0;
-    for (let i = 1; i < shown; i += 1) {
-      const s = 1 - i / (shown + 4);
-      this._m.makeScale(s, s, s).setPosition(pts[i]);
-      this.previewDots.setMatrixAt(n++, this._m);
+    const max = 40, per = Math.floor(max / Math.max(1, paths.length));
+    for (const q of paths) {
+      const pos = q.pos.clone(), vel = q.vel.clone(), pts = [], dt = 0.03;
+      let wb = q.wb, fb = q.fb, life = 0;
+      for (let i = 0; i < 120 && life < q.life; i++) {
+        life += dt;
+        const prev = pos.clone();
+        vel.y -= G * q.gravity * dt; pos.addScaledVector(vel, dt);
+        const s = solidAt(pos);
+        if (s) {
+          const top = prev.y >= s.groundY - 0.05;
+          if (top && fb > 0) { fb--; pos.y = s.groundY + 0.3; vel.y = Math.abs(vel.y) * 0.55 + 5; } // (a toasted bounce)
+          else if (!top && wb > 0) { wb--; pos.copy(prev); if (solidAt(_o.set(pos.x + vel.x * dt, pos.y, pos.z))) vel.x = -vel.x; else vel.z = -vel.z; } // (a ricochet)
+          else { pts.push(top ? pos.setY(s.groundY + 0.05).clone() : prev); break; }
+        }
+        pts.push(pos.clone());
+      }
+      // a lob: the first half of its arc; a shot that flies flat or bounces: all of it (spaced out)
+      const shown = lob && !q.wb && !q.fb && q.gravity > 0.3 ? Math.ceil(pts.length * 0.5) : pts.length;
+      const step = Math.max(1, Math.ceil(shown / per));
+      for (let i = 1; i < shown && n < max; i += step) {
+        const k = 1 - (i / (shown + 4)) * 0.7;
+        this._m.makeScale(k, k, k).setPosition(pts[i]);
+        this.previewDots.setMatrixAt(n++, this._m);
+      }
     }
     this.previewDots.count = n;
     this.previewDots.instanceMatrix.needsUpdate = true;

@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.73: the yellow aim dots follow the real flight, utensil and all** (`src/game.js`, `src/utensils.js`)
+
+- **What changed:** the dotted aim line used to draw a plain lob for every utensil, so with an Oven Mitt, a Rolling Pin or a Mortar & Pestle the food flew somewhere else. Now, while you charge, the game does a silent practice throw of the food in hand (nothing is thrown, used up or heard; no "too hot" chili, no cookie lost, no shield dropped) and bends it the same way the utensil will: faster and flatter with the Oven Mitt (only when its power throw is ready), a high lob that drops right on your aim with the Mortar & Pestle, dead straight with the Legendary Oven Mitt, floor bounces with the Toaster, wall ricochets with the Rolling Pin and Spatula, a fan of three with the Knife, short shreds with the Grater and Spoon, slower with the Whisk and the Ice Cream Machine, a mid-air pop with the Popcorn Popper.
+- **When it shows:** lobbed foods (tomato, ice, soda) always show it; straight throws (carrot, cheese, melon...) show it when the utensil in hand changes their flight. Plain lobs still show only the first half of the arc; bouncing, ricocheting and straight shots show their whole path. Streams (the Legendary Blow Torch and Blender) and the peel have none.
+- **Checked:** for 11 food + utensil pairs, each dot was compared with where the food actually flew afterwards: on average 0.1 to 0.5 m off, at worst 1.3 m (a toaster bounce) and 2.3 m on a 200 m carrot ricochet.
+
 **Version 0.72: the Legendary utensils fire the right way in the highlight reels** (`src/legendary.js`, `src/highlights.js`)
 
 - **Blow Torch and Blender:** a replayed flame cone or juice beam used to point wherever the Titan was aiming *now* (when the reel played), not where they aimed in the play: it could point the opposite way. The reels now record each stream's aim, how far it reached (to the Titan or the wall it hit) and the Blender's ramp, up to 30 times a second, and replay exactly that. Checked: a beam and a cone held on a Titan, then the thrower turned round before the reel: the replay pointed 3° off the Titan they hit (it was 176°).
