@@ -350,7 +350,7 @@ export class Game {
     } else if (R.state === 'over') {
       // (0.69) after every round: play again (the same settings) or a new vote (back to the lobby). It goes as soon
       // as everyone has voted, else when the time's up (0.38: and nobody is watching the round's highlights)
-      const v = net.rematchVotes(R.id), all = v.total > 0 && v.voted === v.total && R.t > 1.5 && !R.fresh;
+      const v = net.rematchVotes(R.id), all = v.total > 0 && v.voted === v.total && R.t > 1.5 && !R.fresh && !this.watchingReel(); // (0.70: not while someone watches the highlights)
       if (all || (R.t > OVER_FOR && (!this.watchingReel() || R.t > OVER_FOR + REEL_WAIT))) {
         if (v.fresh > v.again) this.toLobby();
         else this.beginRound(R.id + 1, net.nextSettings());
@@ -400,7 +400,7 @@ export class Game {
     if (!fresh) { // coins for the round (main.js pays the players who played it)
       const P = this.player;
       const won = tName ? P?.team != null && TEAMS[P.team]?.name === tName : !!w && w === P;
-      this.onMatchEvent?.('roundOver', { won, placement: won ? 1 : P?.alive ? 2 : P?.placement || this.actors.length });
+      this.onMatchEvent?.('roundOver', { won, placement: won ? 1 : P?.alive ? 2 : P?.placement || this.actors.length, winner: w, team: tName }); // (0.70: who won, for the winner screen)
     }
     if (fresh) this.hud.banner('New round', 'Everyone who plays drops in · 3 s', 2.6);
     else if (tName) {
@@ -450,7 +450,7 @@ export class Game {
     this.highlights.onOver();
     const won = !!win && (this.arena.squads ? TEAMS[P?.team]?.name === win : win === P?.name);
     const place = Math.max(1, rank.findIndex((r) => (this.arena.squads ? r.team === P?.team : r.actor === P)) + 1);
-    this.onMatchEvent?.('roundOver', { won, placement: won ? 1 : this.arena.squads ? 2 : place });
+    this.onMatchEvent?.('roundOver', { won, placement: won ? 1 : this.arena.squads ? 2 : place, winner: this.arena.squads ? null : top?.actor || null, team: this.arena.squads && win ? win : null, draw: !win }); // (0.70: for the winner screen)
     const sc = this.arena.squads ? `${rank[0].score}–${rank[1].score}` : `${top?.score ?? 0} splats`;
     if (won) { this.sfx.play('win'); this.hud.banner("Chef's Kiss!", `${this.arena.squads ? `${esc(win)} wins ${sc}` : `You're King of the Utensil · ${sc}`} · next round in ${OVER_FOR} s`, 4); }
     else this.hud.banner(win ? 'Round over' : "Time's up", `${win ? `${esc(win)} ${this.arena.squads ? `wins ${sc}` : `is King of the Utensil · ${sc}`}` : 'A draw'} · next round in ${OVER_FOR} s`, 4);

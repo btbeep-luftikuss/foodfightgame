@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.70: a winner screen after every match, and the highlights only if you want them** (`src/main.js`, `src/game.js`, `index.html`, `src/net.js`)
+
+- **The winner, big and clear, in every mode:** when a match (online: a round) ends, a winner screen comes up over the kitchen: a trophy, the winner's name or team in their own colour (dark colours lifted so they read), how they won (*The Last Bite Standing*, *The last team standing*, *The last pot standing*, *7–4 in team splats*, *King of the Utensil · 6 splats*, or *It's a draw!*), the winning team's Titans with their splats, the top 3 splatters on a little podium (🥇🥈🥉), and your own result with the coins you earned (*🎉 You won! · +159 coins*), with confetti in the winner's colour. Checked in Classic (solo and Duos), Chef's Choice, Cooking Pot Wars, Squads and King of the Utensil.
+- **The highlight reel is your choice:** it no longer plays by itself. The winner screen has **▶ Watch the highlights** (H) when there are any (and *Your highlights* vs bots), or **Continue** (Enter) to the end card. Online the winner screen carries the vote too (**Play again** Y / **New vote** N, live counts, GG) and **▶ Watch the round highlights**; anyone watching keeps the next round waiting (even when everyone has voted) until they finish, at most 32 s more. After the reel you're back on the winner screen while the vote is open. **Hide** puts the vote back in the bar at the top.
+- Tested online with three players: the winner screen with the vote on all three (no reel started by itself), Bob chose to watch the highlights, all three voted to play again and the rematch waited for Bob, then began the moment he finished, closing the winner screen everywhere. Online version 70.
+
 **Version 0.69: a friendlier room lobby, and a vote after every round** (`src/net.js`, `src/game.js`, `src/main.js`, `index.html`; the research behind it: [docs/lobby-research.md](../docs/lobby-research.md))
 
 - **Create a room in one click:** Play online has **Create a new room**, which makes a fun code nobody else is on (*fizzy-tomato-92*) and goes straight in. The starting settings are tucked away (optional: the lobby votes on the game).

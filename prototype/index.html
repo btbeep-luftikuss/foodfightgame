@@ -449,6 +449,41 @@ button { font: inherit; color: inherit; }
 .rm-btns i { font-style: normal; position: absolute; top: -8px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--tomato); color: #fff; font-size: 12px; font-weight: 800; display: grid; place-items: center; }
 .rm-btns i:empty { display: none; }
 .rematch small { font-size: 12.5px; color: var(--paper-dim); font-weight: 700; }
+/* (0.70) the winner screen */
+.victory { position: fixed; inset: 0; z-index: 66; display: grid; place-items: center; padding: 16px; box-sizing: border-box; overflow-y: auto; background: radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--vc, #ffd447) 28%, rgba(34,20,42,0.55)), rgba(20,10,26,0.82) 70%); animation: vicBg 0.5s ease-out; }
+@keyframes vicBg { from { opacity: 0; } }
+.vic-card { position: relative; display: grid; justify-items: center; gap: 8px; width: min(560px, 100%); padding: 18px 20px 16px; border-radius: 24px; background: var(--ink); border: 3px solid var(--vc, var(--butter)); box-shadow: 0 0 0 6px color-mix(in srgb, var(--vc, #ffd447) 25%, transparent), 0 20px 60px rgba(0,0,0,0.5); color: var(--paper); text-align: center; animation: vicIn 0.55s cubic-bezier(.2,1.4,.4,1); }
+@keyframes vicIn { from { transform: scale(0.6); opacity: 0; } }
+.vic-mode { font-size: 12px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--paper-dim); }
+.vic-trophy { font-size: 64px; line-height: 1; filter: drop-shadow(0 4px 0 rgba(0,0,0,0.35)); animation: vicTro 1.2s ease-in-out infinite alternate; }
+@keyframes vicTro { to { transform: translateY(-6px) rotate(-6deg) scale(1.06); } }
+.victory.draw .vic-trophy { filter: grayscale(0.6); }
+.vic-title { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(34px, 7vw, 58px); line-height: 1; color: var(--vc, var(--butter)); text-shadow: 3px 4px 0 rgba(0,0,0,0.45); overflow-wrap: anywhere; }
+.vic-sub { margin: 0; font-weight: 800; font-size: 16px; }
+.vic-members { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.vic-members li { padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--vc, #ffd447) 22%, transparent); border: 1px solid color-mix(in srgb, var(--vc, #ffd447) 60%, transparent); font-weight: 800; font-size: 13px; }
+.vic-members li.me { box-shadow: 0 0 0 2px var(--butter); }
+.vic-toph { margin-top: 4px; font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--paper-dim); }
+.vic-top { list-style: none; margin: 0; padding: 0; display: flex; justify-content: center; align-items: end; gap: 8px; }
+.vic-top li { display: grid; justify-items: center; gap: 2px; min-width: 88px; padding: 6px 8px 7px; border-radius: 12px; background: rgba(255,255,255,0.06); font-size: 13px; font-weight: 800; }
+.vic-top li:first-child { order: 2; padding-bottom: 14px; background: color-mix(in srgb, #ffd447 18%, rgba(255,255,255,0.06)); }
+.vic-top li:nth-child(2) { order: 1; } .vic-top li:nth-child(3) { order: 3; }
+.vic-top li em { font-style: normal; font-size: 18px; }
+.vic-top li b { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vic-top li small { color: var(--paper-dim); font-weight: 700; }
+.vic-top li.me { box-shadow: 0 0 0 2px var(--butter); }
+.vic-you { margin: 2px 0 0; font-weight: 800; color: var(--butter); }
+.vic-vote { display: grid; justify-items: center; gap: 6px; padding: 8px 12px; border-radius: 14px; background: rgba(255,255,255,0.05); }
+.vic-vote > b { font-family: var(--display); font-weight: 400; font-size: 22px; color: var(--butter); }
+.vic-vote small { font-size: 12px; color: var(--paper-dim); font-weight: 700; }
+.vic-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; transition: opacity 0.3s; }
+.vic-acts.wait { opacity: 0; pointer-events: none; }
+.vic-acts kbd, .vic-vote kbd { margin-left: 6px; font-size: 11px; padding: 0 5px; border-radius: 5px; background: rgba(0,0,0,0.2); color: inherit; }
+.touchui .vic-acts kbd { display: none; }
+.vic-confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.vic-confetti i { position: absolute; top: -5%; width: 10px; height: 16px; border-radius: 2px; animation: vicFall linear forwards; }
+@keyframes vicFall { to { transform: translate(var(--dx), 115vh) rotate(var(--r)); } }
+@media (max-height: 640px) { .vic-trophy { font-size: 40px; } .vic-card { gap: 5px; padding: 12px 14px; } }
 .chatbar { position: absolute; left: 16px; bottom: 120px; width: min(460px, calc(100vw - 32px)); display: flex; pointer-events: auto; z-index: 40; }
 .chatbar input { background: var(--ink-glass); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); border-color: var(--butter); }
 .card.loadout h3 { font-size: 34px; }
@@ -787,7 +822,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.69 · Play again?</p>
+      <p class="eyebrow">Prototype 0.70 · Winners</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in; smash the other teams' pots in Cooking Pot Wars; outsplat the other team in Squads; or fight over two Legendary utensils in King of the Utensil.</p>
       <nav class="homenav" aria-label="Main menu">
@@ -1023,6 +1058,32 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
     <div class="row reels" id="end-reels" hidden>
       <button id="reel-all" class="btn ghost" type="button">▶ Match highlights</button>
       <button id="reel-me" class="btn ghost" type="button">▶ Your highlights</button>
+    </div>
+  </div>
+</section>
+
+<!-- (0.70) the winner screen at the end of every match (every mode, offline and online): who won, how,
+     the top splatters, your result; then you choose: watch the highlights, or carry on -->
+<section id="victory" class="victory" hidden aria-label="Match result">
+  <div id="vic-confetti" class="vic-confetti" aria-hidden="true"></div>
+  <div class="vic-card">
+    <small id="vic-mode" class="vic-mode"></small>
+    <div class="vic-trophy" aria-hidden="true">🏆</div>
+    <h2 id="vic-title" class="vic-title"></h2>
+    <p id="vic-sub" class="vic-sub"></p>
+    <ul id="vic-members" class="vic-members"></ul>
+    <div class="vic-toph">Top splatters</div>
+    <ol id="vic-top" class="vic-top"></ol>
+    <p id="vic-you" class="vic-you"></p>
+    <div id="vic-vote" class="vic-vote" hidden>
+      <b>Play again?</b>
+      <div class="rm-btns"><button id="vic-again" class="btn" type="button">🔁 Play again <kbd>Y</kbd><i id="vic-again-n"></i></button><button id="vic-new" class="btn ghost" type="button">🗳️ New vote <kbd>N</kbd><i id="vic-new-n"></i></button><button id="vic-gg" class="btn ghost small" type="button">GG</button></div>
+      <small id="vic-note"></small>
+    </div>
+    <div id="vic-acts" class="vic-acts">
+      <button id="vic-reel" class="btn" type="button">▶ Watch highlights <kbd>H</kbd></button>
+      <button id="vic-reel-me" class="btn ghost" type="button">▶ Your highlights</button>
+      <button id="vic-go" class="btn ghost" type="button">Continue</button>
     </div>
   </div>
 </section>

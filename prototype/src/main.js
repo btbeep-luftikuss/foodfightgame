@@ -772,20 +772,24 @@ function boot() {
   $('rm-new').addEventListener('click', () => voteRematch(2));
   $('rm-gg').addEventListener('click', () => game.net?.say('GG! 🍅'));
   addEventListener('keydown', (e) => {
-    if (rematchBar.hidden || e.target?.closest?.('input, textarea')) return;
+    if ((rematchBar.hidden && (victory.hidden || !game.online)) || e.target?.closest?.('input, textarea')) return;
     if (e.code === 'KeyY') voteRematch(1); else if (e.code === 'KeyN') voteRematch(2);
   });
   function renderRematch() {
     const net = game.net, R = game.round;
     const on = playing && game.online && !!net && !!R && R.id >= 0 && R.state === 'over' && !R.fresh;
-    if (rematchBar.hidden === on) rematchBar.hidden = !on;
-    if (!on) return;
+    const bar = on && victory.hidden && !game.highlights.playing; // (0.70: on the winner screen the vote is on it)
+    if (rematchBar.hidden === bar) rematchBar.hidden = !bar;
+    if (!on) { if (!victory.hidden && game.online) hideVictory(); return; }
     const v = net.rematchVotes(R.id), mine = net.rematch && net.rematch[0] === R.id ? net.rematch[1] : 0, left = game.nextRoundIn();
     $('rm-again').setAttribute('aria-pressed', String(mine === 1)); $('rm-new').setAttribute('aria-pressed', String(mine === 2));
     $('rm-again-n').textContent = v.again || ''; $('rm-new-n').textContent = v.fresh || '';
+    $('vic-again').setAttribute('aria-pressed', String(mine === 1)); $('vic-new').setAttribute('aria-pressed', String(mine === 2));
+    $('vic-again-n').textContent = v.again || ''; $('vic-new-n').textContent = v.fresh || '';
     const lead = v.fresh > v.again ? 'back to the lobby for a new vote' : 'a rematch';
     const note = `${v.voted} of ${v.total} voted · ${v.voted === v.total ? 'starting…' : `${left != null ? `${left} s` : 'soon'}, or as soon as everyone has voted`} · now: ${lead}`;
     if ($('rm-note').textContent !== note) $('rm-note').textContent = note;
+    if ($('vic-note').textContent !== note) $('vic-note').textContent = note;
   }
   // (0.69) the lobby countdown ticks (the last 5 s), the match starting rings; the vote bar keeps up
   let lastTick = null;
@@ -888,8 +892,8 @@ function boot() {
   });
   $('spectate').addEventListener('click', () => { end.hidden = true; });
   $('resume').addEventListener('click', () => { pause.hidden = true; game.paused = false; if (!input.isTouch && !game.spectator.active) input.requestLock(true); });
-  input.wantLock = () => playing && !game.paused && pause.hidden && end.hidden && loadout.hidden && $('sandbox').hidden && !game.spectator.active && !input.isTouch && !game.highlights.playing; // (not under a reel: Esc skips it, and would unlock the mouse into the pause menu)
-  input.blockClicks = () => game.spectator.active || !loadout.hidden || !!game.highlights.playing || !$('sandbox').hidden; // clicks there are for the spectator bar, the card, the reel's buttons
+  input.wantLock = () => playing && !game.paused && pause.hidden && end.hidden && loadout.hidden && $('sandbox').hidden && $('victory').hidden && !game.spectator.active && !input.isTouch && !game.highlights.playing; // (not under a reel: Esc skips it, and would unlock the mouse into the pause menu)
+  input.blockClicks = () => game.spectator.active || !loadout.hidden || !!game.highlights.playing || !$('sandbox').hidden || !$('victory').hidden; // clicks there are for the spectator bar, the card, the reel's buttons
 
 
   input.onLockChange = (locked) => {
@@ -931,24 +935,129 @@ function boot() {
     if (!r) return;
     if (e.code === 'Escape') { r.skip(); e.preventDefault(); } else if (['Space', 'Enter', 'ArrowRight'].includes(e.code)) { r.next(); e.preventDefault(); }
   });
+  // (0.70) The winner screen, every mode: who won (a Titan or a team, in its colour) and how, the winning
+  // team's Titans, the top 3 splatters, your result; online the vote (play again or a new vote) is on it too.
+  // The highlight reel only if you choose it.
+  const victory = $('victory');
+  const MODE_NAME = { classic: 'Classic', chef: "Chef's Choice", pots: 'Cooking Pot Wars', squads: 'Squads', king: 'King of the Utensil' };
+  const okColor = (c) => { // (a dark colour is lifted toward white: the name must read on the dark card)
+    if (!/^#[0-9a-f]{6}$/i.test(c || '')) return '#ffd447';
+    const n = parseInt(c.slice(1), 16), rgb = [n >> 16, (n >> 8) & 255, n & 255], lum = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
+    if (lum >= 0.5) return c;
+    const k = Math.min(0.75, (0.6 - lum) / (1 - lum));
+    return `#${rgb.map((v) => Math.round(v + (255 - v) * k).toString(16).padStart(2, '0')).join('')}`;
+  };
+  function victoryInfo(data) {
+    const g = game, A = g.arena, P = g.player, mode = g.mode;
+    const titans = g.actors.filter((a) => a === P || a.isBot || a.isRemote);
+    const tIndex = (name) => TEAMS.findIndex((T) => T.name === name);
+    let title, sub, color = '#ffd447', members = [], draw = !!data.draw, won = !!data.won;
+    if (A.active && A.squads) {
+      const r = A.ranking();
+      draw = r.length > 1 && r[0].score === r[1].score;
+      const T = TEAMS[r[0].team];
+      title = draw ? "It's a draw!" : `${T.name} wins!`; color = draw ? '#cdb9c9' : T.color;
+      sub = `${r[0].score}–${r[1]?.score ?? 0} in team splats`;
+      if (!draw) members = titans.filter((a) => a.team === r[0].team);
+    } else if (A.active) { // King of the Utensil
+      const r = A.ranking(), top = r[0];
+      draw = draw || (r.length > 1 && top.score === r[1].score);
+      title = draw ? "It's a draw!" : `${top.name} is King!`; color = draw ? '#cdb9c9' : okColor(top.color);
+      sub = draw ? `${top?.score ?? 0} splats each at the top` : `King of the Utensil · ${top.score} splat${top.score === 1 ? '' : 's'}`;
+    } else if (data.team) {
+      const t = tIndex(data.team), T = TEAMS[t];
+      title = `${data.team} wins!`; color = T?.color || color;
+      sub = mode === 'pots' ? 'The last pot standing' : 'The last team standing';
+      members = titans.filter((a) => a.team === t);
+    } else {
+      const w = data.winner || null;
+      title = w ? `${w.name} wins!` : 'Nobody survived!'; color = w ? okColor(w.ownColor || w.color) : '#cdb9c9'; draw = !w;
+      sub = w ? 'The Last Bite Standing' : 'The kitchen won this one';
+    }
+    if (won) title = members.length ? `${title.replace(/ wins!$/, '')} wins!` : 'You win!';
+    const top = [...titans].sort((a, b) => (b.kills || 0) - (a.kills || 0)).slice(0, 3);
+    return { title, sub, color, members, top, draw, won, mode: MODE_NAME[mode] || 'Match' };
+  }
+  function confetti(color) {
+    const box = $('vic-confetti');
+    box.textContent = '';
+    if ((game.fx?.scale ?? 1) <= 0) return;
+    const cols = [color, '#ffd447', '#ffffff', color, '#ff6f91', '#7cf03a'];
+    for (let i = 0; i < 46; i++) {
+      const c = document.createElement('i');
+      c.style.left = `${Math.random() * 100}%`; c.style.background = cols[i % cols.length];
+      c.style.setProperty('--dx', `${(Math.random() - 0.5) * 160}px`); c.style.setProperty('--r', `${(Math.random() - 0.5) * 1440}deg`);
+      c.style.animationDuration = `${2.4 + Math.random() * 2.2}s`; c.style.animationDelay = `${Math.random() * 0.8}s`;
+      box.appendChild(c);
+    }
+  }
+  let vicData = null, vicCoins = null;
+  function showVictory(data, coinsR, again = false) {
+    vicData = data; vicCoins = coinsR;
+    const v = victoryInfo(data), P = game.player;
+    victory.style.setProperty('--vc', v.color);
+    victory.classList.toggle('draw', v.draw);
+    const round = game.online && game.round?.id >= 0 ? ` · round ${game.round.id + 1}` : '';
+    $('vic-mode').textContent = `${v.mode}${round}`;
+    $('vic-title').textContent = v.title;
+    $('vic-sub').textContent = v.sub;
+    const who = (a) => esc(a.name) + (a === P && a.name !== 'You' ? ' (you)' : '');
+    $('vic-members').innerHTML = v.members.map((a) => `<li${a === P ? ' class="me"' : ''}>${who(a)} · ${a.kills || 0}</li>`).join('');
+    $('vic-top').innerHTML = v.top.map((a, i) => `<li${a === P ? ' class="me"' : ''}><em>${['🥇', '🥈', '🥉'][i]}</em><b style="color:${okColor(a.ownColor || a.color)}">${who(a)}</b><small>${a.kills || 0} splat${a.kills === 1 ? '' : 's'}</small></li>`).join('');
+    const you = P ? `${v.won ? '🎉 You won!' : `You: ${P.kills || 0} splat${P.kills === 1 ? '' : 's'}`}${coinsR ? ` · +${coinsR.total} coins` : ''}` : '';
+    $('vic-you').textContent = you;
+    const has = game.highlights.has('all'), hasMe = !game.online && game.highlights.has('me');
+    $('vic-reel').hidden = !has; $('vic-reel-me').hidden = !hasMe;
+    $('vic-reel').firstChild.textContent = game.online ? '▶ Watch the round highlights ' : '▶ Watch the highlights ';
+    $('vic-go').textContent = game.online ? 'Hide' : 'Continue';
+    $('vic-vote').hidden = !game.online;
+    victory.hidden = false; touch.hidden = true; input.exitLock();
+    if (!again) {
+      confetti(v.color);
+      const acts = $('vic-acts');
+      acts.classList.add('wait'); setTimeout(() => acts.classList.remove('wait'), 1300); // (no click goes through by accident)
+      if (v.won) sfx.play('win', null, 0.8);
+    }
+    renderRematch();
+  }
+  function hideVictory() { victory.hidden = true; $('vic-confetti').textContent = ''; }
+  const afterVictory = () => { // off the winner screen: offline the end card, online back to the room (the vote bar stays up)
+    hideVictory();
+    if (!game.online) showEndCard();
+    else if (playing && input.isTouch) touch.hidden = false;
+  };
+  const watchHighlights = (mode = 'all') => {
+    if (victory.hidden || !game.highlights.has(mode)) return;
+    hideVictory();
+    if (game.online) playReel(mode, () => { if (playing && game.online && game.round?.state === 'over' && vicData) showVictory(vicData, vicCoins, true); }, { live: true, max: 4, mine: true, title: 'Round highlights' });
+    else playReel(mode);
+  };
+  $('vic-reel').addEventListener('click', () => watchHighlights('all'));
+  $('vic-reel-me').addEventListener('click', () => watchHighlights('me'));
+  $('vic-go').addEventListener('click', afterVictory);
+  $('vic-again').addEventListener('click', () => voteRematch(1));
+  $('vic-new').addEventListener('click', () => voteRematch(2));
+  $('vic-gg').addEventListener('click', () => game.net?.say('GG! 🍅'));
+  addEventListener('keydown', (e) => {
+    if (victory.hidden || e.target?.closest?.('input, textarea') || $('vic-acts').classList.contains('wait')) return;
+    if (e.code === 'KeyH') { watchHighlights('all'); e.preventDefault(); }
+    else if (!game.online && (e.code === 'Enter' || e.code === 'Escape')) { afterVictory(); e.preventDefault(); }
+  });
+
   game.onMatchEvent = (type, data) => {
-    if (type === 'start') { pay.due = !game.online; pay.kills = game.player?.kills || 0; $('end-coins').textContent = '+0'; $('end-receipt').textContent = ''; if (game.online) sfx.play('ready', null, 0.7); }
+    if (type === 'start') { pay.due = !game.online; pay.kills = game.player?.kills || 0; $('end-coins').textContent = '+0'; $('end-receipt').textContent = ''; hideVictory(); if (game.online) sfx.play('ready', null, 0.7); }
     if (type === 'joined') { pay.due = true; pay.kills = game.player?.kills || 0; }
     if (type === 'roundOver') { // online: the round ended; coins for it if I played
       if (!input.isTouch) input.exitLock(); // (0.69: the mouse is free for the vote: play again or a new vote)
       const r = playing ? payOut(data.placement, data.won) : null;
-      if (r) setTimeout(() => { if (playing) game.hud.banner(`+${r.total} coins`, r.lines.map(([k, n]) => `${k} +${n}`).join(' · '), 3.2); }, 2200); // after "Round over"
-      // (0.38) then the round's highlights (its best plays, always with your best one); the match goes on
-      // underneath, and the next round waits until everyone has watched or skipped
-      setTimeout(() => {
-        if (playing && game.online && game.round?.state === 'over' && loadout.hidden && !game.highlights.playing) {
-          playReel('all', () => {}, { live: true, max: 3, mine: true, title: 'Round highlights' });
-        }
-      }, 3400);
+      // (0.70) the winner screen (with the vote: play again or a new vote); the round's highlights only if you
+      // choose to watch them (the next round waits for whoever does)
+      const id = game.round?.id;
+      setTimeout(() => { if (playing && game.online && game.round?.state === 'over' && game.round.id === id && !game.round.fresh) showVictory(data, r); }, 900);
       return;
     }
     if (type === 'joined') { loadout.hidden = true; return; } // online: dropped into a round
-    if (type === 'lobby') { end.hidden = true; openLoadout(); return; } // (0.68) the room went back to its lobby
+    if (type === 'lobby') { end.hidden = true; hideVictory(); openLoadout(); return; } // (0.68) the room went back to its lobby
     if (!playing || !game.player) {
       if (type === 'over') setTimeout(() => { if (!playing) game.newMatch(false); }, 5000);
       return;
@@ -970,10 +1079,10 @@ function boot() {
         : won ? 'Last Bite Standing. The whole kitchen is yours.' : `${data.winner ? data.winner.name : 'Nobody'} took the Last Bite.`;
       $('end-kills').textContent = game.player.kills;
       $('end-place').textContent = `#${game.player.placement || 1}`;
-      payOut(won ? 1 : game.player.placement || 2, !!won);
+      const r = payOut(won ? 1 : game.player.placement || 2, !!won);
       $('spectate').hidden = true;
-      // the match's highlight reel first (Skip or Esc to go straight to the card), then the card
-      setTimeout(() => { if (playing && !game.highlights.playing && !playReel('all')) showEndCard(); }, 2800);
+      // (0.70) the winner screen first; then you choose: the match's highlights, or straight to the card
+      setTimeout(() => { if (playing && !game.highlights.playing) { end.hidden = true; showVictory({ ...data, won: !!won }, r); } }, 1400);
     }
   };
 
