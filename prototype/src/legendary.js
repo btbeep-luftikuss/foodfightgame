@@ -45,7 +45,10 @@ export const BAL = {
   torch: { range: 11, half: 0.42, dps: 24, burn: 2, pieceEvery: 0.2, pieceM: 0.35, useEvery: 1.0 },
   blender: { range: 34, width: 0.5, stages: [[0, 14], [1.2, 40], [2.4, 120]], gap: 3, botGap: 0.6, // (0.66: a bot's ramp only waits 0.6 s off target)
             useEvery: 3.5, dripEvery: 1.2 },
-  grater: { lock: 0.9, autoEvery: 1.2, dur: 3.5, rate: 22, r: 5, h: 8, m: 0.5, drop: 34, dropG: 1.5, follow: 4, max: 3 }, // (0.62: drop 20 -> 34 m/s, heavier: the rain comes down fast) // (0.59: r 2.6 -> 5, rate 16 -> 22)
+  // (0.59: r 2.6 -> 5; 0.62: the drops fall at 34 m/s; 0.67, to make it a match for the others: a cloud finds the nearest
+  // enemy within `seek` m and follows at 6.5 m/s (faster than a walk), drops hit harder (m) and slow (soak), rain
+  // gathers sooner (start) and falls thicker in the middle)
+  grater: { lock: 0.9, autoEvery: 1.2, dur: 3.5, rate: 22, r: 5, h: 8, m: 0.55, drop: 34, dropG: 1.5, follow: 6.5, seek: 7, start: 0.15, soak: [0.08, 1.2], max: 3 },
   mitt: { charge: 0.8, cd: 2.2, speed: 120, // (cd + charge: a shot every 3 s)
           life: 2.2, m: 1.35, push: 4.5, shots: 4, gap: 0.25 }, // (0.61: a charge loads separate shots, 1.35x each, at least 0.25 s apart; 0.62: 4, and each food its own: MITT_FOOD)
   cream: { r: 9, pelletR: 5, speed: 12, freeze: 1.5, dmg: 10, jump: 0.7, lock: 0.7 },
@@ -354,11 +357,21 @@ export class Legends {
     const base = _v.set(at.x, at.y + 0.5, at.z);
     const room = raycastWorld(base, _up, B.h + 2);
     const h = room > 5 ? Math.min(B.h, room - 1.5) : Math.max(1.4, room - 0.7); // (under a table: just under its top)
-    const c = { x: at.x, y: base.y + h, z: at.z, h, owner, food, cols: null, follow: follow?.alive && follow !== owner ? follow : null, born: g.time, acc: 0, mesh: this._cloudMesh(tintOf(food)) };
+    if (!(follow?.alive && follow !== owner)) follow = this._nearestFoe(owner, at, B.seek); // (0.67: landed near someone: it goes after them)
+    const c = { x: at.x, y: base.y + h, z: at.z, h, owner, food, cols: null, follow, born: g.time, acc: 0, mesh: this._cloudMesh(tintOf(food)) };
     this.clouds.push(c);
     c.mesh.position.set(c.x, c.y, c.z);
     g.sfx.play('whirr', at, 0.6);
     g.fx.spray('puffs', _v.set(c.x, c.y, c.z), 8, { speed: 3, up: 1, colors: [col(tintOf(food)), col('#ffffff')], size: 0.7, life: 0.5, grav: 0, grow: 1.5 });
+  }
+  _nearestFoe(owner, at, max) {
+    let best = null, bd = max * max;
+    for (const b of this.game.actors) {
+      if (!b.alive || b === owner || this.game.teammates(owner, b) || Math.abs(b.pos.y - at.y) > 4) continue;
+      const d = (b.pos.x - at.x) ** 2 + (b.pos.z - at.z) ** 2;
+      if (d < bd) { bd = d; best = b; }
+    }
+    return best;
   }
   _cloudMesh(tint) {
     let m = this.cloudPool.pop();
@@ -400,7 +413,7 @@ export class Legends {
         c.mesh.scale.set(B.r * 0.62 * k, B.r * 0.45 * k, B.r * 0.62 * k);
         c.mesh.rotation.y += dt * 0.3;
       } else if (age < B.dur) this._powder(c, dt, grow);
-      if (age < 0.3 || age > B.dur) continue;
+      if (age < B.start || age > B.dur) continue;
       c.acc += B.rate * dt;
       while (c.acc >= 1) { c.acc -= 1; this._drop(c); }
     }
@@ -419,7 +432,7 @@ export class Legends {
   }
   _drop(c) {
     const g = this.game, B = BAL.grater, root = rootOf(c.food), pid = pieceOf(root), f = FOODS[pid];
-    const r = B.r * Math.sqrt(Math.random()), ang = rand(0, Math.PI * 2);
+    const r = B.r * Math.random() ** 0.65, ang = rand(0, Math.PI * 2); // (0.67: a little thicker in the middle, over whoever it follows)
     g.projectiles.launch({
       food: pid, owner: c.owner, local: true, u: 'gold-grater', x: { m: B.m, sc: pid === root ? 0.55 : 0.85, cr: 1 },
       pos: new THREE.Vector3(c.x + Math.cos(ang) * r, c.y - 0.8, c.z + Math.sin(ang) * r), vel: new THREE.Vector3(rand(-0.5, 0.5), -B.drop, rand(-0.5, 0.5)),

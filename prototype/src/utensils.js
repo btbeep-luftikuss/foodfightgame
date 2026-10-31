@@ -91,7 +91,7 @@ export const UTENSILS = [
   { id: 'gold-blender', base: 'blender', legendary: true, tip: 'Hold: a laser of liquefied food that ramps up', name: 'Legendary Blender', role: 'Ramping Juice Laser', color: '#19c8d6', works: THROWN,
     buff: 'Hold the throw for a laser of your food, liquefied. The longer it stays on the same Titan, the harder it hits: 14, then 40, then 120 damage a second. Melts the toughest Titan. One food lasts 3.5 s.', trade: 'A thin beam: it only hurts the Titan it touches, and the ramp starts over the moment it slips off.' },
   { id: 'gold-grater', base: 'grater', legendary: true, tip: 'A rain cloud of your food where it lands', name: 'Legendary Grater', role: 'Food Rain Clouds', color: '#7cf03a', works: THROWN,
-    buff: 'Where your food lands or hits a Titan, a cloud of its colour gathers overhead and rains that food down for 3.5 s (a cloud over a Titan drifts after them). Up to 3 clouds at once.', trade: 'The rain is little pieces, spread over a 10 m circle: run out from under it. It reloads for 0.9 s.' },
+    buff: 'Where your food lands or hits a Titan, a cloud of its colour gathers overhead and rains that food down for 3.5 s. A cloud goes after the Titan it hit, or the nearest one within 7 m, faster than they can walk, and every drop slows them a little. Up to 3 clouds at once.', trade: 'The rain is little pieces, spread over a 10 m circle, and a cloud is slower than a sprint: run out from under it. It reloads for 0.9 s.' },
   { id: 'gold-cream', base: 'ice-cream-machine', legendary: true, tip: 'Freeze wave where your food lands · jump it!', name: 'Legendary Ice Cream Machine', role: 'Freeze Shockwave', color: '#19c8d6', works: THROWN,
     buff: 'Every food you throw lands with a ring of ice that rolls out 9 m across the floor: everyone it catches on the ground is frozen solid.', trade: 'Only the wave freezes (not the food in the air), and a jump at the right moment clears it.' },
   { id: 'gold-mitt', base: 'oven-mitt', legendary: true, tip: 'Charge once, then 4 dead-straight shots (each food its own)', name: 'Legendary Oven Mitt', role: 'Charged Straight Shots', color: '#19c8d6', works: THROWN,
@@ -258,7 +258,10 @@ const RULES = {
       U.legend.drip(p, hit.point); p.done = true;
       return true;
     },
-    post(p, hit, U) { if (p.x.gc) U.once(p, 'cloud', () => U.legend.cloud(hit.point, p.owner, rootOf(p.food), hit.actor)); },
+    post(p, hit, U) {
+      if (p.x.gc) U.once(p, 'cloud', () => U.legend.cloud(hit.point, p.owner, rootOf(p.food), hit.actor));
+      if (p.x.cr && hit.actor?.alive) hit.actor.addSticky(...BAL.grater.soak); // (0.67: soaked: a little slower under the rain)
+    },
     expire(p, U) { if (p.x.gc) U.once(p, 'cloud', () => U.legend.cloud(p.pos, p.owner, rootOf(p.food), null)); },
   },
   'gold-mitt': { // (0.57) charge, then dead-straight shots (legendary.js). (0.61) A charge loads 3 shots: the

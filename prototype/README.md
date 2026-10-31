@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.67: a much better Legendary Grater** (`src/legendary.js`, `src/utensils.js`, `src/net.js`)
+
+- **Clouds hunt:** a cloud that lands near someone (within 7 m) goes after the nearest enemy, not just the Titan it hit, and follows at 6.5 m/s (was 4): faster than a walk (5.6), still slower than a sprint (8.5), so you can get out from under it if you run.
+- **Harder, soaking rain:** each drop does a bit more (0.55 of the food's damage, was 0.5), every drop that hits slows you a little for a moment, the rain starts sooner (0.15 s after the cloud forms, was 0.3) and falls a little thicker in the middle, where whoever it's following is.
+- Tomato on still Titans: one at 10 m splatted in 4.7 s (was 6.4), 200 to one at 30 m in 5 s (was 98), 690 to a group of four in 5 s (was 520). A bot's Grater against you over 8 s: standing still 323 (was 144), strafing 337 (was 115), sprinting in a zigzag 227 (was 87). Online version 66.
+
 **Version 0.66: bots are worse with the Legendary Blender, and freezing or jelly costs you its ramp** (`src/bots.js`, `src/legendary.js`, `src/net.js`)
 
 - **Bots aim the Blender like people do:** their beam swings after you at a human pace instead of sticking to you, wobbles, starts a moment after they spot you, and their ramp only waits 0.6 s off you before it starts over (yours waits 3 s). Damage a bot's Blender does to you in 8 s (an average of 3 tries): standing still 428 (was 864), strafing side to side 240 (was 931), sprinting in a zigzag 68 (was 940). Keep moving and it can't ramp up.
