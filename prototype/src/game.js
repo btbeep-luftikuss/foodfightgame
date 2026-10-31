@@ -42,7 +42,7 @@ const tideDps = (phase, mode) => (mode === 'shrink' ? TIDE_PHASES[Math.min(phase
   : phase > 0 ? TIDE_PHASES[Math.min(phase - 1, TIDE_PHASES.length - 1)].dps : 2);
 const BOT_LEVELS_ONLINE = ['easy', 'medium', 'hard'];
 const LATE_JOIN = 25; // online: seconds into a round you can still drop in
-const OVER_FOR = 6;   // online: seconds between rounds
+const OVER_FOR = 12;  // online: seconds between rounds (0.69: the vote to play again or vote anew; sooner once everyone has voted)
 const REEL_WAIT = 32; // online: seconds more the next round waits for players watching the round's highlights
 const random3 = () => [...FOOD_IDS].sort(() => Math.random() - 0.5).slice(0, 3);
 const MODES = ['classic', 'chef', 'pots', 'squads', 'king', 'sandbox']; // (0.54: Squads and King of the Utensil: arena.js; 0.55: the Test World, sandbox.js)
@@ -317,10 +317,16 @@ export class Game {
   _hostRound(dt) {
     const R = this.round, net = this.net;
     if (R.id < 0) { // (0.68) the lobby: the match starts once everyone's ready (5 s), or when I say so (3 s)
-      const go = net.startReq || (net.allReady() && net.people().length > 0);
-      if (!go) net.lobbyAt = null;
-      else if (net.lobbyAt == null) { net.lobbyAt = this.time + (net.startReq ? 3 : 5); }
-      if (net.lobbyAt != null && this.time >= net.lobbyAt) { net.lobbyAt = null; net.startReq = false; this.beginRound(0, net.nextSettings()); }
+      // (0.69) ... or 30 s after most of the room (3 players or more) is ready: nobody waits on someone who's away
+      const ppl = net.people(), ready = ppl.filter((p) => p.ready).length;
+      const why = net.startReq ? 3 : ready === ppl.length ? 1 : ppl.length >= 3 && ready * 2 > ppl.length ? 2 : 0;
+      if (!why) net.lobbyAt = null;
+      else if (net.lobbyAt == null || why !== net.lobbyWhy) {
+        const at = this.time + [0, 5, 30, 3][why];
+        net.lobbyAt = net.lobbyAt == null || why === 2 ? at : Math.min(net.lobbyAt, at); // (everyone ready, or the host: never later than it was)
+      }
+      net.lobbyWhy = why;
+      if (net.lobbyAt != null && this.time >= net.lobbyAt) { net.lobbyAt = null; net.startReq = false; this.beginRound(0, net.resolve(net.nextSettings())); }
       return;
     }
     R.t += dt;
@@ -341,8 +347,14 @@ export class Game {
       R.idle = restart ? (R.idle || 0) + dt : 0;
       if (R.started >= 2 && sides <= 1 && !(this.pots.active && this.pots.setup)) this._roundOver();
       else if (R.idle > (h.inRound ? 3 : 5)) this._roundOver(true);
-    } else if (R.state === 'over' && R.t > OVER_FOR && (!this.watchingReel() || R.t > OVER_FOR + REEL_WAIT)) {
-      this.beginRound(R.id + 1, net.nextSettings()); // (0.38) once nobody is watching the round's highlights (0.68: with the votes as they are now)
+    } else if (R.state === 'over') {
+      // (0.69) after every round: play again (the same settings) or a new vote (back to the lobby). It goes as soon
+      // as everyone has voted, else when the time's up (0.38: and nobody is watching the round's highlights)
+      const v = net.rematchVotes(R.id), all = v.total > 0 && v.voted === v.total && R.t > 1.5 && !R.fresh;
+      if (all || (R.t > OVER_FOR && (!this.watchingReel() || R.t > OVER_FOR + REEL_WAIT))) {
+        if (v.fresh > v.again) this.toLobby();
+        else this.beginRound(R.id + 1, net.nextSettings());
+      }
     }
   }
   // Host, early in a round: a player joined a team the bots had already filled. One of that team's

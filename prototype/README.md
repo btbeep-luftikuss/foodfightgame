@@ -63,6 +63,17 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.69: a friendlier room lobby, and a vote after every round** (`src/net.js`, `src/game.js`, `src/main.js`, `index.html`; the research behind it: [docs/lobby-research.md](../docs/lobby-research.md))
+
+- **Create a room in one click:** Play online has **Create a new room**, which makes a fun code nobody else is on (*fizzy-tomato-92*) and goes straight in. The starting settings are tucked away (optional: the lobby votes on the game).
+- **Invite friends:** the lobby shows the room code big, with **Copy invite**: on the public game page a link that opens the game with the code filled in (`#room=...`); on claude.ai, where only people the game is shared with can play, the code to type.
+- **A clearer lobby:** it says who you're waiting for ("waiting for Cara"), names why it's starting ("Everyone is ready!", "Most of you are ready", "The host started it"), the host's button reads **Start** when everyone's ready and **Start anyway** when not, and the last 5 seconds tick.
+- **Nobody holds the room up:** with 3 or more in the room and most of them ready, the match starts in 30 s (still 5 s once everyone is).
+- **Surprise me:** vote for a surprise mode or map; the host picks one when the match starts (not the one just played, if there's a choice).
+- **Quick chat:** one-tap messages under the chat (👋 Hi!, ✅ Ready!, ⏳ Wait for me, 🔥 Let's go!, 🍅 Food fight!, 😂): the easy way on a phone.
+- **After every round: Play again?** A bar at the top: **🔁 Play again** (Y) or **🗳️ New vote** (N), with live counts, and **GG**. The next round starts as soon as everyone has voted (else after 12 s, longer while someone watches the round's highlights). More votes for a new vote than to play again takes the room back to the lobby, where everyone readies up again; otherwise it's a rematch with the same settings (votes cast in the lobby card during a match count when you're back in the lobby). The mouse is freed when a round ends, so you can click.
+- Tested with three players in a test room: created a room, two joined by its invite link (the code filled in, Play online open), a surprise map, quick chat, 2 of 3 ready started the 30 s countdown "waiting for Cara", the third made it 5 s; after the round all three voted (2 play again, 1 new vote) and the rematch began 2 s into the break with the same settings; then 2 new votes to 1 took everyone back to the lobby. Online version 69.
+
 **Version 0.68: a lobby for every online room** (`src/net.js`, `src/game.js`, `src/main.js`, `src/hud.js`, `src/input.js`, `index.html`)
 
 - **Meet in the lobby first:** everyone who joins the same room code lands in the room's lobby instead of straight in a round. The lobby lists who's there (the host, their team, ready or not), and nobody has to pick the same settings any more.

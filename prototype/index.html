@@ -423,6 +423,32 @@ button { font: inherit; color: inherit; }
 .lo-chatform { display: flex; gap: 6px; }
 .lo-chatform input, .chatbar input { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.16); background: rgba(0,0,0,0.25); color: var(--paper); font: inherit; font-size: 13.5px; }
 .btn.small { padding: 6px 12px; font-size: 13px; }
+/* (0.69) the room code, invites, quick chat, the vote after a round */
+.lo-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.lo-code { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; border-radius: 14px; background: rgba(255,255,255,0.06); border: 2px dashed color-mix(in srgb, var(--butter) 55%, transparent); }
+.lo-code span { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--paper-dim); }
+.lo-code b { font-family: var(--display); font-weight: 400; font-size: 24px; color: var(--butter); letter-spacing: 0.02em; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lo-quick { display: flex; flex-wrap: wrap; gap: 4px; }
+.lo-quick button { padding: 3px 8px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.06); color: var(--paper); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.lo-quick button:hover { border-color: var(--butter); }
+.lo-players li.wait .nm { color: var(--butter); }
+.online-more { margin: 2px 0 6px; }
+.online-more summary { cursor: pointer; font-weight: 800; color: var(--paper); }
+.online-more summary span { font-weight: 500; color: var(--paper-dim); font-size: 13px; }
+.rematch { position: fixed; left: 50%; top: calc(54px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 70; display: grid; grid-template-columns: auto auto; align-items: center; justify-items: center; gap: 4px 14px; padding: 8px 14px 7px; border-radius: 18px; background: var(--ink-glass); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: 2px solid var(--butter); color: var(--paper); box-shadow: 0 10px 30px rgba(0,0,0,0.35); width: max-content; max-width: calc(100vw - 24px); animation: rmIn 0.35s ease-out; }
+@keyframes rmIn { from { opacity: 0; transform: translate(-50%, -12px); } }
+@media (max-width: 560px) { .rematch { grid-template-columns: 1fr; } }
+.rematch small { grid-column: 1 / -1; }
+.rematch > b { font-family: var(--display); font-weight: 400; font-size: 22px; color: var(--butter); text-shadow: 2px 3px 0 var(--tomato); }
+.rm-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.rm-btns .btn { position: relative; }
+.rm-btns .btn[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--butter), 0 0 18px var(--butter); }
+.rm-btns kbd { margin-left: 6px; font-size: 11px; padding: 0 5px; border-radius: 5px; background: rgba(0,0,0,0.2); color: inherit; }
+.rm-btns .ghost kbd { background: rgba(255,255,255,0.16); }
+.touchui .rm-btns kbd { display: none; }
+.rm-btns i { font-style: normal; position: absolute; top: -8px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--tomato); color: #fff; font-size: 12px; font-weight: 800; display: grid; place-items: center; }
+.rm-btns i:empty { display: none; }
+.rematch small { font-size: 12.5px; color: var(--paper-dim); font-weight: 700; }
 .chatbar { position: absolute; left: 16px; bottom: 120px; width: min(460px, calc(100vw - 32px)); display: flex; pointer-events: auto; z-index: 40; }
 .chatbar input { background: var(--ink-glass); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); border-color: var(--butter); }
 .card.loadout h3 { font-size: 34px; }
@@ -761,7 +787,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.68 · Room lobby</p>
+      <p class="eyebrow">Prototype 0.69 · Play again?</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in; smash the other teams' pots in Cooking Pot Wars; outsplat the other team in Squads; or fight over two Legendary utensils in King of the Utensil.</p>
       <nav class="homenav" aria-label="Main menu">
@@ -852,10 +878,9 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
       <form id="online" class="online">
         <label for="nick">Your name<input id="nick" maxlength="16" autocomplete="nickname" value=""></label>
         <label for="roomcode">Room code (friends type the same one)<input id="roomcode" maxlength="40" value="kitchen" autocapitalize="off" spellcheck="false"></label>
-        <p class="step-sub"><b>If you start the room</b> <span>(joiners play by the room's settings)</span></p>
-        <div id="online-settings"></div>
-        <div class="row"><button id="online-join" class="btn" type="submit">Join room</button></div>
-        <p id="online-status">Everyone who types the same room code plays together, in rounds. After joining you pick your team, 3 foods and a utensil, or spectate.</p>
+        <div class="row"><button id="online-join" class="btn" type="submit">Join room</button><button id="online-create" class="btn ghost" type="button" title="A new room with a fresh code: invite your friends from its lobby">Create a new room</button></div>
+        <details id="online-more" class="online-more"><summary>Starting settings <span>(optional: everyone votes in the room's lobby)</span></summary><div id="online-settings"></div></details>
+        <p id="online-status">Everyone who types the same room code meets in its lobby: vote on the game, pick teams, chat, ready up.</p>
       </form>
     </div>
 
@@ -922,7 +947,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
 
 <section id="loadout" class="overlay" hidden aria-label="Room lobby">
   <div class="card loadout">
-    <h3 id="lo-title">Room lobby</h3>
+    <div class="lo-head"><h3 id="lo-title">Room lobby</h3><div class="lo-code"><span>Room code</span><b id="lo-code"></b><button id="lo-invite" class="btn small" type="button">Copy invite</button></div></div>
     <p id="lo-room" class="lo-room"></p>
     <p id="lo-status" class="lo-status" aria-live="polite"></p>
     <div class="lo-top">
@@ -938,6 +963,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
         <p class="lo-h"><b>Chat</b><span>press Enter to chat in a match too</span></p>
         <ul id="lo-chat" class="lo-chat" aria-live="polite"></ul>
         <form id="lo-chatform" class="lo-chatform" autocomplete="off"><input id="lo-chatin" maxlength="140" placeholder="Say something…" aria-label="Chat message"><button class="btn small" type="submit">Send</button></form>
+        <div id="lo-quick" class="lo-quick" role="group" aria-label="Quick chat"><button type="button">👋 Hi!</button><button type="button">✅ Ready!</button><button type="button">⏳ Wait for me</button><button type="button">🔥 Let's go!</button><button type="button">🍅 Food fight!</button><button type="button">😂</button></div>
       </div>
     </div>
     <div id="lo-teams-row" class="teampick-row" hidden>
@@ -1000,6 +1026,17 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
     </div>
   </div>
 </section>
+
+<!-- (0.69) after every online round: play again, or a new vote in the lobby -->
+<div id="rematch" class="rematch" hidden role="group" aria-label="Play again?">
+  <b id="rm-title">Play again?</b>
+  <div class="rm-btns">
+    <button id="rm-again" class="btn" type="button">🔁 Play again <kbd>Y</kbd><i id="rm-again-n"></i></button>
+    <button id="rm-new" class="btn ghost" type="button">🗳️ New vote <kbd>N</kbd><i id="rm-new-n"></i></button>
+    <button id="rm-gg" class="btn ghost small" type="button" title="Say GG to the room">GG</button>
+  </div>
+  <small id="rm-note"></small>
+</div>
 
 <section id="reel" class="reel" hidden aria-label="Highlight reel">
   <div class="vig"></div>

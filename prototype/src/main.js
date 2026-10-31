@@ -611,7 +611,8 @@ function boot() {
   const loadout = $('loadout');
   function renderLoadout() {
     if (loadout.hidden || !game.net) return;
-    const net = game.net, R = game.round, rs = net.roomSettings(), left = 3 - chefPick.length;
+    const net = game.net, R = game.round, left = 3 - chefPick.length;
+    const rs = net.inLobby() ? net.nextSettings() : net.roomSettings(); // (0.69: in the lobby, what the votes say)
     $('lo-count').textContent = left > 0 ? `${left} more to pick` : 'all set';
     const bots = rs.bots === 'off' ? 'no bots' : `${rs.bots[0].toUpperCase()}${rs.bots.slice(1)} bots`;
     const mode = rs.mode === 'chef' ? "Chef's Choice: your 3 foods never run out" : rs.mode === 'pots' ? 'Cooking Pot Wars: you start with a stack of each; guard your pot, smash theirs'
@@ -619,7 +620,9 @@ function boot() {
       : rs.mode === 'king' ? 'King of the Utensil: two Legendary utensils in the middle, no other utensils; the most splats in 4 minutes wins; you respawn'
       : 'Classic: you start with a stack of each, and find more';
     const size = cleanSize(rs.team, rs.mode), lobby = net.inLobby();
-    const room = `Room <b>${esc(net.roomName)}</b> · ${lobby ? 'Next match: ' : ''}${MAPS[rs.map]?.name || 'The Grand Kitchen'} · ${TEAM_LABEL[size]} · ${bots}. ${mode}.`;
+    const room = rs.mode === '?' || rs.map === '?'
+      ? `${lobby ? 'Next match: ' : ''}${rs.map === '?' ? 'a surprise map' : MAPS[rs.map]?.name || 'The Grand Kitchen'} · ${rs.mode === '?' ? 'a surprise mode' : TEAM_LABEL[size]} · ${bots}.${rs.mode === '?' ? '' : ` ${mode}.`}`
+      : `${lobby ? 'Next match: ' : ''}${MAPS[rs.map]?.name || 'The Grand Kitchen'} · ${TEAM_LABEL[size]} · ${bots}. ${mode}.`;
     if ($('lo-room').innerHTML !== room) $('lo-room').innerHTML = room;
     renderLobby();
     renderLoTeams(rs.mode === 'squads' ? (lobby ? 6 : 1) : size, lobby); // (Squads: the host splits everyone into two teams; 0.68: in the lobby you can pick a side)
@@ -686,8 +689,8 @@ function boot() {
   // (0.68) The room lobby: who's here, the votes on the game, the chat; the host starts the match (or it
   // starts by itself once everyone's ready) and can take everyone back to the lobby.
   const VOTE_LABEL = {
-    mode: { classic: 'Classic', chef: "Chef's Choice", pots: 'Pot Wars', squads: 'Squads', king: 'King of the Utensil' },
-    map: Object.fromEntries(VOTE_OPTIONS.map.map((id) => [id, MAPS[id]?.name.replace(/^The /, '') || id])),
+    mode: { classic: 'Classic', chef: "Chef's Choice", pots: 'Pot Wars', squads: 'Squads', king: 'King of the Utensil', '?': '🎲 Surprise me' },
+    map: { ...Object.fromEntries(VOTE_OPTIONS.map.filter((id) => id !== '?').map((id) => [id, MAPS[id]?.name.replace(/^The /, '') || id])), '?': '🎲 Surprise me' },
     team: { 1: 'Solo', 2: 'Duos', 3: 'Trios', 4: 'Quads' },
     bots: { off: 'No bots', easy: 'Easy', medium: 'Medium', hard: 'Hard' },
   };
@@ -700,26 +703,30 @@ function boot() {
     const ready = people.filter((p) => p.ready).length, cd = net.countdown();
     const title = lobby ? 'Room lobby' : 'Your loadout';
     if ($('lo-title').textContent !== title) $('lo-title').textContent = title;
+    const waiting = people.filter((p) => !p.ready).map((p) => (p.me ? 'you' : p.name)), why = net.countdownWhy();
+    const wait = waiting.length ? ` · waiting for ${waiting.slice(0, 3).join(', ')}${waiting.length > 3 ? ` and ${waiting.length - 3} more` : ''}` : '';
     const st = lobby
-      ? (cd != null ? `Starting in ${Math.ceil(cd)}…` : `${ready} of ${people.length} ready · it starts when everyone is ready${net.isHost ? ', or press Start now' : ', or when the host starts it'}`)
-      : `Match on · round ${Math.max(1, (game.round?.id ?? 0) + 1)} · votes count from the next round`;
+      ? (cd != null ? `${why === 3 ? 'The host started it' : why === 2 ? 'Most of you are ready' : 'Everyone is ready!'} · starting in ${Math.ceil(cd)}…${why === 2 ? wait : ''}`
+        : `${ready} of ${people.length} ready${wait} · it starts when everyone is ready${people.length >= 3 ? ' (30 s once most are)' : ''}${net.isHost ? ', or press Start' : ''}`)
+      : `Match on · round ${Math.max(1, (game.round?.id ?? 0) + 1)} · after every round you vote: play again, or back here for a new vote`;
+    if ($('lo-code').textContent !== net.roomName) $('lo-code').textContent = net.roomName;
     if ($('lo-status').textContent !== st) $('lo-status').textContent = st;
     const pc = `${people.length} here`;
     if ($('lo-pcount').textContent !== pc) $('lo-pcount').textContent = pc;
     const nT = teamCount(next.mode === 'squads' ? 6 : cleanSize(next.team, next.mode));
     const ph = people.map((p) => {
       const T = lobby && nT && p.team >= 0 && p.team < nT ? TEAMS[p.team] : null;
-      return `<li><span class="dot" style="background:${/^#[0-9a-f]{6}$/i.test(p.color) ? p.color : '#f2f2f2'}"></span><span class="nm">${esc(p.name)}${p.me ? ' (you)' : ''}</span>${p.host || (p.me && net.isHost) ? '<span class="tag host">host</span>' : ''}${T ? `<span class="tag team" style="--c:${T.color}">${T.short}</span>` : ''}<span class="tag${p.ready ? ' ok' : ''}">${p.ready ? 'ready' : lobby ? 'not ready' : 'watching'}</span></li>`;
+      return `<li${lobby && !p.ready ? ' class="wait"' : ''}><span class="dot" style="background:${/^#[0-9a-f]{6}$/i.test(p.color) ? p.color : '#f2f2f2'}"></span><span class="nm">${esc(p.name)}${p.me ? ' (you)' : ''}</span>${p.host || (p.me && net.isHost) ? '<span class="tag host">host</span>' : ''}${T ? `<span class="tag team" style="--c:${T.color}">${T.short}</span>` : ''}<span class="tag${p.ready ? ' ok' : ''}">${p.ready ? 'ready' : lobby ? 'not ready' : 'watching'}</span></li>`;
     }).join('');
     if ($('lo-players').innerHTML !== ph) $('lo-players').innerHTML = ph;
-    const fixedTeams = next.mode === 'squads' || next.mode === 'king';
+    const fixedTeams = next.mode === 'squads' || next.mode === 'king'; // (a surprise mode: the size you vote for, where it applies)
     const vh = Object.entries(VOTE_OPTIONS).map(([k, opts]) => `<div class="lo-vrow"><span>${VOTE_TITLE[k]}</span><div>${opts.map((o) => {
       const n = counts[k][o] || 0, off = k === 'team' && (fixedTeams || (next.mode === 'pots' && o === 1));
       return `<button type="button" data-vk="${k}" data-vv="${o}" aria-pressed="${net.votes[k] === o}" class="${next[k] === o && !(k === 'team' && fixedTeams) ? 'win' : ''}"${off ? ' disabled' : ''}>${VOTE_LABEL[k][o]}${n ? `<b>${n}</b>` : ''}</button>`;
     }).join('')}</div>${k === 'team' && fixedTeams ? `<p class="lo-vnote">${next.mode === 'squads' ? 'Squads: two teams of up to 6' : 'King of the Utensil: every Titan for themselves'}</p>` : ''}</div>`).join('');
     if ($('lo-votes').innerHTML !== vh) $('lo-votes').innerHTML = vh;
     $('lo-start').hidden = !(net.isHost && lobby);
-    $('lo-start').textContent = cd != null && net.startReq ? 'Starting…' : 'Start now';
+    $('lo-start').textContent = cd != null && net.startReq ? 'Starting…' : ready === people.length ? 'Start' : 'Start anyway'; // (0.69: "anyway": not everyone is ready)
     $('lo-tolobby').hidden = !(net.isHost && !lobby);
     $('lo-close').hidden = lobby || !game.player?.alive;
     $('lo-watch').hidden = lobby || !!game.player?.alive;
@@ -745,6 +752,51 @@ function boot() {
   $('lo-close').addEventListener('click', () => { loadout.hidden = true; if (game.player?.alive && !input.isTouch) input.requestLock(true); });
   $('pause-lobby').addEventListener('click', () => { pause.hidden = true; game.paused = false; openLoadout(); });
   const sendChat = (el) => { if (game.net?.say(el.value)) el.value = ''; };
+  // (0.69) quick chat: one tap (the easy way on a phone)
+  $('lo-quick').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b && game.net) game.net.say(b.textContent); });
+  // (0.69) an invite: on the public page a link that opens this room's code (#room=...); on claude.ai, where
+  // only people the game is shared with can join, the code to type
+  $('lo-invite').addEventListener('click', async () => {
+    const code = game.net?.roomName || '';
+    const text = onClaude() ? `Join my Tiny Titans food fight! Open the game, Play online, room code: ${code}` : `${location.origin}${location.pathname}#room=${encodeURIComponent(code)}`;
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch { /* no clipboard here */ }
+    game.hud.toast(ok ? (onClaude() ? 'Invite copied: paste it to your friends' : 'Invite link copied: send it to your friends') : `Room code: ${code}`);
+    $('lo-invite').textContent = ok ? 'Copied!' : code;
+    setTimeout(() => { $('lo-invite').textContent = 'Copy invite'; }, 1800);
+  });
+  // (0.69) after every round: play again (the same settings) or a new vote (back to the lobby)
+  const rematchBar = $('rematch');
+  const voteRematch = (v) => { const net = game.net, R = game.round; if (!net || !R || R.state !== 'over' || R.id < 0) return; net.rematch = [R.id, v]; renderRematch(); };
+  $('rm-again').addEventListener('click', () => voteRematch(1));
+  $('rm-new').addEventListener('click', () => voteRematch(2));
+  $('rm-gg').addEventListener('click', () => game.net?.say('GG! 🍅'));
+  addEventListener('keydown', (e) => {
+    if (rematchBar.hidden || e.target?.closest?.('input, textarea')) return;
+    if (e.code === 'KeyY') voteRematch(1); else if (e.code === 'KeyN') voteRematch(2);
+  });
+  function renderRematch() {
+    const net = game.net, R = game.round;
+    const on = playing && game.online && !!net && !!R && R.id >= 0 && R.state === 'over' && !R.fresh;
+    if (rematchBar.hidden === on) rematchBar.hidden = !on;
+    if (!on) return;
+    const v = net.rematchVotes(R.id), mine = net.rematch && net.rematch[0] === R.id ? net.rematch[1] : 0, left = game.nextRoundIn();
+    $('rm-again').setAttribute('aria-pressed', String(mine === 1)); $('rm-new').setAttribute('aria-pressed', String(mine === 2));
+    $('rm-again-n').textContent = v.again || ''; $('rm-new-n').textContent = v.fresh || '';
+    const lead = v.fresh > v.again ? 'back to the lobby for a new vote' : 'a rematch';
+    const note = `${v.voted} of ${v.total} voted · ${v.voted === v.total ? 'starting…' : `${left != null ? `${left} s` : 'soon'}, or as soon as everyone has voted`} · now: ${lead}`;
+    if ($('rm-note').textContent !== note) $('rm-note').textContent = note;
+  }
+  // (0.69) the lobby countdown ticks (the last 5 s), the match starting rings; the vote bar keeps up
+  let lastTick = null;
+  setInterval(() => {
+    renderRematch();
+    const net = game.net;
+    if (!playing || !net || !game.online) { lastTick = null; return; }
+    const cd = net.inLobby() ? net.countdown() : null, n = cd == null ? null : Math.ceil(cd);
+    if (n != null && n !== lastTick && n <= 5 && n > 0) sfx.play('tick', null, 0.6);
+    lastTick = n;
+  }, 150);
   $('lo-chatform').addEventListener('submit', (e) => { e.preventDefault(); sendChat($('lo-chatin')); });
   // in a match: Enter opens a chat line (Enter sends, Esc cancels); what others say shows in the feed
   const chatbar = $('chatbar'), chatIn = $('chatbar-in');
@@ -780,11 +832,26 @@ function boot() {
     if (link) { const a = document.createElement('a'); a.href = link; a.target = '_blank'; a.rel = 'noopener'; a.textContent = link.replace(/^https:\/\//, '').replace(/\/$/, ''); status.append(' ', a); }
   };
   const onlineHelp = () => {
-    const how = 'Everyone who types the same room code meets in its lobby: vote on the mode, map, teams and bots, pick your team, 3 foods and a utensil, chat, and ready up. The match starts when everyone is ready (or the host starts it), in rounds.';
+    const how = 'Everyone who types the same room code meets in its lobby: vote on the mode, map, teams and bots, pick your team and food, chat and ready up. Copy the invite from the lobby to bring friends. After every round you vote: play again, or a new vote.';
     if (onClaude()) say('', `${how} Here on claude.ai, online play is for people signed in to claude.ai whom you have shared the game with. To play with anyone else, everyone opens the public game page:`, PUBLIC_URL);
     else say('', `${how} To invite friends, send them this page's link and your room code; nobody needs to sign in.`);
   };
   try { $('nick').value = localStorage.getItem('tt-nick') || ''; } catch { /* storage blocked */ }
+  // (0.69) a new room with a fun code nobody else is using (like Among Us's lobby names): straight in
+  const CODE_A = ['spicy', 'crispy', 'soggy', 'zesty', 'sticky', 'saucy', 'fizzy', 'sneaky', 'jolly', 'mighty', 'tiny', 'grumpy', 'sizzling', 'frosty', 'bouncy', 'cheesy'];
+  const CODE_B = ['tomato', 'carrot', 'banana', 'pickle', 'muffin', 'waffle', 'noodle', 'dumpling', 'pretzel', 'taco', 'melon', 'pancake', 'nacho', 'biscuit', 'cookie', 'grape'];
+  const pickOf = (a) => a[(Math.random() * a.length) | 0];
+  $('online-create').addEventListener('click', () => {
+    $('roomcode').value = `${pickOf(CODE_A)}-${pickOf(CODE_B)}-${10 + ((Math.random() * 90) | 0)}`;
+    $('online').requestSubmit();
+  });
+  // (0.69) an invite link (#room=<code>): the room's code is filled in, Play online open
+  const invited = (() => { try { const m = /[#&?]room=([^&#]+)/.exec(location.hash + location.search); return m ? cleanRoom(decodeURIComponent(m[1])) : ''; } catch { return ''; } })();
+  if (invited) {
+    $('roomcode').value = invited;
+    showScreen('online');
+    setTimeout(() => { say('', `You're invited to room "${invited}": type your name and press Join room.`); $('nick').focus(); }, 0);
+  }
   $('online').addEventListener('submit', async (e) => {
     e.preventDefault();
     sfx.unlock();
@@ -865,9 +932,10 @@ function boot() {
     if (e.code === 'Escape') { r.skip(); e.preventDefault(); } else if (['Space', 'Enter', 'ArrowRight'].includes(e.code)) { r.next(); e.preventDefault(); }
   });
   game.onMatchEvent = (type, data) => {
-    if (type === 'start') { pay.due = !game.online; pay.kills = game.player?.kills || 0; $('end-coins').textContent = '+0'; $('end-receipt').textContent = ''; }
+    if (type === 'start') { pay.due = !game.online; pay.kills = game.player?.kills || 0; $('end-coins').textContent = '+0'; $('end-receipt').textContent = ''; if (game.online) sfx.play('ready', null, 0.7); }
     if (type === 'joined') { pay.due = true; pay.kills = game.player?.kills || 0; }
     if (type === 'roundOver') { // online: the round ended; coins for it if I played
+      if (!input.isTouch) input.exitLock(); // (0.69: the mouse is free for the vote: play again or a new vote)
       const r = playing ? payOut(data.placement, data.won) : null;
       if (r) setTimeout(() => { if (playing) game.hud.banner(`+${r.total} coins`, r.lines.map(([k, n]) => `${k} +${n}`).join(' · '), 3.2); }, 2200); // after "Round over"
       // (0.38) then the round's highlights (its best plays, always with your best one); the match goes on

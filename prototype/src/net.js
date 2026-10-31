@@ -55,6 +55,11 @@
 // 0 in the lobby or 1 in a match, and the seconds left of the countdown). The match starts once everyone
 // is ready (a 5 s countdown) or when the host says so (3 s); every round after uses the votes as they are
 // then; the host can take everyone back to the lobby (no round: rd is null).
+// (0.69) Votes can be "surprise me" ('?': the host picks one when the match starts); most of the room ready
+// (3 or more players) starts a 30 s countdown, so one player away from the keyboard can't hold everyone up
+// (lb[2]: why the countdown runs: 1 all ready, 2 most, 3 the host). After every round everyone votes (pa:
+// [round, 1 play again or 2 new vote]): the next round starts as soon as all have voted; more "new vote"
+// than "play again" takes the room back to the lobby, else it's a rematch with the same settings.
 //
 // Teams and Cooking Pot Wars (0.26): the room settings carry the mode and the team size; every
 // Titan's state carries its team and the pot on its back. Players pick their team (state), the host
@@ -86,7 +91,7 @@ const MIN_SENT = 6;     // an event leaves the log once it went out this often a
 const BUDGET = 3900;    // bytes of one player's presence (the claude.ai room refuses over 4096)
 // (0.51) The game's version, in every update: players on different copies of the game (one browser still
 // showing an older one) play by different rules, so each is told to reload. Bump it with every release.
-export const NET_VERSION = 68;
+export const NET_VERSION = 69;
 // What a hit did besides its damage, merged into the claim for it (freezes add up to 3, shoves add up)
 function mergeStatus(a, s) {
   for (const [k, v] of Object.entries(s)) {
@@ -111,8 +116,14 @@ const cleanRS = (rs) => { // eslint-disable-line arrow-body-style
   return { map: MAPS_OK.includes(rs.map) ? rs.map : 'kitchen', mode, team: cleanSize(rs.team, mode), bots: BOTS_OK.includes(rs.bots) ? rs.bots : 'medium', since: num(rs.since, 0, 1e15) };
 };
 // (0.68) A player's votes in the lobby: [mode, map, team size, bots] ('' or 0: no vote)
-const cleanVotes = (v) => (Array.isArray(v) ? { mode: MODES_OK.includes(v[0]) ? v[0] : '', map: MAPS_OK.includes(v[1]) ? v[1] : '', team: [1, 2, 3, 4].includes(v[2]) ? v[2] : 0, bots: BOTS_OK.includes(v[3]) ? v[3] : '' } : { mode: '', map: '', team: 0, bots: '' });
-export const VOTE_OPTIONS = { mode: MODES_OK, map: MAPS_OK, team: [1, 2, 3, 4], bots: BOTS_OK };
+const cleanVotes = (v) => (Array.isArray(v) ? { mode: MODES_OK.includes(v[0]) || v[0] === '?' ? v[0] : '', map: MAPS_OK.includes(v[1]) || v[1] === '?' ? v[1] : '', team: [1, 2, 3, 4].includes(v[2]) ? v[2] : 0, bots: BOTS_OK.includes(v[3]) ? v[3] : '' } : { mode: '', map: '', team: 0, bots: '' });
+export const VOTE_OPTIONS = { mode: [...MODES_OK, '?'], map: [...MAPS_OK, '?'], team: [1, 2, 3, 4], bots: BOTS_OK }; // ('?': surprise me)
+// (0.69) the next settings as voted: like the room settings, but the mode and the map may still be '?'
+const cleanNext = (rs) => {
+  if (!rs || typeof rs !== 'object') return null;
+  const mode = MODES_OK.includes(rs.mode) || rs.mode === '?' ? rs.mode : 'classic';
+  return { map: MAPS_OK.includes(rs.map) || rs.map === '?' ? rs.map : 'kitchen', mode, team: mode === '?' ? ([1, 2, 3, 4].includes(+rs.team) ? +rs.team : 1) : cleanSize(rs.team, mode), bots: BOTS_OK.includes(rs.bots) ? rs.bots : 'medium' };
+};
 const cleanChat = (s) => String(s || '').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 140);
 const STATES = ['drop', 'play', 'over'];
 const cleanRD = (rd) => (Array.isArray(rd) ? [num(rd[0], 0, 1e6) | 0, STATES.includes(rd[1]) ? rd[1] : 'play',
@@ -263,6 +274,8 @@ export class Net {
     this.lobbyAt = null;          // (0.68, host) when the countdown ends (game time), or null
     this.matchSettings = null;    // (0.68, host) the settings of the round on now
     this.hostLobby = null; this.hostNext = null; // (0.68) the room's lobby clock and next settings, from the host
+    this.rematch = null;          // (0.69) my vote after a round: [round, 1 play again or 2 new vote]
+    this.lobbyWhy = 0;            // (0.69, host) why the countdown runs: 1 everyone's ready, 2 most are, 3 I started it
     this.isHost = false; this.hostPeer = null; this.hostSince = 0;
     this.hostSettings = null; this.hostRound = null; // the room's, from the host
     this.botProxies = new Map();  // `${hostPeer}|b${id}` -> proxy of one of the host's bots
@@ -277,13 +290,31 @@ export class Net {
 
   // The settings of the round on now (in the lobby: what the votes say)
   roomSettings() {
-    if (this.isHost) return this.game.round?.id >= 0 && this.matchSettings ? { ...this.matchSettings } : this.tally();
+    if (this.isHost) return this.game.round?.id >= 0 && this.matchSettings ? { ...this.matchSettings } : cleanRS(this.tally());
     return this.hostSettings ? { ...this.hostSettings } : { ...this.settings };
   }
   // (0.68) The settings the next round (or match) gets: the votes, as the host counts them
+  // (0.69: in a match, a rematch plays the same again; the votes are for when the room is back in the lobby)
   nextSettings() {
-    if (this.isHost) return this.tally();
+    if (this.isHost) return this.game.round?.id >= 0 && this.matchSettings ? { ...this.matchSettings } : this.tally();
+    if (this.game.round?.id >= 0) return this.roomSettings();
     return this.hostNext ? { ...this.hostNext } : this.roomSettings();
+  }
+  // (0.69, host) "surprise me": a real mode or map, not the one just played if there's a choice
+  resolve(rs) {
+    const pick = (opts, last) => { const o = opts.filter((x) => x !== last); return o[(Math.random() * o.length) | 0] || opts[0]; };
+    const out = { ...rs };
+    if (out.mode === '?') out.mode = pick(MODES_OK, this.matchSettings?.mode);
+    if (out.map === '?') out.map = pick(MAPS_OK, this.matchSettings?.map);
+    return cleanRS(out);
+  }
+  // (0.69) the votes after round `id`: how many want to play again, a new vote, how many have voted, of how many
+  rematchVotes(id = this.game.round?.id) {
+    const out = { again: 0, fresh: 0, voted: 0, total: 0 };
+    const add = (v) => { out.total++; if (v && v[0] === id && (v[1] === 1 || v[1] === 2)) { out.voted++; if (v[1] === 1) out.again++; else out.fresh++; } };
+    add(this.rematch);
+    for (const pr of this.proxies.values()) add(pr.rematch);
+    return out;
   }
   // Everyone in the room, me first: { peer, name, ready, votes, team (picked, -1 any), host, me }
   people() {
@@ -301,7 +332,7 @@ export class Net {
       const tied = opts.filter((o) => (n.get(o) || 0) === top && top > 0);
       out[k] = !tied.length ? this.settings[k] : tied.includes(prev[k]) ? prev[k] : tied.includes(this.votes[k]) ? this.votes[k] : tied[0];
     }
-    this.lastTally = cleanRS(out);
+    this.lastTally = cleanNext(out);
     return { ...this.lastTally };
   }
   // how many vote for each option of each setting
@@ -317,6 +348,8 @@ export class Net {
     const L = this.hostLobby;
     return L && L.phase === 0 && L.count >= 0 ? L.count : null;
   }
+  // why the countdown runs: 1 everyone's ready, 2 most are, 3 the host started it (0: it doesn't)
+  countdownWhy() { return this.isHost ? (this.lobbyAt == null ? 0 : this.lobbyWhy) : this.countdown() == null ? 0 : this.hostLobby?.why || 0; }
   // (host) is everyone in the room ready?
   allReady() { const p = this.people(); return p.length > 0 && p.every((x) => x.ready); }
   // (0.68) Chat: say something to the room
@@ -446,7 +479,8 @@ export class Net {
     // every field, every time: what isn't mine (any more) goes out as null, which takes it off my presence
     const V = this.votes;
     const msg = { v: NET_VERSION, n: this.name, c: this.color, k: this.game.playerSkin, w: this.ready ? 1 : 0, hl: g.highlights.playing?.live ? 1 : 0, s: this._stateOf(p, this.game.input.pitch), pm: null, rs: null, rd: null, b: null, pw: null, e: [],
-      lv: V.mode || V.map || V.team || V.bots ? [V.mode, V.map, V.team, V.bots] : null, tp: this.teamPick >= 0 ? this.teamPick : null, nx: null, lb: null }; // (0.68: my votes, my team pick)
+      lv: V.mode || V.map || V.team || V.bots ? [V.mode, V.map, V.team, V.bots] : null, tp: this.teamPick >= 0 ? this.teamPick : null, nx: null, lb: null, // (0.68: my votes, my team pick)
+      pa: this.rematch && this.rematch[0] === g.round.id && g.round.state === 'over' ? this.rematch : null }; // (0.69: my vote after the round)
     if (g.mode === 'pots') msg.pm = (g.potMenu || []).map((id) => FOOD_IDS.indexOf(id).toString(36)).join(''); // my pick for my pot's menu
     if (this.isHost && g.pots.active) msg.pw = [Math.max(0, g.round.id), ...g.pots.state()]; // Cooking Pot Wars: the pots
     msg.sp = this.isHost && g.round.id >= 0 ? [g.round.id, g.items.spawnerCode()] : null; // (0.44) which food spots hold food
@@ -464,7 +498,7 @@ export class Net {
       const R = g.round, T = g.tide, to = T.to || { x: T.x, z: T.z, r: T.r };
       msg.rs = { ...this.roomSettings(), since: this.hostSince };
       msg.nx = this.tally(); // (0.68) what the votes say, for the next round
-      msg.lb = [R.id >= 0 ? 1 : 0, this.lobbyAt == null ? -1 : r1(Math.max(0, this.lobbyAt - t))]; // (0.68) lobby or match; the countdown
+      msg.lb = [R.id >= 0 ? 1 : 0, this.lobbyAt == null ? -1 : r1(Math.max(0, this.lobbyAt - t)), this.lobbyAt == null ? 0 : this.lobbyWhy]; // (0.68) lobby or match; the countdown (0.69: and why)
       msg.rd = R.id < 0 ? null : [Math.max(0, fin(R.id)), STATES.includes(R.state) ? R.state : 'drop', r2(T.x), r2(T.z), r2(T.r), fin(T.phase), T.mode === 'shrink' ? 'shrink' : 'wait', r2(Math.max(0, T.t)), R.winner || '', r2(R.t), r2(to.x), r2(to.z), r2(to.r), R.fresh ? 1 : 0, r2(R.playAt ?? 0), g.arena.score[0] | 0, g.arena.score[1] | 0];
       // a bot's name, colour and skin only every 10th update (receivers keep them)
       msg.b = this._localBots().map((a) => [a.id, (this.frame + a.id) % 10 ? 0 : [a.name, a.color, a.skinId || 'chef'], ...this._stateOf(a, Math.asin(clamp(a.aimDir.y, -1, 1)))]);
@@ -626,9 +660,9 @@ export class Net {
       if (this.hostPeer !== top[0]) { this.hostPeer = top[0]; for (const key of [...this.botProxies.keys()]) if (!key.startsWith(`${top[0]}|`)) this._dropBot(key); }
       this.hostSettings = top[3];
       this.hostRound = cleanRD(top[2].rd);
-      this.hostNext = cleanRS(top[2].nx); // (0.68) the votes, as the host counts them
+      this.hostNext = cleanNext(top[2].nx); // (0.68) the votes, as the host counts them
       const lb = top[2].lb;
-      this.hostLobby = Array.isArray(lb) ? { phase: lb[0] === 1 ? 1 : 0, count: num(lb[1], -1, 30, -1) } : null;
+      this.hostLobby = Array.isArray(lb) ? { phase: lb[0] === 1 ? 1 : 0, count: num(lb[1], -1, 60, -1), why: num(lb[2], 0, 3) | 0 } : null;
       const tm = top[2].tm; // (0.54) Squads: the teams the host split the players into
       this.hostTeams = tm && typeof tm === 'object' && !Array.isArray(tm) ? tm : null;
       this._syncBots(top[0], top[2].b);
@@ -746,6 +780,7 @@ export class Net {
     pr.potMenu = typeof pres.pm === 'string' && pres.pm.length <= 5 ? [...pres.pm].map((c) => FOOD_IDS[parseInt(c, 36)]).filter(Boolean) : null;
     pr.votes = cleanVotes(pres.lv); // (0.68) their votes and team pick in the lobby
     pr.teamPick = typeof pres.tp === 'number' ? num(pres.tp, 0, 5) | 0 : -1;
+    pr.rematch = Array.isArray(pres.pa) && (pres.pa[1] === 1 || pres.pa[1] === 2) ? [num(pres.pa[0], -1, 1e6, -1) | 0, pres.pa[1]] : null; // (0.69)
     this._applyState(pr, pres.s);
 
     // events we haven't seen yet (0.33: they may come in any order: each is numbered, and we keep the
