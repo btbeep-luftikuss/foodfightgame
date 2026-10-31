@@ -63,6 +63,13 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.72: the Legendary utensils fire the right way in the highlight reels** (`src/legendary.js`, `src/highlights.js`)
+
+- **Blow Torch and Blender:** a replayed flame cone or juice beam used to point wherever the Titan was aiming *now* (when the reel played), not where they aimed in the play: it could point the opposite way. The reels now record each stream's aim, how far it reached (to the Titan or the wall it hit) and the Blender's ramp, up to 30 times a second, and replay exactly that. Checked: a beam and a cone held on a Titan, then the thrower turned round before the reel: the replay pointed 3° off the Titan they hit (it was 176°).
+- **Oven Mitt:** a replayed shot draws its tracer again, along the way it flew.
+- **Grater:** its rain clouds are in the reels now (where they drifted, following their Titan), raining over the replay; before, the raindrops fell out of an empty sky.
+- (The Ice Cream Machine's freeze waves and the Popcorn Popper's cascades already replayed as they happened.)
+
 **Version 0.71: a "food only" place in the utensil kit** (`src/utensils.js`, `src/hud.js`, `src/input.js`, `src/net.js`, `src/sandbox.js`, `index.html`)
 
 - **Choose no utensil:** once you carry a utensil, the utensil bar gets a fourth place, an open hand (key **9**): your utensils go away and you throw just the food, plain. **R** comes round to it after your last utensil (knife, spoon, whisk, food only, knife...); on a phone the utensil plate has the open hand as one of its places (turn or tap to it). Picking a utensil (6–8) takes it back in hand. A toast says *Food only: no utensil*.

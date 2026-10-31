@@ -207,6 +207,8 @@ export class Legends {
       if (now >= (a.streamSnd || 0)) { a.streamSnd = now + 0.45; g.sfx.play(a.utensil === 'gold-torch' ? 'flame' : 'slosh', from, a === g.player ? 0.6 : 0.35); }
       if (a.utensil === 'gold-torch') this._torch(a, food, from, _d, dt);
       else this._blender(a, food, from, _d, dt);
+      const h = a.hlStream; // (0.72) the reels replay it the way it went: its aim, its reach, its ramp (up to 30 a second)
+      if (h && !h.none && now - (h.aimAt ?? -9) >= 1 / 30) { h.aimAt = now; (h.aim ||= []).push(now, _d.x, _d.y, _d.z, a.streamReach || 0, this.stage(a)); }
     }
     this._waves(dt);
     this._clouds(dt);
@@ -331,12 +333,14 @@ export class Legends {
     if (k >= 1 && Math.random() < 0.5) g.fx.flames.spawn(h.x, h.y, h.z, 0, 0, 0, 0.12, 0.3 * s, col('#ffffff'), 0, 0, 1); // (charged: it glows)
   }
   // the tracer behind a shot in flight (every frame: dense, however fast it goes)
-  mittTrail(p, dt) {
-    const g = this.game, n = Math.max(4, Math.ceil(p.vel.length() * dt / 0.25)), c = p.trailC ||= col(tintOf(p.food)), w = col('#fff6d8');
-    if (g.fx.scale <= 0) return;
+  mittTrail(p, dt) { this.tracer(_e.copy(p.pos).addScaledVector(p.vel, -dt), p.pos, p.food); }
+  // a shot's tracer from `a` to `b` (0.72: also the reels', between two frames of a replayed shot)
+  tracer(a, b, food) {
+    const g = this.game, d = a.distanceTo(b), n = Math.max(4, Math.ceil(d / 0.25)), c = col(tintOf(food)), w = col('#fff6d8');
+    if (g.fx.scale <= 0 || d > 40) return;
     for (let i = 0; i < n; i++) { // (0.60: thicker, mostly the food's colour: it shows on a white wall too)
-      const k = (i / n) * dt;
-      g.fx.flames.spawn(p.pos.x - p.vel.x * k, p.pos.y - p.vel.y * k, p.pos.z - p.vel.z * k, 0, 0.2, 0, 0.3, 0.2, i % 3 ? c : w, 0, 0, -0.6);
+      const k = i / n;
+      g.fx.flames.spawn(b.x + (a.x - b.x) * k, b.y + (a.y - b.y) * k, b.z + (a.z - b.z) * k, 0, 0.2, 0, 0.3, 0.2, i % 3 ? c : w, 0, 0, -0.6);
     }
   }
   mittHit(p, at, actor) {
@@ -358,7 +362,7 @@ export class Legends {
     const room = raycastWorld(base, _up, B.h + 2);
     const h = room > 5 ? Math.min(B.h, room - 1.5) : Math.max(1.4, room - 0.7); // (under a table: just under its top)
     if (!(follow?.alive && follow !== owner)) follow = this._nearestFoe(owner, at, B.seek); // (0.67: landed near someone: it goes after them)
-    const c = { x: at.x, y: base.y + h, z: at.z, h, owner, food, cols: null, follow, born: g.time, acc: 0, mesh: this._cloudMesh(tintOf(food)) };
+    const c = { hl: g.highlights?.onAbility('cloud', { food, pos: _v.set(at.x, base.y + h, at.z), end: g.time + B.dur + 0.5 }) || null, x: at.x, y: base.y + h, z: at.z, h, owner, food, cols: null, follow, born: g.time, acc: 0, mesh: this._cloudMesh(tintOf(food)) };
     this.clouds.push(c);
     c.mesh.position.set(c.x, c.y, c.z);
     g.sfx.play('whirr', at, 0.6);
@@ -407,6 +411,7 @@ export class Legends {
       // (0.59) the cloud is powder, like the Mortar & Pestle's: soft puffs of the food's colour and white, drifting
       // and swelling across the whole circle it rains on, a few sifting down. (No particles at this quality: a
       // solid cloud instead.)
+      if (c.hl && now - (c.hlAt ?? -9) >= 0.1) { c.hlAt = now; c.hl.pts.push(now, c.x, c.y, c.z); } // (0.72: where it drifted, for the reels)
       c.mesh.visible = g.fx.scale <= 0;
       if (c.mesh.visible) {
         c.mesh.position.set(c.x, c.y + Math.sin(age * 2) * 0.15, c.z);
@@ -566,7 +571,7 @@ export function streamVisuals(L, dt) {
   }
 }
 // One Titan's cone or beam (also the highlight reels', for a replayed one: reach and ramp stage given then).
-export function drawStream(L, a, u, food, dt, reach, st, t) {
+export function drawStream(L, a, u, food, dt, reach, st, t, dir = null) { // dir: (the reels) the recorded aim
   const g = L.game;
   {
     let fx = L.fx.get(a);
@@ -591,7 +596,7 @@ export function drawStream(L, a, u, food, dt, reach, st, t) {
     }
     fx.grp.visible = true;
     const tint = tintOf(food);
-    L.aim(a, _d);
+    if (dir) { a.handPos(_o); _d.copy(dir).normalize(); } else L.aim(a, _d);
     const from = _o; // (aim() left the hand position in _o)
     const torch = u === 'gold-torch';
     let len = Math.max(0.5, reach || (torch ? BAL.torch.range : BAL.blender.range));

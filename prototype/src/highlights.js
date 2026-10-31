@@ -61,6 +61,17 @@ const MAX_MOMENTS = 90;
 const PATH_MAX = 4 * 240;     // numbers kept per flight path: its last 8 s
 const TRAIL_N = 150;          // points along a trail
 const PRE_N = 3, PRE_BACK = 8, PRE_GAP = 0.6, PRE_MIN = 4; // (0.46) the lead-up: at most 3 hits, from the last 8 s, 0.6 s apart, 4 damage or more
+// (0.72) A Legendary stream's recorded aim at time t ([t, dx, dy, dz, reach, stage] samples): the direction
+// (between the two samples around t), how far it reached, its ramp stage; null if it has none yet
+const _aimDir = new THREE.Vector3();
+function aimAt(S, t) {
+  if (!S || S.length < 6) return null;
+  let i = 0;
+  while (i + 6 < S.length && S[i + 6] <= t) i += 6;
+  const j = i + 6 < S.length ? i + 6 : i, k = j > i ? clamp((t - S[i]) / Math.max(1e-3, S[j] - S[i]), 0, 1) : 0;
+  _aimDir.set(lerp(S[i + 1], S[j + 1], k), lerp(S[i + 2], S[j + 2], k), lerp(S[i + 3], S[j + 3], k)).normalize();
+  return { dir: _aimDir, reach: lerp(S[i + 4], S[j + 4], k), st: Math.max(0, k < 0.5 ? S[i + 5] : S[j + 5]) };
+}
 const PRE_IN = 0.5, PRE_OUT = 0.32; // ... each shown from this long before it lands to this long after
 const KO_HOLD = 0.22;         // seconds a splatted Titan stays in the replay after the hit (squashing flat), so you see it land
 const UP = new THREE.Vector3(0, 1, 0), WHITE = new THREE.Color('#ffffff'), RING = new THREE.Color('#fff1c2'), _col = new THREE.Color();
@@ -198,6 +209,7 @@ export class Highlights {
     else if (kind === 'flamer') { if (!this.idx.has(o.owner)) return; e = { ab: kind, a: this.idx.get(o.owner), end: t + o.dur }; }
     else if (kind === 'stream') { if (!this.idx.has(o.owner)) return null; e = { ab: kind, a: this.idx.get(o.owner), u: o.u, food: o.food, end: t + 0.12 }; } // (0.54) a Legendary torch or blender
     else if (kind === 'wave') e = { ab: kind, x: o.pos.x, y: o.pos.y, z: o.pos.z, r: o.r, end: t + o.r / 12 + 0.1 }; // (0.54) a Legendary Ice Cream Machine's freeze wave
+    else if (kind === 'cloud') e = { ab: kind, food: o.food, pts: [t, o.pos.x, o.pos.y, o.pos.z], end: o.end }; // (0.72) a Legendary Grater's rain cloud (pts: where it drifted)
     else return null;
     e.t = t;
     this.events.push(e);
@@ -300,7 +312,7 @@ export class Highlights {
     if (!this.rec) return;
     const g = this.game;
     // (0.50) a utensil's throw: which, how big a coat, and the bits of it that change its look
-    const u = p.u ? { u: p.u, r: p.radius, x: { sm: p.x.sm ? 1 : 0, mx: p.x.mx || '', pp: p.x.pp ? 1 : 0 }, pel: /^(grape|berry)$/.test(p.food) } : null;
+    const u = p.u ? { u: p.u, r: p.radius, x: { sm: p.x.sm ? 1 : 0, mx: p.x.mx || '', pp: p.x.pp ? 1 : 0, ms: p.x.ms ? 1 : 0, cs: p.x.cs | 0, tf: p.x.tf ? 1 : 0, gc: p.x.gc ? 1 : 0 }, pel: /^(grape|berry)$/.test(p.food) } : null; // (0.72: the Legendary marks too)
     p.hl = {
       id: this.nextPid++, t: g.time, from: (p.owner?.pos || p.pos).clone(), owner: p.owner, near: null, u, bank: 0, hits: 0,
       // its flight, from the hand (it left at the start of this step)
@@ -1219,6 +1231,11 @@ class Reel {
     if (!uv) return;
     const U = this.g.utensils;
     U.poseAttach(m.userData.att, m.position, uv.r, this.t, step);
+    if (uv.u === 'gold-mitt' && uv.x?.ms) { // (0.72) a Legendary Oven Mitt shot: its tracer, along the way it flew
+      const prev = m.userData.prevPos;
+      if (prev && step > 0) U.legend.tracer(prev, m.position, m.userData.food);
+      (m.userData.prevPos ||= new THREE.Vector3()).copy(m.position);
+    }
     if ((m.userData.trT -= step) > 0 || this.g.fx.scale <= 0) return;
     m.userData.trT = uv.pel ? 0.09 : 0.045;
     this.emitting = true; U.trail(uv.u, m.userData.food, m.position, uv.x); this.emitting = false;
@@ -1244,11 +1261,19 @@ class Reel {
           const a = this.hl.actors[e.a];
           if (!a?.alive) continue;
           a.replayStream = true; this.streams.add(a);
-          const L = U.legend;
-          drawStream(L, a, e.u, e.food, step, null, Math.min(2, Math.floor((t - e.t) / 1.2)), t);
+          const L = U.legend, s = aimAt(e.aim, t); // (0.72) the way they aimed it then, as far as it reached, its ramp then
+          if (s) drawStream(L, a, e.u, e.food, step, s.reach || null, s.st, t, s.dir);
+          else drawStream(L, a, e.u, e.food, step, null, Math.min(2, Math.floor((t - e.t) / 1.2)), t, _u.set(-Math.sin(a.yaw), a.aimDir.y, -Math.cos(a.yaw)));
         } else if (e.ab === 'wave') {
           const m = U.legend.waveAt(this.wg.get(e), e.x, e.y, e.z, e.r, t - e.t);
           if (m) this.wg.set(e, m); else this.wg.delete(e);
+        } else if (e.ab === 'cloud' && step > 0) { // (0.72) a Grater's rain cloud, where it was then
+          const P = e.pts; let i = 0;
+          while (i + 4 < P.length && P[i + 4] <= t) i += 4;
+          const k = i + 4 < P.length ? clamp((t - P[i]) / Math.max(1e-3, P[i + 4] - P[i]), 0, 1) : 0, j = i + 4 < P.length ? i + 4 : i;
+          e.c ||= { food: e.food, cols: null };
+          e.c.x = lerp(P[i + 1], P[j + 1], k); e.c.y = lerp(P[i + 2], P[j + 2], k); e.c.z = lerp(P[i + 3], P[j + 3], k);
+          U.legend._powder(e.c, step, Math.min(1, (t - e.t) / 0.35));
         }
         else if (e.ab === 'flamer' && step > 0) { // from their hand, the way they faced
           const a = this.hl.actors[e.a];
