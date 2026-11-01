@@ -572,6 +572,7 @@ class Reel {
     this.live = !!opts.live;   // online: the match goes on underneath (see unpose)
     this.rInv = new Map();     // (online) what each Titan holds in the replay, apart from what they hold live
     this.ghosts = new Map(); // pid -> mesh
+    this.lent = new Set(); // (0.75) Titans who left the room since: back in the scene for the replay
     this.zg = new Map();     // (0.50) a recorded utensil zone -> its replayed one
     this.pg = new Map();     // ... a recorded puddle -> its replayed one
     this.ag = new Map();     // ... a recorded ice storm -> its replayed one
@@ -699,6 +700,8 @@ class Reel {
   }
   _restore() {
     const g = this.g, s = this.saved;
+    for (const a of this.lent) { if (!g.actors.includes(a)) { a.hide(); g.scene.remove(a.root); } }
+    this.lent.clear();
     for (const m of this.ghosts.values()) this._drop(m);
     this.ghosts.clear();
     this._clearWorld();
@@ -880,7 +883,7 @@ class Reel {
       kind = c.ko ? 'Snipe splat' : 'Snipe';
       text = `${a} ${c.ko ? 'splatted' : 'hit'} ${b} from <b>${Math.round(c.dist)} m</b>${food ? ` with ${/^[aeiou]/i.test(food) ? 'an' : 'a'} ${food}` : ''}`;
     } else if (c.kind === 'hit') {
-      kind = c.head ? 'Headshot' : 'Big hit';
+      kind = c.head ? 'Direct hit' : 'Big hit';
       text = `${a} hit ${b} for <b>${Math.round(c.amt)}</b>`;
     } else {
       kind = c.final ? (n > 1 ? `${mult(n)} splat to win` : 'Winning splat') : n > 1 ? `${mult(n)} splat` : 'Splat';
@@ -1020,7 +1023,9 @@ class Reel {
         if (dead < 0) continue;
         let j = dead;
         while (j > 0 && !up(j, x.b)) j--;
-        this.kos.set(x.b, { tk: Math.max(x.tk, x.ti), j, dead: fr[dead].t }); // (squashed once the food is in)
+        // (0.75) the frame itself, not its index: online the recording goes on under the reel and drops
+        // old frames, so an index would soon point at a later one (with them already gone: invisible)
+        this.kos.set(x.b, { tk: Math.max(x.tk, x.ti), f: fr[j], dead: fr[dead].t }); // (squashed once the food is in)
       }
     }
   }
@@ -1153,7 +1158,7 @@ class Reel {
     this._events(this.evT, p.ti); this.evT = Math.max(this.evT, p.ti);
     const kind = BURST[p.food] || 'tomato';
     this.emitting = true; g.fx.burst(kind, at, 1.3); this.emitting = false;
-    this._pop(`${p.head ? 'Headshot ' : ''}-${Math.round(p.amt)}`, 'pre', 0.1);
+    this._pop(`${p.head ? 'Direct hit ' : ''}-${Math.round(p.amt)}`, 'pre', 0.1);
     this.freeze = 0.09; this.punch = 0.45; this.shake = Math.min(1, this.shake + 0.25);
     this._ring(at, 1.3, 0, 0.35, (PALETTE[kind] || PALETTE.tomato)[0]); // (small: the camera is close)
     this._sfx('thud', at, 0.75);
@@ -1177,7 +1182,7 @@ class Reel {
     }
     let word;
     if (dodge) word = n ? `${mult(n + 1)} dodge!` : 'Dodged!';
-    else if (h.head) word = 'Headshot!';
+    else if (h.head) word = 'Direct hit!';
     else if (c.kind === 'snipe') word = ko ? 'Sniped!' : 'Snipe!';
     else if (c.kind === 'hit') word = 'Bam!';
     else word = n ? `${mult(n + 1)}!` : c.final && c.hits.length === 1 ? 'Winner!' : 'Splat!';
@@ -1322,13 +1327,14 @@ class Reel {
       // gone (online, however late the room said so)
       const ko = this.kos.get(i), inKo = ko && t >= ko.tk - 0.3 && t < Math.max(ko.dead, ko.tk + KO_HOLD) + 0.05;
       const hold = inKo && !linked(A, B, o); // (the recording has them gone already: their last pose)
-      if (hold) { A = B = fr[ko.j].a; flags = A[o + 8]; kk = 0; }
+      if (hold) { A = B = ko.f.a; flags = A[o + 8]; kk = 0; }
       if (inKo && t >= ko.tk + KO_HOLD) flags = 0;
       const alive = (flags & FL.alive) !== 0;
       a.alive = alive; a.root.visible = alive;
+      if (alive && !a.root.parent) { g.scene.add(a.root); this.lent.add(a); } // (0.75: they left the room since; here for the replay)
       a.root.scale.set(1, 1, 1);
       if (!alive) { a.glint.visible = false; return; }
-      if (hold) { const e = clamp(Math.min(t, ko.tk) - fr[ko.j].t, 0, 0.15); a.pos.set(A[o] + A[o + 5] * e, A[o + 1] + Math.max(0, A[o + 6]) * e, A[o + 2] + A[o + 7] * e); }
+      if (hold) { const e = clamp(Math.min(t, ko.tk) - ko.f.t, 0, 0.15); a.pos.set(A[o] + A[o + 5] * e, A[o + 1] + Math.max(0, A[o + 6]) * e, A[o + 2] + A[o + 7] * e); }
       else hl.posAt(i, t, a.pos, false);
       if (ko && t > ko.tk && t < ko.tk + KO_HOLD) {
         const u = (t - ko.tk) / KO_HOLD, xz = lerp(1, 1.6, smooth(u / 0.45)) * (1 - smooth((u - 0.6) / 0.4));

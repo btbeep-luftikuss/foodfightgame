@@ -63,6 +63,13 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.75: "Direct hit!", and no more invisible Titans in the highlight reels** (`src/highlights.js`)
+
+- **Direct hits:** a hit on the head is now called a direct hit in the highlight reels ("Direct hit!", "Direct hit -96", a play's kind), instead of a headshot.
+- **Splatted Titans vanishing just before the hit (online):** a reel remembered the last moment a splatted Titan was still standing by its place in the recording. Online the match goes on under the reel and keeps dropping the old parts of the recording that no play needs, so that place soon pointed at a later moment, when the Titan was already gone: they disappeared as the food flew in (or stood in the wrong spot). It now keeps the moment itself. Checked: two players and the host's bots, the host watching the round's reel: 11 frames of a bot gone on screen before, none now.
+- **Players who left the room:** their Titan was taken out of the scene when they left, so every replay of that round showed them invisible. The reel now puts them back while it plays and takes them out again after. Checked: Bob plays, leaves, Alice watches the reel: invisible in 965 frames before (141 of them on screen), shown in all now.
+- Checked too: offline reels after a 90 s bot match, and online Squads: no Titan missing.
+
 **Version 0.74: one steady aim line** (`src/game.js`)
 
 - **Always one line:** the Knife's fan of three (and any volley) now shows a single line, down the middle.
