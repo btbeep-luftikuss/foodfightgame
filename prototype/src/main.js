@@ -7,7 +7,7 @@ import { Input, controlsDetected, controlsPref } from './input.js';
 import { Sfx } from './fx.js';
 import { FOODS, FOOD_IDS, makeFoodMesh, setFoodShadows } from './foods.js';
 import { SKINS, SKIN_BY_ID, RARITY, PACKS } from './skins.js';
-import { Wallet, priceOf, packSkins, packPrice, packFullPrice, matchReward } from './coins.js';
+import { Wallet, boxOdds, boxOf, matchReward } from './coins.js';
 import { titanPreview } from './actors.js';
 import { TITANS } from './game.js';
 import { BOT_LEVELS } from './bots.js';
@@ -399,33 +399,36 @@ function boot() {
   const lockerGrid = $('locker-grid'), packsEl = $('locker-packs'), buyEl = $('locker-buy');
   const card = (s) => {
     const own = wallet.owns(s.id);
-    return `<button type="button" data-id="${s.id}" aria-pressed="false" class="${own ? '' : 'locked'}" style="--rar:${RARITY[s.rarity].color}" title="${s.desc}"><img src="${icons['skin:' + s.id] || ''}" alt=""><b>${s.name}</b><small>${own ? RARITY[s.rarity].name : coins(priceOf(s.id))}</small></button>`;
+    return `<button type="button" data-id="${s.id}" aria-pressed="false" class="${own ? '' : 'locked'}${s.rarity === 'mythic' ? ' mythic' : ''}" style="--rar:${RARITY[s.rarity].color}" title="${s.desc}"><img src="${icons['skin:' + s.id] || ''}" alt=""><b>${s.name}</b><small>${RARITY[s.rarity].name}</small></button>`;
   };
+  // (0.76) Skin boxes, Blooket style: what's in each box and how likely each skin is (tap one to try it on)
+  const boxArt = (B, big = false) => `<div class="box-art${big ? ' big' : ''}" style="--b1:${B.color};--b2:${B.color2}"><i class="box-lid"></i><i class="box-body"><img src="${icons[B.icon] || ''}" alt=""></i></div>`;
+  const pct = (x) => (x >= 10 ? x.toFixed(0) : x >= 1 ? x.toFixed(1) : x.toFixed(2)).replace(/\.0+$/, '') + '%';
   function renderLocker() {
     lockerGrid.innerHTML = SKINS.filter((s) => wallet.owns(s.id)).map(card).join('');
-    packsEl.innerHTML = PACKS.map((P) => {
-      const left = packSkins(P.id).filter((s) => !wallet.owns(s.id));
-      if (!left.length) return '';
-      const cost = packPrice(P.id, wallet.owned), full = left.reduce((t, s) => t + priceOf(s.id), 0);
-      const all = left.length === packSkins(P.id).length;
-      return `<section class="pack" data-pack="${P.id}"><div class="pack-head"><h3>${P.name}</h3><span class="coinpill">${left.length} skin${left.length > 1 ? 's' : ''}${all ? '' : ' left'}</span>`
-        + `<button type="button" class="btn" data-buypack="${P.id}" ${wallet.coins < cost ? 'disabled' : ''}>${all ? 'Buy the pack' : 'Buy the rest'} · ${coins(cost)}</button>`
-        + `<p>${P.desc} <b>${all ? `Save ${fmt(full - cost)}` : `Save ${fmt(full - cost)} on the rest`}</b> (<s>${fmt(full)}</s>)${wallet.coins < cost ? ` · ${fmt(cost - wallet.coins)} more coins to go` : ''}</p></div>`
-        + `<div class="locker-grid" role="group" aria-label="${P.name}">${left.map(card).join('')}</div></section>`;
+    packsEl.innerHTML = '<p class="step-sub"><b>Skin boxes</b> · open one for a random skin; rarer skins turn up less often, and a skin you already have pays coins back</p>' + PACKS.map((B) => {
+      const odds = boxOdds(B.id), have = odds.filter(([sk]) => wallet.owns(sk.id)).length, done = have === odds.length;
+      return `<section class="box" data-box="${B.id}" style="--b1:${B.color};--b2:${B.color2}">`
+        + `<div class="box-top">${boxArt(B)}<div class="box-info"><h3>${B.name}</h3><p>${B.desc} <b>${have}/${odds.length} collected</b></p>`
+        + (done ? '<span class="box-done">Complete! Every skin in this box is yours</span>'
+          : `<button type="button" class="btn" data-open="${B.id}" ${wallet.coins < B.price ? 'disabled' : ''}>Open · ${coins(B.price)}</button>${wallet.coins < B.price ? `<small>${fmt(B.price - wallet.coins)} more coins to go</small>` : ''}`)
+        + '</div></div><div class="box-odds">'
+        + odds.map(([sk, x]) => `<button type="button" data-id="${sk.id}" aria-pressed="false" class="${wallet.owns(sk.id) ? 'got' : ''}${sk.rarity === 'mythic' ? ' mythic' : ''}" style="--rar:${RARITY[sk.rarity].color}" title="${sk.desc}"><img src="${icons['skin:' + sk.id] || ''}" alt=""><b>${sk.name}</b><small>${RARITY[sk.rarity].name} · ${pct(x)}</small></button>`).join('')
+        + '</div></section>';
     }).join('');
     const shown = tryId || skinId;
     for (const b of document.querySelectorAll('#locker [data-id]')) b.setAttribute('aria-pressed', b.dataset.id === shown ? 'true' : 'false');
     const s = SKIN_BY_ID[shown];
     $('locker-now').innerHTML = `${tryId ? 'Trying on' : 'Wearing'} <b style="color:${RARITY[s.rarity].color}">${s.name}</b>: ${s.desc}`;
     if (tryId) {
-      const cost = priceOf(tryId), short = cost - wallet.coins;
+      const B = boxOf(s.pack), x = boxOdds(s.pack).find(([sk]) => sk.id === tryId)?.[1] || 0;
       buyEl.hidden = false;
-      buyEl.innerHTML = `<p>${short > 0 ? `You need <b>${fmt(short)}</b> more coins for ${s.name}. Play a few matches to earn them.` : `Make ${s.name} yours?`}</p>`
-        + `<button type="button" class="btn" data-buy="${tryId}" ${short > 0 ? 'disabled' : ''}>Buy · ${coins(cost)}</button><button type="button" class="btn ghost" data-untry>Back to ${SKIN_BY_ID[skinId].name}</button>`;
+      buyEl.innerHTML = `<p>${s.name} is in the <b>${B.name}</b>: a ${pct(x)} chance each time you open it.</p>`
+        + `<button type="button" class="btn" data-open="${B.id}" ${wallet.coins < B.price ? 'disabled' : ''}>Open the ${B.name} · ${coins(B.price)}</button><button type="button" class="btn ghost" data-untry>Back to ${SKIN_BY_ID[skinId].name}</button>`;
     } else { buyEl.hidden = true; buyEl.innerHTML = ''; }
     $('locker-coins').innerHTML = coins(wallet.coins);
     $('home-coins').innerHTML = coins(wallet.coins);
-    $('locker-open').querySelector('span').textContent = `Wearing ${SKIN_BY_ID[skinId].name} · skins and the Snack Pack`;
+    $('locker-open').querySelector('span').textContent = `Wearing ${SKIN_BY_ID[skinId].name} · skins and skin boxes`;
   }
   const wear = (id) => {
     skinId = id; tryId = null; game.playerSkin = id;
@@ -434,14 +437,9 @@ function boot() {
   $('locker').addEventListener('click', (e) => {
     const t = e.target.closest('button');
     if (!t) return;
-    if (t.dataset.buypack) {
-      if (!wallet.buyPack(t.dataset.buypack)) return;
-      sfx.play('win');
-      wear(tryId && wallet.owns(tryId) ? tryId : packSkins(t.dataset.buypack)[0].id);
-    } else if (t.dataset.buy) {
-      if (!wallet.buySkin(t.dataset.buy)) return;
-      sfx.play('win');
-      wear(t.dataset.buy);
+    if (t.dataset.open) {
+      openBox(t.dataset.open);
+      return;
     } else if (t.hasAttribute('data-untry')) {
       tryId = null;
     } else if (t.dataset.id) {
@@ -453,6 +451,65 @@ function boot() {
   });
   wallet.onChange = () => renderLocker();
   renderLocker();
+
+  // (0.76) Opening a box: it shakes (longer, and glowing, for a rare one), bursts open, and the skin is
+  // revealed on a burst of its rarity's colour: new, or a duplicate that pays coins back. Tap to hurry it.
+  const boxEl = $('box-open');
+  document.body.appendChild(boxEl); // (over everything, the menu's own layers too)
+  let boxing = null;
+  function openBox(id) {
+    if (boxing) return;
+    const B = boxOf(id), got = wallet.openBox(id);
+    if (!got) return;
+    const { skin, fresh, refund } = got, R = RARITY[skin.rarity], rank = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'].indexOf(skin.rarity);
+    boxing = { id, timers: [] };
+    boxEl.hidden = false;
+    boxEl.className = `box-open r-${skin.rarity}`;
+    boxEl.style.setProperty('--rar', R.color);
+    boxEl.innerHTML = `<div class="bo-stage">${boxArt(B, true)}<div class="bo-reveal"><div class="bo-rays"></div>`
+      + `<img src="${icons['skin:' + skin.id] || ''}" alt=""><b class="bo-name">${skin.name}</b><span class="bo-rar">${R.name}</span>`
+      + `<span class="bo-tag ${fresh ? 'new' : 'dupe'}">${fresh ? 'NEW!' : `Duplicate · +${fmt(refund)} coins back`}</span></div></div>`
+      + `<p class="bo-hint">${B.name} · tap to open</p><div class="bo-btns" hidden>`
+      + `${fresh ? `<button type="button" class="btn" data-bo="wear">Wear ${skin.name}</button>` : ''}`
+      + `<button type="button" class="btn ${fresh ? 'ghost' : ''}" data-bo="again">Open another · ${coins(B.price)}</button>`
+      + '<button type="button" class="btn ghost" data-bo="done">Done</button></div>';
+    const again = boxEl.querySelector('[data-bo="again"]');
+    if (wallet.coins < B.price || wallet.boxDone(id)) { again.disabled = true; if (wallet.boxDone(id)) again.textContent = 'Box complete!'; }
+    boxing.skin = skin; boxing.fresh = fresh;
+    // the shake: a tick per wobble, faster as it builds; a rare skin's box glows its colour first
+    const shakeFor = 1300 + Math.max(0, rank - 2) * 450;
+    boxEl.classList.add('shaking');
+    if (rank >= 3) boxing.timers.push(setTimeout(() => boxEl.classList.add('hint'), shakeFor * 0.45));
+    for (let k = 0, t = 0; t < shakeFor; k++, t += Math.max(110, 330 - k * 22)) boxing.timers.push(setTimeout(() => sfx.play('tick'), t));
+    boxing.timers.push(setTimeout(reveal, shakeFor));
+  }
+  function reveal() {
+    if (!boxing || boxing.shown) return;
+    boxing.shown = true;
+    for (const t of boxing.timers) clearTimeout(t);
+    boxEl.classList.remove('shaking', 'hint'); boxEl.classList.add('opened');
+    boxEl.querySelector('.bo-hint').textContent = boxing.fresh ? 'A new skin for your locker!' : 'Already yours: coins back instead';
+    boxEl.querySelector('.bo-btns').hidden = false;
+    sfx.play('boing'); setTimeout(() => sfx.play(boxing?.fresh ? 'win' : 'pickup'), 160);
+    if (boxing.fresh) { tryId = null; showOnStage(boxing.skin.id); } // (the stage shows it, ready to wear)
+    renderLocker();
+  }
+  function closeBox() {
+    if (!boxing) return;
+    for (const t of boxing.timers) clearTimeout(t);
+    boxing = null; boxEl.hidden = true; boxEl.innerHTML = '';
+    renderLocker(); showOnStage(tryId || skinId);
+  }
+  boxEl.addEventListener('click', (e) => {
+    if (!boxing) return;
+    const b = e.target.closest('[data-bo]');
+    if (!boxing.shown) { reveal(); return; } // (tap: skip the shake)
+    if (!b) return;
+    const what = b.dataset.bo, { id, skin } = boxing;
+    if (what === 'wear') { wear(skin.id); closeBox(); } else if (what === 'done') closeBox();
+    else if (what === 'again') { closeBox(); openBox(id); }
+  });
+  addEventListener('keydown', (e) => { if (boxing && e.key === 'Escape') closeBox(); else if (boxing && !boxing.shown && (e.key === ' ' || e.key === 'Enter')) reveal(); });
 
   // Locker stage: the selected skin on a live turntable (idles, blinks, waves when picked; drag to spin).
   // Its own small renderer, only alive while the Locker is open.

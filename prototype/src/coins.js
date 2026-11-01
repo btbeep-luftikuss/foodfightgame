@@ -1,23 +1,33 @@
 // Coins and the skin shop (0.30). You earn coins for every match (vs bots or online): for taking part,
-// for each splat, for how long you lasted and for winning. Coins buy the skins in skin packs, one at a
-// time or the whole pack for less. The first 13 skins are free for everyone.
+// for each splat, for how long you lasted and for winning. (0.76) Coins open skin boxes, Blooket style:
+// each box costs the same every time and gives one of its skins at random, rarer ones less often; a skin
+// you already have pays some coins back. The first 13 skins are free for everyone.
 //
 // The wallet lives on this device (browser storage), like the chosen skin. If storage is blocked it
 // still works, for this visit only.
 import { SKINS, SKIN_BY_ID, PACKS } from './skins.js';
 
-export const PRICE = { common: 150, uncommon: 300, rare: 500, epic: 800, legendary: 1200 };
-export const PACK_DISCOUNT = 0.65; // a whole pack costs 65% of its skins bought one by one
-export const STARTER_COINS = 500;  // a welcome gift, enough for a first skin
+export const STARTER_COINS = 500;  // a welcome gift, enough for a first box
 
-export const priceOf = (id) => (SKIN_BY_ID[id]?.pack ? PRICE[SKIN_BY_ID[id].rarity] : 0);
+// How likely each skin in a box is, by its rarity (relative weights; see boxOdds), and the coins a
+// duplicate pays back.
+export const WEIGHT = { common: 30, uncommon: 30, rare: 20, epic: 10, legendary: 4, mythic: 1.5 };
+export const DUPE_COINS = { common: 40, uncommon: 60, rare: 100, epic: 160, legendary: 250, mythic: 400 }; // (never more than a box)
+
 export const packSkins = (packId) => SKINS.filter((s) => s.pack === packId);
-// What the rest of a pack costs: the skins you don't own yet, at the pack discount (rounded to 50).
-export function packPrice(packId, owned = new Set()) {
-  const full = packSkins(packId).filter((s) => !owned.has(s.id)).reduce((t, s) => t + PRICE[s.rarity], 0);
-  return Math.ceil((full * PACK_DISCOUNT) / 50) * 50;
+export const boxOf = (packId) => PACKS.find((p) => p.id === packId) || null;
+// Each skin's chance in a box, in percent: [[skin, %], ...]
+export function boxOdds(packId) {
+  const list = packSkins(packId), total = list.reduce((t, s) => t + WEIGHT[s.rarity], 0);
+  return list.map((s) => [s, (WEIGHT[s.rarity] / total) * 100]);
 }
-export const packFullPrice = (packId) => packSkins(packId).reduce((t, s) => t + PRICE[s.rarity], 0);
+// One skin out of a box (rnd: 0..1).
+export function rollBox(packId, rnd = Math.random()) {
+  const odds = boxOdds(packId);
+  let x = rnd * 100;
+  for (const [s, pc] of odds) { if ((x -= pc) < 0) return s; }
+  return odds[odds.length - 1][0];
+}
 
 // Coins for one match: the lines of the receipt and the total.
 // placement: 1 is the winner; titans: how many started.
@@ -45,22 +55,17 @@ export class Wallet {
   }
   owns(id) { return !!SKIN_BY_ID[id] && (!SKIN_BY_ID[id].pack || this.owned.has(id)); }
   earn(n) { if (n > 0) { this.coins = Math.min(1e7, this.coins + Math.round(n)); this._save(); } }
-  buySkin(id) {
-    if (this.owns(id)) return true;
-    const cost = priceOf(id);
-    if (!cost || this.coins < cost) return false;
-    this.coins -= cost; this.owned.add(id); this._save();
-    return true;
-  }
-  buyPack(packId) {
-    if (!PACKS.some((p) => p.id === packId)) return false;
-    const cost = packPrice(packId, this.owned);
-    if (!cost || this.coins < cost) return false;
-    this.coins -= cost;
-    for (const s of packSkins(packId)) this.owned.add(s.id);
+  // (0.76) Open a box: { skin, fresh, refund }, or null (no such box, not enough coins, or nothing left in it).
+  openBox(packId, rnd = Math.random()) {
+    const B = boxOf(packId);
+    if (!B || this.coins < B.price || this.boxDone(packId)) return null;
+    const skin = rollBox(packId, rnd), fresh = !this.owned.has(skin.id), refund = fresh ? 0 : DUPE_COINS[skin.rarity];
+    this.coins = this.coins - B.price + refund;
+    this.owned.add(skin.id);
     this._save();
-    return true;
+    return { skin, fresh, refund };
   }
+  boxDone(packId) { return packSkins(packId).every((s) => this.owned.has(s.id)); } // (every skin in it: no more opening)
   _save() {
     write('tt-coins', String(this.coins));
     write('tt-owned', JSON.stringify([...this.owned]));

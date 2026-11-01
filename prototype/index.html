@@ -257,6 +257,65 @@ button { font: inherit; color: inherit; }
 .pack-head .btn { margin-left: auto; }
 .pack-head s { opacity: 0.7; }
 .coin-help { font-size: 12px !important; }
+/* (0.76) skin boxes, Blooket style */
+.box { display: grid; gap: 10px; margin-top: 8px; padding: 12px; border-radius: 16px; border: 2px solid var(--b1); background: #2a1c33;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--b1) 30%, #22142a), #22142a 70%); }
+.box-top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.box-info { flex: 1 1 180px; display: grid; gap: 6px; justify-items: start; }
+.box-info h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 21px; color: var(--paper); }
+.box-info p { margin: 0; font-size: 13px; }
+.box-info small { font-size: 12px; color: var(--paper-dim); }
+.box-done { font-weight: 900; color: var(--butter); }
+.box-art { position: relative; width: 84px; height: 84px; flex: none; }
+.box-art .box-body { position: absolute; left: 7%; right: 7%; bottom: 0; height: 62%; border-radius: 8% 8% 14% 14%; display: grid; place-items: center;
+  background: linear-gradient(180deg, var(--b1), var(--b2)); box-shadow: inset 0 -0.4em 0 #0003, 0 0.4em 1em #0007; }
+.box-art .box-body::before { content: ''; position: absolute; left: 44%; width: 12%; top: 0; bottom: 0; background: #fff8; }
+.box-art .box-lid { position: absolute; z-index: 1; left: 0; right: 0; top: 13%; height: 27%; border-radius: 10%; background: var(--b1);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--b1) 65%, #fff), var(--b1)); box-shadow: inset 0 -0.3em 0 #0002, 0 0.2em 0.4em #0005; }
+.box-art .box-lid::before { content: ''; position: absolute; left: 44%; width: 12%; top: 0; bottom: 0; background: #fffa; }
+.box-art .box-lid::after { content: ''; position: absolute; left: 50%; top: -42%; width: 38%; height: 50%; transform: translateX(-50%); border-radius: 50% 50% 10% 10%;
+  border: 0.32em solid #fffc; border-bottom: 0; }
+.box-art img { position: relative; width: 92%; height: 92%; object-fit: contain; filter: drop-shadow(0 2px 2px #0007); }
+.box-art.big { width: 190px; height: 190px; font-size: 2.2em; }
+.box-odds { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 6px; }
+.box-odds button { position: relative; display: grid; justify-items: center; gap: 1px; padding: 4px 3px 6px; border-radius: 10px; border: 2px solid transparent; background: #00000038;
+  color: var(--paper); font: inherit; cursor: pointer; }
+.box-odds button img { width: 60px; height: 60px; filter: saturate(0.45) brightness(0.62); }
+.box-odds button.got img { filter: none; }
+.box-odds button.got::after { content: '✓'; position: absolute; top: 3px; right: 5px; font-weight: 900; color: #7cf06a; }
+.box-odds button b { font-size: 11.5px; line-height: 1.1; text-align: center; }
+.box-odds button small { font-size: 10.5px; font-weight: 800; color: var(--rar); }
+.box-odds button[aria-pressed="true"] { border-color: var(--butter); }
+.mythic small, .r-mythic .bo-rar { background: linear-gradient(90deg, #ff5a5a, #ffd23a, #5fe05a, #4fb8ff, #c07aff); -webkit-background-clip: text; background-clip: text; color: transparent !important; }
+.locker-grid button.mythic { border-image: linear-gradient(135deg, #ff5a5a, #ffd23a, #5fe05a, #4fb8ff, #c07aff) 1; }
+.box-open { position: fixed; inset: 0; z-index: 9000; display: grid; place-items: center; align-content: center; gap: 12px; padding: 16px; text-align: center; cursor: pointer;
+  background: radial-gradient(circle at 50% 42%, #3a2350f2, #120a18f7); }
+.box-open[hidden], .bo-btns[hidden] { display: none; }
+.bo-stage { position: relative; width: min(320px, 90vw); height: 330px; display: grid; place-items: center; }
+.box-open .box-art { transition: transform 0.3s, opacity 0.3s; }
+.box-open.shaking .box-art { animation: bo-shake 0.3s infinite; }
+.box-open.hint .box-art { animation-duration: 0.16s; filter: drop-shadow(0 0 14px var(--rar)) drop-shadow(0 0 30px var(--rar)); }
+@keyframes bo-shake { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-8deg) translateY(-4px); } 75% { transform: rotate(8deg) translateY(-4px); } }
+.box-open.opened .box-art { transform: scale(1.6); opacity: 0; }
+.bo-reveal { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 4px; opacity: 0; transform: scale(0.3); pointer-events: none; }
+.box-open.opened .bo-reveal { opacity: 1; transform: scale(1); transition: transform 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) 0.1s, opacity 0.2s 0.1s; }
+.bo-rays { position: absolute; left: 50%; top: 38%; width: 460px; height: 460px; margin: -230px 0 0 -230px; z-index: -1; border-radius: 50%;
+  background: repeating-conic-gradient(var(--rar) 0deg 9deg, transparent 9deg 22.5deg); opacity: 0.55;
+  -webkit-mask: radial-gradient(circle, #000 18%, transparent 66%); mask: radial-gradient(circle, #000 18%, transparent 66%); animation: bo-spin 10s linear infinite; }
+.r-epic .bo-rays, .r-legendary .bo-rays { opacity: 0.8; }
+.r-mythic .bo-rays { opacity: 0.85; background: repeating-conic-gradient(#ff5a5a 0deg 7deg, transparent 7deg 14.4deg, #ffd23a 14.4deg 21.4deg, transparent 21.4deg 28.8deg,
+  #5fe05a 28.8deg 35.8deg, transparent 35.8deg 43.2deg, #4fb8ff 43.2deg 50.2deg, transparent 50.2deg 57.6deg, #c07aff 57.6deg 64.6deg, transparent 64.6deg 72deg); }
+@keyframes bo-spin { to { transform: rotate(360deg); } }
+.bo-reveal img { width: 200px; height: 200px; filter: drop-shadow(0 0 18px var(--rar)); }
+.bo-name { font-family: var(--display); font-weight: 400; font-size: 30px; line-height: 1; color: var(--paper); }
+.bo-rar { font-weight: 900; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--rar); }
+.bo-tag { margin-top: 4px; padding: 3px 12px; border-radius: 999px; font-weight: 900; font-size: 14px; }
+.bo-tag.new { background: var(--butter); color: #2a1a10; animation: bo-pop 0.6s ease-in-out 0.5s 2; }
+.bo-tag.dupe { background: #00000066; color: var(--butter); }
+@keyframes bo-pop { 50% { transform: scale(1.18); } }
+.bo-hint { margin: 0; font-weight: 800; color: var(--paper-dim); }
+.bo-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .bo-rays, .box-open.shaking .box-art { animation: none; } }
 .btn .coin { margin-right: 0.3em; }
 .stats .gold { color: var(--butter); }
 .receipt { margin: -4px 0 10px; font-size: 13px; color: var(--paper-dim); text-align: center; }
@@ -824,7 +883,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.75 · Direct hits</p>
+      <p class="eyebrow">Prototype 0.76 · Skin boxes</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in; smash the other teams' pots in Cooking Pot Wars; outsplat the other team in Squads; or fight over two Legendary utensils in King of the Utensil.</p>
       <nav class="homenav" aria-label="Main menu">
@@ -931,6 +990,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
         <p class="step-sub"><b>Your skins</b></p>
         <div id="locker-grid" class="locker-grid" role="group" aria-label="Your skins"></div>
         <div id="locker-packs"></div>
+        <div id="box-open" class="box-open" hidden role="dialog" aria-label="Opening a skin box"></div>
         <p class="coin-help">Earn coins in every match, vs bots or online: 10 for playing, 15 per splat, up to 44 for lasting, 60 for a win.</p>
       </div>
     </div>

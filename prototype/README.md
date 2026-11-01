@@ -63,6 +63,17 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.76: skin boxes, Blooket style, and 12 new skins** (`src/skins.js`, `src/coins.js`, `src/main.js`, `index.html`)
+
+- **Boxes, not shop prices:** the Locker's Snack Pack (buy a skin, or the pack for less) is now three skin boxes. Each costs the same every time (Snack Box 350 coins, Garden Box 400, Bakery Box 400) and gives one of its six skins at random. Every box lists its skins with their chances (by rarity: Uncommon 31%, Rare 21%, Epic 10%, Legendary 4%, Mythic 1.6%; the Snack Box has no Mythic) and how many you've collected; tap one to try it on. A skin you already have pays coins back instead (60 to 400 by rarity, never more than a box costs). A box you've completed can't be opened again, so no coins are wasted. Skins you bought before are still yours.
+- **The opening:** the box shakes (longer, and glowing in the skin's colour, for an Epic or better), bursts open, and the skin turns up on spinning rays of its rarity's colour (a rainbow for a Mythic), with NEW! or the coins back. Tap to hurry it. Then wear it, open another, or close.
+- **A new rarity, Mythic,** with a rainbow label.
+- **12 new skins:**
+  - Garden Box: Carrot Captain and Corn Cob Kid (Uncommon), Pumpkin Patch (Rare: a carved pumpkin head with a candle glow), Mushroom Mage (Epic), Pineapple King (Legendary) and Rainbow Root (Mythic: a glowing radish crown, rainbow leaves and a rainbow arc).
+  - Bakery Box: Croissant Cowboy and Cupcake Cutie (Uncommon), Bagel Baron (Rare: a top hat on a sesame-bagel brim and a monocle), Gingerbread Guard (Epic), Cake Royale (Legendary: a three-tier cake crown with lit candles) and Cosmic Cookie (Mythic: a giant cookie halo ringed like a planet).
+- Bots wear the new skins too.
+- **Checked:** the odds add up to 100% in every box, and 100,000 simulated openings per box came out at those odds. Opening, duplicates, the Mythic reveal and wearing were all tested on desktop and phone-sized screens.
+
 **Version 0.75: "Direct hit!", and no more invisible Titans in the highlight reels** (`src/highlights.js`)
 
 - **Direct hits:** a hit on the head is now called a direct hit in the highlight reels ("Direct hit!", "Direct hit -96", a play's kind), instead of a headshot.

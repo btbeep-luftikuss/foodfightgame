@@ -17,6 +17,7 @@ export const RARITY = {
   rare: { name: 'Rare', color: '#3fa9ff' },
   epic: { name: 'Epic', color: '#b760ff' },
   legendary: { name: 'Legendary', color: '#ff9b2e' },
+  mythic: { name: 'Mythic', color: '#ff4fd8' }, // (0.76) the rarest drop in a box
 };
 
 // Model space: the Titan faces +z, feet at y = 0. The skull is centred at HEAD_C (half-sizes about
@@ -229,7 +230,7 @@ export const SKINS = [
       ['speaker', cyl(0.045, 0.045, 0.01, M(-0.075, 1.25, -0.195, HALF)), 'chest'],
     ],
   },
-  // ---- The Snack Pack (0.30): six skins bought with coins (see coins.js), one at a time or all at once.
+  // ---- The Snack Box (0.30 the Snack Pack; 0.76 a box opened for a random skin, see coins.js).
   {
     id: 'burger', name: 'Burger Boss', rarity: 'rare', pack: 'snack', hideHair: true, desc: 'A double-stacked burger hat with lettuce, cheese and sesame seeds.',
     color: '#d8342c', belly: '#5a3a26', sleeves: 'short', accent: '#ffd447', collar: '#ffd447', belt: '#3a2a1e', buckle: '#ffd447', shoes: '#ffd447', soles: '#5a3a26', laces: '#d8342c',
@@ -344,10 +345,257 @@ export const SKINS = [
       return p;
     },
   },
+  // ---- (0.76) The Garden Box: opened with coins for a random skin (coins.js BOXES), Blooket style.
+  {
+    id: 'carrotcap', name: 'Carrot Captain', rarity: 'uncommon', pack: 'garden', hair: 'buzz', desc: 'A carrot-top cap with leafy sprouts, a captain\'s sash and a gold badge.',
+    color: '#ff8a2a', belly: '#2f6b3a', sleeves: 'short', accent: '#2f6b3a', collar: '#fff3d6', shoes: '#2f6b3a', soles: '#1f3a22', laces: '#ff8a2a',
+    mats: { carrot: ['#ff7a1a', { roughness: 0.6 }], ridge: ['#d95a12', { roughness: 0.7 }], leaf: ['#4fbf3a', { side: THREE.DoubleSide, roughness: 0.6 }], sash: ['#fff3d6'], badge: ['#ffd447', { metalness: 0.6, roughness: 0.3 }] },
+    parts: () => {
+      const p = [
+        ['carrot', sph(0.175, hm(0, 0.02, -0.004, -0.12, 0, 0, 1, 1, 1.04), Math.PI * 0.48), 'head'],
+        ['carrot', cyl(0.11, 0.11, 0.012, hm(0, 0.06, 0.14, 0.22), 20), 'head'],
+        ['ridge', torus(0.168, 0.007, hm(0, 0.07, -0.01, HALF - 0.12, 0, 0, 1, 1, 1.04)), 'head'],
+        ['ridge', torus(0.14, 0.007, hm(0, 0.125, -0.016, HALF - 0.12, 0, 0, 1, 1, 1.04)), 'head'],
+        ['sash', box(0.055, 0.56, 0.015, M(0, 1.22, 0.14, 0, 0, 0.62)), 'chest'],
+        ['badge', star(0.03, M(0.08, 1.34, 0.15, 0, 0, 0, 1, 1, 0.3)), 'chest'],
+      ];
+      for (const k of [-1, -0.35, 0.35, 1]) p.push(['leaf', cone(0.032, 0.19, hm(k * 0.035, 0.27, -0.03, -0.1, k * 0.7, -k * 0.45, 1, 1, 0.3), 6), 'head']);
+      return p;
+    },
+  },
+  {
+    id: 'corncob', name: 'Corn Cob Kid', rarity: 'uncommon', pack: 'garden', hideHair: true, desc: 'A tall corn-on-the-cob hat in its husk, with silky tassels on top.',
+    color: '#ffd23a', belly: '#4f8a3a', sleeves: 'short', accent: '#4f8a3a', collar: '#4f8a3a', shoes: '#4f8a3a', soles: '#2e5a22', laces: '#ffd23a',
+    mats: { cob: ['#f2c230', { roughness: 0.5 }], kernel: ['#ffde55', { roughness: 0.3 }], husk: ['#7cc04a', { side: THREE.DoubleSide, roughness: 0.8 }], silk: ['#e8d9a0', { roughness: 0.9 }] },
+    parts: () => {
+      const p = [
+        ['husk', sph(0.174, hm(0, 0.025, -0.004, -0.1, 0, 0, 1, 1, 1.03), Math.PI * 0.45), 'head'],
+        ['cob', cyl(0.1, 0.1, 0.2, hm(0, 0.245, -0.01), 18), 'head'],
+        ['cob', sph(0.1, hm(0, 0.345, -0.01), Math.PI / 2), 'head'],
+      ];
+      for (let j = 0; j < 5; j++) for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 + j * 0.31, y = 0.17 + j * 0.042;
+        p.push(['kernel', box(0.036, 0.036, 0.02, hm(Math.cos(a) * 0.104, y, Math.sin(a) * 0.104 - 0.01, 0, HALF - a, 0)), 'head']);
+      }
+      for (let k = 0; k < 3; k++) p.push(['husk', arc(0.122, 0.17, k * 2.1, 1.25, hm(0, 0.21, -0.01, 0.06 * (k - 1), 0, 0.05 * (1 - k))), 'head']);
+      for (let k = 0; k < 5; k++) p.push(['silk', cone(0.012, 0.11, hm(Math.cos(k * 1.3) * 0.03, 0.47, Math.sin(k * 1.3) * 0.03 - 0.01, 0.3 * Math.sin(k), 0, 0.3 * Math.cos(k)), 5), 'head']);
+      return p;
+    },
+  },
+  {
+    id: 'pumpkin', name: 'Pumpkin Patch', rarity: 'rare', pack: 'garden', hideHair: true, hideBeard: true, desc: 'A carved pumpkin head with a candle glow, a curly stem and a vine scarf.',
+    color: '#2b2b35', belly: '#3a2a1e', sleeves: 'long', gloves: '#5a8a3a', accent: '#ff8a1a', collar: '#ff8a1a', boots: '#3a2a1e', belt: '#5a8a3a', buckle: '#ff8a1a',
+    mats: { pump: ['#ff7a14', { roughness: 0.55 }], rib: ['#e8640e', { roughness: 0.6 }], stem: ['#5a7a2a', { roughness: 0.9 }], glow: ['#ffd23a', { emissive: '#ffb000', emissiveIntensity: 2 }], vine: ['#3f8f2a', { roughness: 0.8 }] },
+    parts: () => {
+      const p = [['pump', sph(0.2, hm(0, 0.03, 0.0, 0, 0, 0, 1.12, 0.93, 1.08)), 'head']];
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + 0.2; p.push(['rib', sph(0.1, hm(Math.cos(a) * 0.135, 0.03, Math.sin(a) * 0.13, 0, -a, 0, 0.62, 1.72, 1)), 'head']); }
+      for (const s of [1, -1]) p.push(['glow', cyl(0.042, 0.042, 0.02, hm(0.075 * s, 0.075, 0.205, HALF, 0, 0), 3), 'head']);
+      p.push(['glow', cyl(0.024, 0.024, 0.02, hm(0, 0.025, 0.215, HALF, 0, 0), 3), 'head']);
+      p.push(['glow', box(0.17, 0.034, 0.02, hm(0, -0.06, 0.19)), 'head']);
+      for (const x of [-0.05, 0, 0.05]) p.push(['pump', box(0.018, 0.02, 0.026, hm(x, -0.051, 0.19)), 'head']);
+      p.push(['stem', cyl(0.024, 0.035, 0.09, hm(0.01, 0.24, 0, 0.12, 0, 0.18), 8), 'head']);
+      p.push(['vine', torus(0.045, 0.008, hm(0.06, 0.22, 0.0, 0, 0, 0.4), Math.PI * 1.3), 'head']);
+      p.push(['vine', torus(0.1, 0.024, M(0, 1.5, -0.004, HALF)), 'chest']);
+      p.push(['vine', cone(0.05, 0.1, M(0.05, 1.42, 0.1, Math.PI, 0, 0.3, 1, 1, 0.3), 6), 'chest']);
+      return p;
+    },
+  },
+  {
+    id: 'mushroom', name: 'Mushroom Mage', rarity: 'epic', pack: 'garden', hair: 'long', desc: 'A wide spotted toadstool hat, glowing spores and a tiny mushroom friend on the shoulder.',
+    color: '#f4ead2', belly: '#7a4a2a', sleeves: 'long', accent: '#e0302a', collar: '#e0302a', gloves: '#7a4a2a', boots: '#5a3a22', belt: '#e0302a', buckle: '#fff3d6',
+    mats: { cap: ['#e0302a', { roughness: 0.45 }], spot: ['#fffaf2', { roughness: 0.6 }], gill: ['#f4dcb0', { roughness: 0.9, side: THREE.DoubleSide }], spore: ['#b8ff7a', { emissive: '#7aff3a', emissiveIntensity: 1.6 }], stalk: ['#fff3d6', { roughness: 0.8 }] },
+    parts: () => {
+      const p = [
+        ['cap', sph(0.3, hm(0, 0.12, -0.01, 0, 0, 0, 1, 0.55, 1), Math.PI / 2), 'head'],
+        ['gill', cyl(0.295, 0.295, 0.01, hm(0, 0.12, -0.01), 32), 'head'],
+      ];
+      for (const [th, ph, r] of [[0.3, 0.4, 0.045], [2.0, 0.55, 0.04], [3.6, 0.5, 0.05], [5.0, 0.6, 0.038], [1.2, 0.95, 0.035], [4.3, 1.0, 0.04], [0, 0.05, 0.04]]) {
+        p.push(['spot', sph(r, hm(0.3 * Math.sin(ph) * Math.cos(th), 0.12 + 0.165 * Math.cos(ph), 0.3 * Math.sin(ph) * Math.sin(th) - 0.01, 0, 0, 0, 1, 0.5, 1)), 'head']);
+      }
+      for (const [x, y, z] of [[0.3, 0.02, 0.1], [-0.28, 0.08, -0.05], [0.2, -0.1, -0.2], [-0.18, 0.2, 0.2]]) p.push(['spore', star(0.016, hm(x, y, z)), 'head']);
+      p.push(['stalk', cyl(0.025, 0.03, 0.08, M(0.17, 1.52, -0.02), 10), 'chest']);
+      p.push(['cap', sph(0.065, M(0.17, 1.56, -0.02, 0, 0, 0, 1, 0.65, 1), Math.PI / 2), 'chest']);
+      p.push(['spot', sph(0.014, M(0.19, 1.6, 0.01)), 'chest']);
+      p.push(['spore', star(0.02, M(-0.24, 1.25, 0.12)), 'chest']);
+      return p;
+    },
+  },
+  {
+    id: 'pineking', name: 'Pineapple King', rarity: 'legendary', pack: 'garden', hideHair: true, desc: 'A spiky pineapple helm under a gold crown, a ruby and a royal leaf cape.',
+    color: '#ffcf2e', belly: '#7a5a1e', sleeves: 'long', gloves: '#ffcf2e', accent: '#3f9a3a', collar: '#3f9a3a', boots: '#7a5a1e', belt: '#3f9a3a', buckle: '#ffd447',
+    mats: { skin: ['#e8a92a', { roughness: 0.6 }], diamond: ['#b8781a', { roughness: 0.7 }], leaf: ['#3faa3a', { side: THREE.DoubleSide, roughness: 0.6 }], crown: ['#ffd447', { metalness: 0.85, roughness: 0.25 }],
+      gem: ['#ff3f6a', { emissive: '#ff1f4a', emissiveIntensity: 0.8 }], cape: ['#2f8a3a', { side: THREE.DoubleSide }], fur: ['#fff7ec', { roughness: 0.95 }] },
+    parts: () => {
+      const p = [
+        ['skin', sph(0.178, hm(0, 0.04, -0.004, -0.1, 0, 0, 1, 1.05, 1.03), Math.PI * 0.5), 'head'],
+        ['crown', torus(0.17, 0.016, hm(0, 0.1, -0.008, HALF - 0.1, 0, 0, 1, 1, 1.03)), 'head'],
+        ['gem', star(0.026, hm(0, 0.13, 0.17, 0, 0, 0, 1, 1.2, 0.5)), 'head'],
+        ['cape', box(0.4, 0.75, 0.012, M(0, 1.06, -0.16, 0.13)), 'chest'],
+        ['fur', torus(0.11, 0.032, M(0, 1.49, -0.01, HALF)), 'chest'],
+      ];
+      for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; p.push(['crown', cone(0.022, 0.07, hm(Math.cos(a) * 0.16, 0.15, Math.sin(a) * 0.165 - 0.008, Math.sin(a) * 0.2, 0, -Math.cos(a) * 0.2), 4), 'head']); }
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 9; i++) {
+        const a = (i / 9) * Math.PI * 2 + j * 0.35, ph = 0.55 + j * 0.4;
+        p.push(['diamond', star(0.018, hm(0.178 * Math.sin(ph) * Math.cos(a), 0.04 + 0.187 * Math.cos(ph), 0.183 * Math.sin(ph) * Math.sin(a) - 0.004, 0, -a, 0, 1, 1.3, 0.5)), 'head']);
+      }
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; p.push(['leaf', cone(0.034, 0.24, hm(Math.cos(a) * 0.05, 0.33, Math.sin(a) * 0.05 - 0.01, Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35, 1, 1, 0.3), 5), 'head']); }
+      p.push(['leaf', cone(0.03, 0.28, hm(0, 0.36, -0.01, 0, 0, 0, 1, 1, 0.3), 5), 'head']);
+      return p;
+    },
+  },
+  {
+    id: 'rainbowroot', name: 'Rainbow Root', rarity: 'mythic', pack: 'garden', hideHair: true, desc: 'A glowing radish crown with rainbow leaves, a rainbow arc behind your head and a shimmering suit.',
+    color: '#ff4fd8', belly: '#7a3cff', glow: '#8a1aa8', sleeves: 'long', gloves: '#ffffff', accent: '#4ff0ff', collar: '#4ff0ff', shoes: '#ffffff', soles: '#ff4fd8', laces: '#4ff0ff', iris: '#4ff0ff', eyeGlow: '#4ff0ff',
+    mats: {
+      bulb: ['#ff3fb0', { roughness: 0.3, emissive: '#a0106a', emissiveIntensity: 0.6 }], root: ['#fff0f8', { roughness: 0.5 }],
+      r1: ['#ff4f4f', { emissive: '#ff2020', emissiveIntensity: 0.9, side: THREE.DoubleSide }], r2: ['#ff9a2e', { emissive: '#ff7a00', emissiveIntensity: 0.9, side: THREE.DoubleSide }],
+      r3: ['#ffe14f', { emissive: '#ffc800', emissiveIntensity: 0.9, side: THREE.DoubleSide }], r4: ['#5fe05a', { emissive: '#20c020', emissiveIntensity: 0.9, side: THREE.DoubleSide }],
+      r5: ['#4fb8ff', { emissive: '#1a8aff', emissiveIntensity: 0.9, side: THREE.DoubleSide }], r6: ['#a86bff', { emissive: '#7a2aff', emissiveIntensity: 0.9, side: THREE.DoubleSide }],
+      spark: ['#ffffff', { emissive: '#ffffff', emissiveIntensity: 1.6 }],
+    },
+    parts: () => {
+      const p = [
+        ['bulb', sph(0.18, hm(0, 0.05, -0.004, -0.1, 0, 0, 1, 1.05, 1.03), Math.PI * 0.5), 'head'],
+        ['root', cone(0.012, 0.09, hm(0.16, -0.02, -0.06, 0, 0, -2.2), 6), 'head'],
+      ];
+      [-1, -0.6, -0.2, 0.2, 0.6, 1].forEach((a, i) => p.push([`r${i + 1}`, cone(0.045, 0.26, hm(Math.sin(a) * 0.1, 0.32 + Math.cos(a) * 0.04, -0.03, 0, 0, -a, 1, 1, 0.3), 6), 'head']));
+      for (let i = 0; i < 6; i++) p.push([`r${6 - i}`, torus(0.2 + i * 0.024, 0.011, hm(0, -0.02, -0.23), Math.PI), 'head']);
+      for (const [x, y, z, r] of [[0.33, 0.25, -0.2, 0.022], [-0.34, 0.2, -0.22, 0.018], [0.0, 0.42, -0.23, 0.02]]) p.push(['spark', star(r, hm(x, y, z)), 'head']);
+      p.push(['spark', star(0.026, M(0.27, 1.3, 0.06)), 'chest']);
+      p.push(['spark', star(0.02, M(-0.26, 1.12, -0.06)), 'chest']);
+      return p;
+    },
+  },
+  // ---- (0.76) The Bakery Box
+  {
+    id: 'croissant', name: 'Croissant Cowboy', rarity: 'uncommon', pack: 'bakery', hair: 'buzz', desc: 'A cowboy hat with a flaky croissant band and a red bandana.',
+    color: '#c98a4b', belly: '#2e4a7a', sleeves: 'long', accent: '#e0302a', collar: '#e0302a', boots: '#6a4126', belt: '#5a3a22', buckle: '#ffd447', gloves: '#6a4126',
+    mats: { hat: ['#a8703a', { roughness: 0.75 }], pastry: ['#e0a456', { roughness: 0.6 }], flake: ['#b8702e', { roughness: 0.8 }], bandana: ['#e0302a', { side: THREE.DoubleSide }], dot: ['#fff3d6'] },
+    parts: () => {
+      const p = [
+        ['hat', ecyl(0.28, 0.25, 0.014, hm(0, 0.12, -0.004)), 'head'],
+        ['hat', ecyl(0.13, 0.15, 0.13, hm(0, 0.19, -0.01)), 'head'],
+        ['hat', sph(0.13, hm(0, 0.255, -0.01, 0, 0, 0, 1, 0.35, 1.15), Math.PI / 2), 'head'],
+        ['pastry', torus(0.15, 0.03, hm(0, 0.15, -0.01, HALF, 0, 0, 1, 1.15, 1)), 'head'],
+        ['bandana', torus(0.1, 0.026, M(0, 1.5, -0.004, HALF)), 'chest'],
+        ['bandana', cone(0.075, 0.13, M(0, 1.42, 0.09, Math.PI, 0, 0, 1, 1, 0.4)), 'chest'],
+      ];
+      for (let i = 0; i < 9; i++) { const a = (i / 9) * Math.PI * 2; p.push(['flake', torus(0.032, 0.007, hm(Math.cos(a) * 0.15, 0.15, Math.sin(a) * 0.172 - 0.01, 0, -a, 0)), 'head']); }
+      for (const [x, y] of [[0.03, 1.44], [-0.025, 1.4], [0.01, 1.37]]) p.push(['dot', sph(0.008, M(x, y, 0.118)), 'chest']);
+      return p;
+    },
+  },
+  {
+    id: 'cupcake', name: 'Cupcake Cutie', rarity: 'uncommon', pack: 'bakery', hideHair: true, desc: 'A swirl of pink frosting with sprinkles and a cherry, and a cupcake-wrapper skirt.',
+    color: '#ff9fc4', belly: '#7a4bb0', sleeves: 'short', accent: '#fff3d6', collar: '#fff3d6', shoes: '#fff3d6', soles: '#ff6fae', laces: '#7a4bb0',
+    mats: { frost: ['#ffb3d4', { roughness: 0.35 }], frost2: ['#ff8fc0', { roughness: 0.35 }], cherry: ['#e0102a', { roughness: 0.2 }], stem: ['#5a7a2a'], wrap: ['#7fd6ff', { roughness: 0.6, side: THREE.DoubleSide }],
+      s1: ['#4fd1ff'], s2: ['#ffe14f'], s3: ['#7cf06a'] },
+    parts: () => {
+      const p = [
+        ['frost', sph(0.172, hm(0, 0.04, -0.004, -0.1, 0, 0, 1, 1, 1.03), Math.PI * 0.45), 'head'],
+        ['frost2', torus(0.14, 0.05, hm(0, 0.13, -0.006, HALF)), 'head'],
+        ['frost', torus(0.1, 0.046, hm(0, 0.2, -0.006, HALF)), 'head'],
+        ['frost2', torus(0.06, 0.04, hm(0, 0.26, -0.006, HALF)), 'head'],
+        ['frost', sph(0.045, hm(0, 0.3, -0.006)), 'head'],
+        ['cherry', sph(0.036, hm(0, 0.37, -0.006)), 'head'],
+        ['stem', cyl(0.004, 0.004, 0.06, hm(0.015, 0.42, -0.006, 0, 0, -0.4), 6), 'head'],
+        ['wrap', new THREE.CylinderGeometry(0.29, 0.22, 0.2, 24, 1, true).applyMatrix4(M(0, 0.97, 0)), 'hips'],
+      ];
+      for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; p.push(['wrap', box(0.012, 0.2, 0.012, M(Math.cos(a) * 0.255, 0.97, Math.sin(a) * 0.255, 0, -a, Math.sin(a) * 0.0 - 0.0)), 'hips']); }
+      for (let i = 0; i < 12; i++) { const a = i * 2.4, r = 0.08 + (i % 3) * 0.03, y = 0.14 + (i % 4) * 0.035; p.push([`s${1 + (i % 3)}`, box(0.026, 0.008, 0.008, hm(Math.cos(a) * (0.17 - y * 0.35), y + 0.02, Math.sin(a) * (0.17 - y * 0.35) - 0.006, 0, a * 1.7, 0.4)), 'head']); }
+      return p;
+    },
+  },
+  {
+    id: 'bagel', name: 'Bagel Baron', rarity: 'rare', pack: 'bakery', hair: 'buzz', desc: 'A top hat on a sesame-bagel brim, a gold monocle and a red bow tie.',
+    color: '#2b2b35', belly: '#2b2b35', sleeves: 'long', accent: '#fff3d6', collar: '#fff3d6', gloves: '#fff3d6', boots: '#1d1a1f', belt: '#1d1a1f', buckle: '#c9a24a',
+    mats: { bagel: ['#c98a3a', { roughness: 0.6 }], sesame: ['#fff3d6'], hat: ['#1d1a1f', { roughness: 0.4 }], band: ['#c98a3a'], gold: ['#ffd447', { metalness: 0.8, roughness: 0.25 }], bow: ['#e0302a'],
+      glass: ['#bfe8ff', { metalness: 0.2, roughness: 0.05, transparent: true, opacity: 0.45 }] },
+    parts: () => {
+      const p = [
+        ['bagel', torus(0.165, 0.045, hm(0, 0.13, -0.004, HALF, 0, 0, 1, 1.1, 1)), 'head'],
+        ['hat', cyl(0.135, 0.135, 0.24, hm(0, 0.27, -0.01), 24), 'head'],
+        ['band', cyl(0.138, 0.138, 0.035, hm(0, 0.18, -0.01), 24), 'head'],
+        ['gold', torus(0.034, 0.006, hm(0.058, 0.014, 0.178)), 'head'],
+        ['glass', cyl(0.031, 0.031, 0.004, hm(0.058, 0.014, 0.179, HALF)), 'head'],
+        ['gold', cyl(0.002, 0.002, 0.16, hm(0.085, -0.07, 0.165, 0.1, 0, 0.25), 4), 'head'],
+        ['bow', sph(0.022, M(0, 1.47, 0.115)), 'chest'],
+      ];
+      for (const s of [1, -1]) p.push(['bow', cone(0.035, 0.07, M(0.045 * s, 1.47, 0.11, 0, 0, s * HALF, 1, 1, 0.5), 4), 'chest']);
+      for (let i = 0; i < 12; i++) { const a = i * 0.53; p.push(['sesame', sph(0.009, hm(Math.cos(a) * 0.165, 0.17, Math.sin(a) * 0.18 - 0.004, 0, a, 0, 1.6, 0.6, 1)), 'head']); }
+      return p;
+    },
+  },
+  {
+    id: 'ginger', name: 'Gingerbread Guard', rarity: 'epic', pack: 'bakery', hideHair: true, hideBeard: true, desc: 'A gingerbread body with icing trim, a tall guard hat, gumdrop buttons and a candy cane.',
+    tone: '#b8702e', color: '#b8702e', belly: '#b8702e', sleeves: 'long', gloves: '#b8702e', accent: '#fffaf2', collar: '#fffaf2', boots: '#fffaf2', belt: '#e0302a', buckle: '#7cf06a', lips: '#fffaf2',
+    mats: { icing: ['#fffaf2', { roughness: 0.3 }], hat: ['#1d1a1f', { roughness: 0.95 }], red: ['#e0302a'], g1: ['#ff4f6a', { roughness: 0.2 }], g2: ['#4fd1ff', { roughness: 0.2 }], g3: ['#7cf06a', { roughness: 0.2 }] },
+    parts: () => {
+      const p = [
+        ['hat', ecyl(0.165, 0.18, 0.3, hm(0, 0.2, -0.01)), 'head'],
+        ['hat', sph(0.165, hm(0, 0.35, -0.01, 0, 0, 0, 1, 0.5, 1.09), Math.PI / 2), 'head'],
+        ['icing', torus(0.168, 0.009, hm(0, 0.07, -0.01, HALF, 0, 0, 1, 1.09, 1)), 'head'],
+        ['red', cone(0.03, 0.14, hm(0.15, 0.32, -0.01, 0, 0, -0.2)), 'head'],
+        ['icing', torus(0.034, 0.005, hm(0.058, 0.07, 0.165, 0, 0, 0), Math.PI), 'head'],
+        ['icing', torus(0.034, 0.005, hm(-0.058, 0.07, 0.165, 0, 0, 0), Math.PI), 'head'],
+        ['red', cyl(0.018, 0.018, 0.5, M(0.06, 1.2, -0.16, 0, 0, 0.5), 8), 'chest'],
+        ['red', torus(0.05, 0.018, M(-0.07, 1.42, -0.16, 0, 0, 0.5), Math.PI), 'chest'],
+      ];
+      [1.39, 1.3, 1.21].forEach((y, i) => p.push([`g${i + 1}`, sph(0.026, M(0, y, 0.13, 0, 0, 0, 1, 0.85, 0.7), Math.PI * 0.7), 'chest']));
+      for (let i = 0; i < 5; i++) p.push(['icing', torus(0.019, 0.006, M(0.06 + Math.sin(0.5) * (i * 0.1 - 0.2), 1.2 - Math.cos(0.5) * (i * 0.1 - 0.2), -0.16, HALF, 0.5, 0)), 'chest']);
+      return p;
+    },
+  },
+  {
+    id: 'cakeroyale', name: 'Cake Royale', rarity: 'legendary', pack: 'bakery', hair: 'long', desc: 'A three-tier birthday-cake crown with lit candles and pearls, and a frosting-pink royal cape.',
+    color: '#ff9fc4', belly: '#fff3d6', sleeves: 'long', gloves: '#fff3d6', accent: '#ffd447', collar: '#ffd447', shoes: '#ffd447', soles: '#c98a4b', belt: '#ffd447', buckle: '#ff4f9a',
+    mats: { tier1: ['#fff3d6', { roughness: 0.5 }], tier2: ['#ff9fc4', { roughness: 0.45 }], drip: ['#ff6fae', { roughness: 0.3 }], candle: ['#7fd6ff'], flame: ['#ffcf3a', { emissive: '#ff9a00', emissiveIntensity: 2 }],
+      gold: ['#ffd447', { metalness: 0.8, roughness: 0.25 }], cape: ['#ff6fae', { side: THREE.DoubleSide }], pearl: ['#fffaf2', { roughness: 0.2, metalness: 0.2 }] },
+    parts: () => {
+      const p = [
+        ['tier1', cyl(0.16, 0.16, 0.07, hm(0, 0.17, -0.004), 28), 'head'],
+        ['drip', torus(0.158, 0.013, hm(0, 0.205, -0.004, HALF)), 'head'],
+        ['tier2', cyl(0.12, 0.12, 0.06, hm(0, 0.235, -0.004), 28), 'head'],
+        ['drip', torus(0.118, 0.012, hm(0, 0.265, -0.004, HALF)), 'head'],
+        ['tier1', cyl(0.08, 0.08, 0.05, hm(0, 0.29, -0.004), 24), 'head'],
+        ['cape', box(0.42, 0.76, 0.012, M(0, 1.06, -0.16, 0.13)), 'chest'],
+        ['gold', torus(0.105, 0.016, M(0, 1.49, -0.01, -HALF), Math.PI), 'chest'],
+        ['gold', star(0.034, M(0, 1.42, 0.13, 0, 0, 0, 1, 1, 0.35)), 'chest'],
+      ];
+      for (const [x, z] of [[0, 0.04], [0.045, -0.03], [-0.045, -0.03]]) {
+        p.push(['candle', cyl(0.009, 0.009, 0.06, hm(x, 0.345, z - 0.004), 8), 'head']);
+        p.push(['flame', cone(0.011, 0.03, hm(x, 0.39, z - 0.004), 8), 'head']);
+      }
+      for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; p.push(['pearl', sph(0.014, hm(Math.cos(a) * 0.162, 0.137, Math.sin(a) * 0.162 - 0.004)), 'head']); }
+      return p;
+    },
+  },
+  {
+    id: 'cosmiccookie', name: 'Cosmic Cookie', rarity: 'mythic', pack: 'bakery', desc: 'A giant choc-chip cookie halo ringed like a planet, a starlit glowing suit and orbiting crumbs.',
+    color: '#1c1240', belly: '#130c30', glow: '#4a2fd0', sleeves: 'long', gloves: '#1c1240', accent: '#ff9a3c', collar: '#ff9a3c', shoes: '#ff9a3c', soles: '#1c1240', belt: '#ff9a3c', buckle: '#ffe27a', iris: '#ff9a3c', eyeGlow: '#ffb050',
+    mats: { cookie: ['#d99a52', { roughness: 0.75, emissive: '#5a3000', emissiveIntensity: 0.35 }], chip: ['#3a1f12', { roughness: 0.6 }], ring: ['#9a7aff', { emissive: '#6a3aff', emissiveIntensity: 1.4 }],
+      star: ['#ffffff', { emissive: '#ffcf8a', emissiveIntensity: 1.8 }] },
+    parts: () => {
+      const p = [
+        ['cookie', cyl(0.26, 0.26, 0.03, hm(0, 0.04, -0.25, HALF, 0, 0), 32), 'head'],
+        ['ring', torus(0.37, 0.009, hm(0, 0.04, -0.25, 0.25, 0, 0.35)), 'head'],
+        ['ring', torus(0.33, 0.006, hm(0, 0.04, -0.25, 0.25, 0, 0.35)), 'head'],
+      ];
+      for (const [x, y] of [[0.1, 0.12], [-0.12, 0.08], [0.02, -0.1], [-0.05, 0.18], [0.16, -0.06], [-0.17, -0.08], [0.07, 0.0], [-0.03, -0.18], [0.18, 0.1]]) p.push(['chip', sph(0.026, hm(x, 0.04 + y, -0.232, 0, 0, 0, 1, 1, 0.45)), 'head']);
+      for (const [x, y, z, r] of [[0.3, 0.3, -0.1, 0.022], [-0.32, 0.25, -0.1, 0.018], [0.25, -0.2, 0.05, 0.016]]) p.push(['star', star(r, hm(x, y, z)), 'head']);
+      for (const [x, y, z] of [[0.28, 1.28, 0.05], [-0.27, 1.12, -0.08]]) p.push(['cookie', cyl(0.035, 0.035, 0.012, M(x, y, z, HALF, 0, 0.4), 12), 'chest']);
+      p.push(['star', star(0.022, M(0.05, 1.0, 0.18)), 'hips']);
+      return p;
+    },
+  },
 ];
 export const SKIN_BY_ID = Object.fromEntries(SKINS.map((s) => [s.id, s]));
+// (0.76) Skin boxes, Blooket style: pay a box's price, get one of its skins at random (odds by rarity, in
+// coins.js); a skin you already have pays some coins back. icon: a food whose picture is on the box.
 export const PACKS = [
-  { id: 'snack', name: 'Snack Pack', desc: 'Six food-fight outfits: Burger Boss, Donut Dynamo, Ice Cream Ace, Pizza Pilot, Broccoli Bandit and Taco Tumbler.' },
+  { id: 'snack', name: 'Snack Box', price: 350, icon: 'cheese', color: '#ff8a3c', color2: '#c8281e', desc: 'Fast-food favourites.' },
+  { id: 'garden', name: 'Garden Box', price: 400, icon: 'carrot', color: '#5fce3e', color2: '#1f6a2a', desc: 'Fresh from the veg patch, with a Mythic hiding in it.' },
+  { id: 'bakery', name: 'Bakery Box', price: 400, icon: 'cookie', color: '#ff9fc4', color2: '#9a5a2a', desc: 'Warm from the oven, with a Mythic hiding in it.' },
 ];
 
 // Built once per skin: one merged geometry + material per (bone, material), in that bone's space.
