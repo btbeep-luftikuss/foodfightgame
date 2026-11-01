@@ -452,64 +452,166 @@ function boot() {
   wallet.onChange = () => renderLocker();
   renderLocker();
 
-  // (0.76) Opening a box: it shakes (longer, and glowing, for a rare one), bursts open, and the skin is
-  // revealed on a burst of its rarity's colour: new, or a duplicate that pays coins back. Tap to hurry it.
+  // (0.76, 0.77) Opening a box. It drops in and lands; you tap it to crack it (three cracks; it cracks
+  // itself if you wait). Light leaks out of the cracks in a colour that climbs toward the skin's rarity
+  // (green, then blue, purple...), so a good one builds up. A Legendary or Mythic holds a moment: the room
+  // darkens, the box trembles, a riser. Then it bursts: the lid flies, a flash, the screen shakes, confetti
+  // and sparkles; and your Titan pops out of the box on the live turntable, waving, on spinning rays of its
+  // rarity, with a fanfare (bigger the rarer). A duplicate's coins fly into the coin counter.
   const boxEl = $('box-open');
   document.body.appendChild(boxEl); // (over everything, the menu's own layers too)
+  const RANKS = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
+  const RAINBOW = ['#ff5a5a', '#ffd23a', '#5fe05a', '#4fb8ff', '#c07aff'];
   let boxing = null;
+  // confetti, sparkles and coins on a canvas over the whole screen
+  const fxc = { cv: null, x: null, parts: [], raf: 0, last: 0 };
+  function fxLoop(now) {
+    const { cv, x } = fxc;
+    if (!cv || !boxing) { fxc.raf = 0; return; }
+    fxc.raf = requestAnimationFrame(fxLoop);
+    const dt = Math.min(0.05, (now - (fxc.last || now)) / 1000); fxc.last = now;
+    const pr = Math.min(2, devicePixelRatio || 1), W = innerWidth, H = innerHeight;
+    if (cv.width !== Math.round(W * pr) || cv.height !== Math.round(H * pr)) { cv.width = Math.round(W * pr); cv.height = Math.round(H * pr); }
+    x.setTransform(pr, 0, 0, pr, 0, 0); x.clearRect(0, 0, W, H);
+    // a Legendary or Mythic keeps twinkling while it's shown
+    if (boxing.phase === 'shown' && boxing.rank >= 4 && Math.random() < dt * 14) {
+      const c = boxing.anchor(); spawn(1, c.x + (Math.random() - 0.5) * 260, c.y + (Math.random() - 0.5) * 300, { kind: 'spark', speed: 20, up: 30, colors: boxing.colors, life: 1.2, g: -10 });
+    }
+    fxc.parts = fxc.parts.filter((p) => (p.age += dt) < p.life);
+    for (const p of fxc.parts) {
+      if (p.kind === 'coin' && p.to) { // a coin homing in on the counter
+        const k = Math.min(1, p.age / p.life), e = k * k;
+        p.x = p.x0 + (p.to.x - p.x0) * e + Math.sin(k * Math.PI) * p.arc; p.y = p.y0 + (p.to.y - p.y0) * e - Math.sin(k * Math.PI) * 80;
+        if (k > 0.97 && !p.done) { p.done = true; sfx.play('coin', null, 0.5); }
+      } else { p.vy += p.g * dt; p.vx *= 1 - dt * p.drag; p.vy *= 1 - dt * p.drag; p.x += p.vx * dt; p.y += p.vy * dt; }
+      p.rot += p.vr * dt;
+      const fade = Math.min(1, (p.life - p.age) / 0.35);
+      x.globalAlpha = fade; x.save(); x.translate(p.x, p.y); x.rotate(p.rot);
+      if (p.kind === 'conf') { x.fillStyle = p.color; x.scale(1, Math.abs(Math.cos(p.rot * 2.3)) + 0.15); x.fillRect(-p.size, -p.size * 0.5, p.size * 2, p.size); }
+      else if (p.kind === 'coin') { x.fillStyle = '#ffd447'; x.beginPath(); x.ellipse(0, 0, p.size * Math.abs(Math.cos(p.rot)) + 1, p.size, 0, 0, Math.PI * 2); x.fill(); x.fillStyle = '#b8740a'; x.fillRect(-1, -p.size * 0.5, 2, p.size); }
+      else { // a four-point sparkle
+        x.fillStyle = p.color; x.shadowColor = p.color; x.shadowBlur = 10;
+        const r = p.size * (0.6 + 0.4 * Math.sin(p.age * 18 + p.rot));
+        x.beginPath(); x.moveTo(0, -r * 2); x.lineTo(r * 0.45, -r * 0.45); x.lineTo(r * 2, 0); x.lineTo(r * 0.45, r * 0.45); x.lineTo(0, r * 2); x.lineTo(-r * 0.45, r * 0.45); x.lineTo(-r * 2, 0); x.lineTo(-r * 0.45, -r * 0.45); x.fill();
+      }
+      x.restore();
+    }
+    x.globalAlpha = 1;
+  }
+  function spawn(n, cx, cy, { kind = 'conf', speed = 600, up = 250, colors = ['#fff'], life = 2.2, g = 900, drag = 1.6, size = 6 } = {}) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, v = speed * (0.35 + Math.random() * 0.65);
+      fxc.parts.push({ kind, x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v - up, g, drag, life: life * (0.6 + Math.random() * 0.4), age: 0,
+        size: size * (0.6 + Math.random() * 0.8), color: colors[(Math.random() * colors.length) | 0], rot: Math.random() * 6, vr: (Math.random() - 0.5) * 14 });
+    }
+  }
+  const at = (el) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+  const later = (ms, f) => boxing?.timers.push(setTimeout(f, ms));
+
   function openBox(id) {
     if (boxing) return;
-    const B = boxOf(id), got = wallet.openBox(id);
+    const B = boxOf(id), before = wallet.coins, got = wallet.openBox(id);
     if (!got) return;
-    const { skin, fresh, refund } = got, R = RARITY[skin.rarity], rank = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'].indexOf(skin.rarity);
-    boxing = { id, timers: [] };
+    const { skin, fresh, refund } = got, R = RARITY[skin.rarity], rank = RANKS.indexOf(skin.rarity);
+    const beams = Array.from({ length: 10 }, (_, i) => `<i style="--a:${i * 36 + (i % 2) * 9}deg;--d:${(i % 3) * 0.12}s"></i>`).join('');
     boxEl.hidden = false;
-    boxEl.className = `box-open r-${skin.rarity}`;
+    boxEl.className = `box-open r-${skin.rarity} drop`;
     boxEl.style.setProperty('--rar', R.color);
-    boxEl.innerHTML = `<div class="bo-stage">${boxArt(B, true)}<div class="bo-reveal"><div class="bo-rays"></div>`
-      + `<img src="${icons['skin:' + skin.id] || ''}" alt=""><b class="bo-name">${skin.name}</b><span class="bo-rar">${R.name}</span>`
-      + `<span class="bo-tag ${fresh ? 'new' : 'dupe'}">${fresh ? 'NEW!' : `Duplicate · +${fmt(refund)} coins back`}</span></div></div>`
-      + `<p class="bo-hint">${B.name} · tap to open</p><div class="bo-btns" hidden>`
+    boxEl.innerHTML = `<div class="bo-dim"></div><div class="bo-flash"></div><div class="bo-coins">${coins(before)}</div>`
+      + '<div class="bo-stage"><div class="bo-reveal"><div class="bo-rays"></div><div class="bo-model"></div>'
+      + `<b class="bo-name">${skin.name}</b><span class="bo-rar">${R.name}</span><span class="bo-tag ${fresh ? 'new' : 'dupe'}">${fresh ? 'NEW!' : `Duplicate · +${fmt(refund)} coins`}</span></div>`
+      + `<div class="bo-boxwrap" data-lv="0"><div class="bo-beams">${beams}</div>${boxArt(B, true)}`
+      + '<svg class="bo-cracks" viewBox="0 0 100 100" aria-hidden="true"><polyline class="c1" points="48,38 42,52 52,60 44,76"/><polyline class="c2" points="22,44 34,56 28,68 38,84 33,96"/><polyline class="c3" points="76,40 66,54 74,64 62,80 70,96"/></svg>'
+      + '<i class="bo-ring"></i></div></div>'
+      + `<p class="bo-hint">${B.name}</p><div class="bo-btns" hidden>`
       + `${fresh ? `<button type="button" class="btn" data-bo="wear">Wear ${skin.name}</button>` : ''}`
       + `<button type="button" class="btn ${fresh ? 'ghost' : ''}" data-bo="again">Open another · ${coins(B.price)}</button>`
-      + '<button type="button" class="btn ghost" data-bo="done">Done</button></div>';
+      + '<button type="button" class="btn ghost" data-bo="done">Done</button></div><canvas class="bo-fx"></canvas>';
     const again = boxEl.querySelector('[data-bo="again"]');
     if (wallet.coins < B.price || wallet.boxDone(id)) { again.disabled = true; if (wallet.boxDone(id)) again.textContent = 'Box complete!'; }
-    boxing.skin = skin; boxing.fresh = fresh;
-    // the shake: a tick per wobble, faster as it builds; a rare skin's box glows its colour first
-    const shakeFor = 1300 + Math.max(0, rank - 2) * 450;
-    boxEl.classList.add('shaking');
-    if (rank >= 3) boxing.timers.push(setTimeout(() => boxEl.classList.add('hint'), shakeFor * 0.45));
-    for (let k = 0, t = 0; t < shakeFor; k++, t += Math.max(110, 330 - k * 22)) boxing.timers.push(setTimeout(() => sfx.play('tick'), t));
-    boxing.timers.push(setTimeout(reveal, shakeFor));
+    fxc.cv = boxEl.querySelector('.bo-fx'); fxc.x = fxc.cv.getContext('2d'); fxc.parts = []; fxc.last = 0;
+    boxing = { id, B, skin, fresh, refund, rank, before, after: wallet.coins, lv: 0, phase: 'drop', timers: [], tapAt: 0,
+      colors: rank >= 5 ? RAINBOW.concat('#ffffff') : [R.color, '#ffffff', R.color, '#ffd447'],
+      anchor: () => at(boxEl.querySelector('.bo-boxwrap')) };
+    if (!fxc.raf) fxc.raf = requestAnimationFrame(fxLoop);
+    later(380, () => { sfx.play('boxdrop'); spawn(14, boxing.anchor().x, boxing.anchor().y + 70, { kind: 'conf', speed: 260, up: 60, colors: ['#ffffff88', '#ffffff55'], life: 0.6, size: 4 }); });
+    later(620, () => { boxing.phase = 'idle'; boxEl.classList.remove('drop'); boxEl.classList.add('idle'); boxEl.querySelector('.bo-hint').textContent = 'Tap the box to crack it open!'; autoCrack(); });
   }
-  function reveal() {
-    if (!boxing || boxing.shown) return;
-    boxing.shown = true;
-    for (const t of boxing.timers) clearTimeout(t);
-    boxEl.classList.remove('shaking', 'hint'); boxEl.classList.add('opened');
-    boxEl.querySelector('.bo-hint').textContent = boxing.fresh ? 'A new skin for your locker!' : 'Already yours: coins back instead';
-    boxEl.querySelector('.bo-btns').hidden = false;
-    sfx.play('boing'); setTimeout(() => sfx.play(boxing?.fresh ? 'win' : 'pickup'), 160);
-    if (boxing.fresh) { tryId = null; showOnStage(boxing.skin.id); } // (the stage shows it, ready to wear)
-    renderLocker();
+  function autoCrack() { const lv = boxing.lv; later(1500, () => { if (boxing && boxing.lv === lv && (boxing.phase === 'idle' || boxing.phase === 'crack')) crack(); }); }
+  function crack() {
+    const bx = boxing;
+    if (!bx || !(bx.phase === 'idle' || bx.phase === 'crack') || performance.now() - bx.tapAt < 220) return;
+    bx.tapAt = performance.now();
+    bx.lv++; bx.phase = 'crack';
+    // the light climbs toward the real rarity: always green first, the real colour on the last crack
+    const r = bx.rank, cr = r <= 1 ? 1 : Math.min(r, Math.max(1, Math.round(1 + ((bx.lv - 1) * (r - 1)) / 2)));
+    const col = RARITY[RANKS[cr]].color;
+    const wrap = boxEl.querySelector('.bo-boxwrap');
+    wrap.dataset.lv = bx.lv; boxEl.style.setProperty('--crack', col); boxEl.classList.toggle('crack-mythic', cr >= 5);
+    wrap.classList.remove('hit'); void wrap.offsetWidth; wrap.classList.add('hit');
+    sfx.play(`crack${bx.lv}`);
+    const c = bx.anchor();
+    spawn(8 + bx.lv * 6, c.x, c.y + 20, { kind: 'spark', speed: 300 + bx.lv * 90, up: 120, colors: cr >= 5 ? RAINBOW : [col, '#ffffff'], life: 0.7, g: 500, size: 4 });
+    boxEl.querySelector('.bo-hint').textContent = bx.lv < 3 ? ['', 'Again!', 'One more!'][bx.lv] : '…';
+    if (bx.lv < 3) { autoCrack(); return; }
+    if (r >= 4) { // a big one: hold your breath
+      bx.phase = 'hold'; boxEl.classList.add('hold');
+      sfx.play('boxrise');
+      later(1050, burst);
+    } else { bx.phase = 'hold'; later(280, burst); }
+  }
+  function burst() {
+    const bx = boxing;
+    if (!bx || bx.phase === 'burst' || bx.phase === 'shown') return;
+    bx.phase = 'burst';
+    boxEl.classList.remove('idle', 'hold'); boxEl.classList.add('burst');
+    sfx.play('boxburst');
+    const c = bx.anchor(), big = 1 + Math.max(0, bx.rank - 2) * 0.5;
+    spawn(Math.round(70 * big), c.x, c.y, { kind: 'conf', speed: 900 * Math.min(1.5, big), up: 380, colors: bx.colors, life: 2.6, size: 6 });
+    spawn(Math.round(26 * big), c.x, c.y, { kind: 'spark', speed: 700, up: 200, colors: bx.colors, life: 1.3, g: 200, size: 5 });
+    // the Titan on the live turntable, out of the box (the picture if 3D isn't available)
+    const host = boxEl.querySelector('.bo-model');
+    if (stage) { host.appendChild(stage.r.domElement); stage.spin = -0.9; stage.vel = 1.2; showOnStage(bx.skin.id); }
+    else host.innerHTML = `<img src="${icons['skin:' + bx.skin.id] || ''}" alt="">`;
+    later(260, () => {
+      bx.phase = 'shown'; boxEl.classList.add('shown');
+      sfx.play(`fan${Math.max(1, bx.rank)}`);
+      boxEl.querySelector('.bo-hint').textContent = bx.fresh ? (bx.rank >= 4 ? `WOW! A ${RARITY[bx.skin.rarity].name} skin!` : 'A new skin for your locker!') : 'Already yours: coins back instead!';
+      if (bx.fresh) tryId = null;
+      renderLocker();
+    });
+    if (!bx.fresh) later(1000, () => { // the refund, coin by coin, into the counter
+      const pill = boxEl.querySelector('.bo-coins'), to = at(pill), from = bx.anchor(), n = Math.min(16, 4 + Math.round(bx.refund / 30));
+      for (let i = 0; i < n; i++) fxc.parts.push({ kind: 'coin', x0: from.x + (Math.random() - 0.5) * 120, y0: from.y + (Math.random() - 0.5) * 80, x: 0, y: 0, to, arc: (Math.random() - 0.5) * 160,
+        life: 0.7 + i * 0.05, age: -i * 0.05, size: 7, rot: Math.random() * 6, vr: 9, g: 0, drag: 0, vx: 0, vy: 0 });
+      const t0 = performance.now(), dur = 700 + n * 50;
+      const tick = () => { if (!boxing) return; const k = Math.min(1, (performance.now() - t0) / dur); pill.innerHTML = coins(Math.round(bx.before - bx.B.price + (bx.after - bx.before + bx.B.price) * k)); if (k < 1) requestAnimationFrame(tick); else pill.classList.add('bump'); };
+      pill.innerHTML = coins(bx.before - bx.B.price); requestAnimationFrame(tick);
+    });
+    else later(300, () => { boxEl.querySelector('.bo-coins').innerHTML = coins(bx.after); });
+    later(bx.rank >= 4 ? 1300 : 900, () => { if (boxing === bx) boxEl.querySelector('.bo-btns').hidden = false; });
   }
   function closeBox() {
     if (!boxing) return;
     for (const t of boxing.timers) clearTimeout(t);
-    boxing = null; boxEl.hidden = true; boxEl.innerHTML = '';
+    if (stage && stage.r.domElement.parentElement !== stage.box) stage.box.appendChild(stage.r.domElement); // (the turntable back in the locker)
+    boxing = null; boxEl.hidden = true; boxEl.innerHTML = ''; fxc.parts = []; fxc.cv = null;
     renderLocker(); showOnStage(tryId || skinId);
   }
+  boxEl.addEventListener('pointerdown', () => { if (boxing && (boxing.phase === 'idle' || boxing.phase === 'crack')) crack(); });
   boxEl.addEventListener('click', (e) => {
     if (!boxing) return;
     const b = e.target.closest('[data-bo]');
-    if (!boxing.shown) { reveal(); return; } // (tap: skip the shake)
-    if (!b) return;
+    if (boxing.phase !== 'shown' || !b || b.disabled) return;
     const what = b.dataset.bo, { id, skin } = boxing;
     if (what === 'wear') { wear(skin.id); closeBox(); } else if (what === 'done') closeBox();
     else if (what === 'again') { closeBox(); openBox(id); }
   });
-  addEventListener('keydown', (e) => { if (boxing && e.key === 'Escape') closeBox(); else if (boxing && !boxing.shown && (e.key === ' ' || e.key === 'Enter')) reveal(); });
+  addEventListener('keydown', (e) => {
+    if (!boxing) return;
+    if (e.key === 'Escape' && boxing.phase === 'shown') closeBox();
+    else if (e.key === ' ' || e.key === 'Enter') { if (boxing.phase === 'idle' || boxing.phase === 'crack') { e.preventDefault(); crack(); } }
+  });
 
   // Locker stage: the selected skin on a live turntable (idles, blinks, waves when picked; drag to spin).
   // Its own small renderer, only alive while the Locker is open.
@@ -548,7 +650,7 @@ function boot() {
       stage.raf = requestAnimationFrame(loop);
       const dt = Math.min(0.05, (now - stage.last) / 1000);
       stage.last = now; stage.t += dt;
-      const w = box.clientWidth, h = box.clientHeight;
+      const host = cv.parentElement || box, w = host.clientWidth, h = host.clientHeight; // (0.77: or a box's reveal)
       if (w && (cv.width !== Math.round(w * r.getPixelRatio()) || cv.height !== Math.round(h * r.getPixelRatio()))) {
         r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix();
       }

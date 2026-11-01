@@ -439,6 +439,40 @@ export class Sfx {
       case 'win':
         [523, 659, 784, 1047].forEach((f, i) => this._tone(o, t + i * 0.12, 0.35, { type: 'triangle', f0: f, f1: f, vol: 0.3 }));
         break;
+      // (0.77) opening a skin box: it lands, cracks (higher each time), a riser for a big one, the burst, a fanfare by rarity
+      case 'boxdrop':
+        this._tone(o, t, 0.25, { f0: 140, f1: 50, vol: 0.8 });
+        this._noise(o, t, 0.15, { f0: 900, f1: 120, vol: 0.6 });
+        break;
+      case 'crack1': case 'crack2': case 'crack3': {
+        const k = +name[5];
+        for (let i = 0; i < 2 + k; i++) this._noise(o, t + i * 0.025, 0.06, { type: 'highpass', f0: 3000 + k * 600, f1: 1800, vol: 0.7 });
+        this._tone(o, t, 0.18, { type: 'triangle', f0: 260 * k, f1: 380 * k, vol: 0.35 });
+        this._tone(o, t, 0.12, { f0: 120, f1: 60, vol: 0.5 });
+        break;
+      }
+      case 'boxrise':
+        this._tone(o, t, 1.0, { type: 'sawtooth', f0: 160, f1: 1100, vol: 0.12, attack: 0.6 });
+        this._tone(o, t, 1.0, { type: 'sine', f0: 320, f1: 2200, vol: 0.18, attack: 0.6 });
+        this._noise(o, t, 1.0, { type: 'bandpass', f0: 400, f1: 6000, q: 2, vol: 0.35 });
+        break;
+      case 'boxburst':
+        this._noise(o, t, 0.6, { f0: 3000, f1: 100, vol: 1 });
+        this._tone(o, t, 0.4, { f0: 160, f1: 40, vol: 0.9 });
+        for (let i = 0; i < 6; i++) this._tone(o, t + 0.05 + i * 0.04, 0.35, { type: 'sine', f0: 1800 + i * 420, f1: 2400 + i * 420, vol: 0.08 });
+        break;
+      case 'fan1': case 'fan2': case 'fan3': case 'fan4': case 'fan5': {
+        const r = +name[3], notes = [[523, 784], [523, 659, 784], [523, 659, 784, 1047], [392, 523, 659, 784, 1047, 1319], [523, 659, 784, 1047, 1319, 1568, 2093]][r - 1];
+        notes.forEach((f, i) => this._tone(o, t + i * 0.085, 0.5 + r * 0.08, { type: 'triangle', f0: f, f1: f, vol: 0.26 }));
+        if (r >= 3) notes.forEach((f) => this._tone(o, t + notes.length * 0.085, 0.9 + r * 0.15, { type: 'sine', f0: f, f1: f, vol: 0.12 })); // the chord, held
+        if (r >= 4) this._tone(o, t, 1.2, { type: 'sine', f0: 98, f1: 98, vol: 0.4 });
+        if (r >= 5) for (let i = 0; i < 10; i++) this._tone(o, t + 0.7 + i * 0.05, 0.3, { type: 'sine', f0: 2093 + i * 260, f1: 2093 + i * 260, vol: 0.06 });
+        break;
+      }
+      case 'coin':
+        this._tone(o, t, 0.06, { type: 'square', f0: 1320, f1: 1320, vol: 0.08 });
+        this._tone(o, t + 0.05, 0.12, { type: 'square', f0: 1980, f1: 1980, vol: 0.08 });
+        break;
       case 'tide':
         this._noise(o, t, 1.4, { f0: 500, f1: 900, vol: 0.4 });
         break;

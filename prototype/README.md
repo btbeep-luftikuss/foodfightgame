@@ -63,6 +63,17 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.77: a much more exciting box opening** (`src/main.js`, `src/fx.js`, `index.html`)
+
+- **It drops in:** the box falls onto the screen and bounces, wiggling until you tap it.
+- **You crack it:** tap the box (or press Space) three times. Each tap squashes it, draws a glowing crack, sprays sparks and lets out more beams of light, with a crack sound that gets higher each time. It cracks by itself if you wait.
+- **The light hints at the rarity:** the first crack always glows green; the next ones climb toward what's inside (blue, purple, orange), and the last one is the real colour, a cycling rainbow for a Mythic.
+- **Big ones make you wait:** for a Legendary or Mythic the room goes dark, the box trembles, the beams flicker and a sound rises for a second.
+- **The burst:** the lid flies off spinning, a flash in the rarity's colour, the screen shakes, a shockwave ring, and confetti and sparkles explode across the screen (more for rarer skins).
+- **The reveal:** your actual 3D Titan in the new skin pops out of the box on the turntable, waving, on spinning rays of its colour, with a shine across it. The name slides up, the rarity is stamped on, NEW! pulses. A fanfare plays that is bigger the rarer it is, and Legendaries and Mythics keep twinkling.
+- **Duplicates:** the coins back fly from the box into the coin counter, which counts up coin by coin.
+- Checked on desktop and phone-sized screens: tapped, untapped (it opens by itself), a Mythic, a duplicate Mythic, closing (the turntable goes back to the Locker); no errors.
+
 **Version 0.76: skin boxes, Blooket style, and 12 new skins** (`src/skins.js`, `src/coins.js`, `src/main.js`, `index.html`)
 
 - **Boxes, not shop prices:** the Locker's Snack Pack (buy a skin, or the pack for less) is now three skin boxes. Each costs the same every time (Snack Box 350 coins, Garden Box 400, Bakery Box 400) and gives one of its six skins at random. Every box lists its skins with their chances (by rarity: Uncommon 31%, Rare 21%, Epic 10%, Legendary 4%, Mythic 1.6%; the Snack Box has no Mythic) and how many you've collected; tap one to try it on. A skin you already have pays coins back instead (60 to 400 by rarity, never more than a box costs). A box you've completed can't be opened again, so no coins are wasted. Skins you bought before are still yours.
