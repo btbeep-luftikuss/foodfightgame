@@ -63,6 +63,10 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.78: the Locker is never empty after a match** (`src/main.js`)
+
+- Starting a match hid everything in the Locker (the preview, your skins, the boxes) and nothing showed it again, so after your first match the Locker was only its title until the page was reloaded: it looked like it worked sometimes and not others. Opening the Locker now always shows it. Checked: open the Locker, play a match, quit to the menu, open it again: empty before the fix, all there now.
+
 **Version 0.77: a much more exciting box opening** (`src/main.js`, `src/fx.js`, `index.html`)
 
 - **It drops in:** the box falls onto the screen and bounces, wiggling until you tap it.

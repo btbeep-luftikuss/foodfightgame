@@ -198,8 +198,7 @@ function boot() {
   }
   setInterval(potActionLabel, 200);
   function enterPlay(lock = true) {
-    closeStage();
-    $('locker').hidden = true;
+    closeStage(); // (0.78: the Locker's contents stay; they used to be hidden here for good: an empty Locker after a match)
     game.paused = false;
     playing = true;
     input.enabled = true;
@@ -326,7 +325,7 @@ function boot() {
   const panel = document.querySelector('.menu-panel');
   function showScreen(name) {
     for (const el of document.querySelectorAll('.screen')) el.hidden = el.dataset.screen !== name;
-    if (name === 'locker') openStage(); else { closeStage(); if (tryId) { tryId = null; renderLocker(); } }
+    if (name === 'locker') { $('locker').hidden = false; openStage(); } else { closeStage(); if (tryId) { tryId = null; renderLocker(); } }
     if (name === 'play') placeSettings(false);
     if (name === 'online') { placeSettings(true); onlineHelp(); }
     panel.scrollTop = 0;
