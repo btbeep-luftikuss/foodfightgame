@@ -72,7 +72,7 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 - **Winning:** the Fresh win when they've claimed 5 zones; the Rotten win when nobody Fresh is left. No clock. The top bar shows the zones claimed, how many are still Fresh and the zone's progress; the winner screen says which side won.
 - **Bots:** Fresh bots head for the zone and run when a Rotten Titan comes close (they still throw food to knock them back); Rotten bots hunt the nearest Fresh, whoever is claiming the zone first.
 - **Online too:** pick it in the online modes or vote for it in the lobby. The host picks the imposters and keeps the zone; every player's game says when their own Titan turns Rotten. (NET_VERSION 72: everyone in a room needs this version.)
-- **Checked:** bot matches end both ways (the Fresh won 3 of 5 test matches, the Rotten 2; 2½ to 3 minutes each); online, two players saw the same imposters, zones and claims, a splatted player turned Rotten on both screens, and both saw the Rotten win at the end. Classic and Squads still play as before.
+- **Checked:** bot matches end both ways (the Fresh won 3 of 5 test matches, the Rotten 2; 2 to 3 minutes each); online, two players saw the same imposters, zones and claims, a splatted player turned Rotten on both screens, and both saw the Rotten win at the end. Classic and Squads still play as before.
 
 **Version 0.78: the Locker is never empty after a match** (`src/main.js`)
 
