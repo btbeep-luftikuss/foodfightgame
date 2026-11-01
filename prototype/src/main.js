@@ -8,6 +8,7 @@ import { Sfx } from './fx.js';
 import { FOODS, FOOD_IDS, makeFoodMesh, setFoodShadows } from './foods.js';
 import { SKINS, SKIN_BY_ID, RARITY, PACKS } from './skins.js';
 import { Wallet, boxOdds, boxOf, matchReward } from './coins.js';
+import { ROT, ROT_SIDES } from './arena.js';
 import { titanPreview } from './actors.js';
 import { TITANS } from './game.js';
 import { BOT_LEVELS } from './bots.js';
@@ -220,7 +221,7 @@ function boot() {
   try {
     const v = localStorage.getItem('tt-bots'); if (BOT_LEVELS[v]) botLevel = v;
     const o = localStorage.getItem('tt-online-bots'); if (BOT_LEVELS[o] || o === 'off') onlineBots = o;
-    const m = localStorage.getItem('tt-mode') || localStorage.getItem('tt-online-mode'); if (['classic', 'chef', 'pots', 'squads', 'king'].includes(m)) selMode = m;
+    const m = localStorage.getItem('tt-mode') || localStorage.getItem('tt-online-mode'); if (['classic', 'chef', 'pots', 'squads', 'king', 'rotten'].includes(m)) selMode = m;
     teamSize = cleanSize(localStorage.getItem('tt-team'), selMode);
     myTeamPick = Number(localStorage.getItem('tt-myteam') ?? -1);
     if (!Number.isInteger(myTeamPick)) myTeamPick = -1;
@@ -242,12 +243,12 @@ function boot() {
     document.querySelectorAll('#botlevel button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.level === lv)));
     document.querySelectorAll('#mappick button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.map === mapId)));
     document.querySelectorAll('#onlinemode button, .modes .mode').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === selMode)));
-    const fixed = selMode === 'squads' || selMode === 'king'; // (0.54: two teams, or every Titan for themselves)
+    const fixed = selMode === 'squads' || selMode === 'king' || selMode === 'rotten'; // (0.54: two teams, or every Titan for themselves; 0.79: Fresh or Rotten)
     document.querySelectorAll('#teamsize button').forEach((b) => {
       b.setAttribute('aria-pressed', String(+b.dataset.team === teamSize));
       b.disabled = (selMode === 'pots' && b.dataset.team === '1') || fixed; // Cooking Pot Wars is a team game
     });
-    $('team-note').textContent = selMode === 'king' ? 'King of the Utensil: every Titan for themselves.' : TEAM_NOTE[teamSize] + (selMode === 'pots' ? ' Cooking Pot Wars needs teams.' : '');
+    $('team-note').textContent = selMode === 'rotten' ? 'Gone Rotten: the Fresh against the Rotten imposters (and everyone they splat).' : selMode === 'king' ? 'King of the Utensil: every Titan for themselves.' : TEAM_NOTE[teamSize] + (selMode === 'pots' ? ' Cooking Pot Wars needs teams.' : '');
     $('map-note').textContent = MAPS[mapId].blurb;
     renderTeamPick();
     $('chef').hidden = selMode !== 'chef';
@@ -337,7 +338,7 @@ function boot() {
   // The Start button says what it starts (Chef's Choice needs 3 foods first).
   function renderStart() {
     const btn = $('play-start'), left = 3 - chefPick.length;
-    const name = { classic: 'Classic', chef: "Chef's Choice", pots: 'Cooking Pot Wars', squads: 'Squads', king: 'King of the Utensil' }[selMode];
+    const name = { classic: 'Classic', chef: "Chef's Choice", pots: 'Cooking Pot Wars', squads: 'Squads', king: 'King of the Utensil', rotten: 'Gone Rotten' }[selMode];
     const potLeft = selMode === 'pots' ? 5 - potPick.length : 0;
     btn.disabled = (selMode === 'chef' && left > 0) || potLeft > 0;
     btn.textContent = potLeft > 0 ? `Pick ${potLeft} more food${potLeft > 1 ? 's' : ''} for your pot` : btn.disabled ? `Pick ${left} more food${left > 1 ? 's' : ''}` : `Start ${name}${teamSize > 1 && teamSize < 6 ? ` · ${TEAM_LABEL[teamSize]}` : ''}`;
@@ -776,6 +777,7 @@ function boot() {
     const mode = rs.mode === 'chef' ? "Chef's Choice: your 3 foods never run out" : rs.mode === 'pots' ? 'Cooking Pot Wars: you start with a stack of each; guard your pot, smash theirs'
       : rs.mode === 'squads' ? 'Squads: two teams, the most team splats in 4 minutes wins; you respawn'
       : rs.mode === 'king' ? 'King of the Utensil: two Legendary utensils in the middle, no other utensils; the most splats in 4 minutes wins; you respawn'
+      : rs.mode === 'rotten' ? 'Gone Rotten: an imposter turns Rotten and hunts everyone; the Fresh run and claim 5 zones; splatted Fresh turn Rotten'
       : 'Classic: you start with a stack of each, and find more';
     const size = cleanSize(rs.team, rs.mode), lobby = net.inLobby();
     const room = rs.mode === '?' || rs.map === '?'
@@ -847,7 +849,7 @@ function boot() {
   // (0.68) The room lobby: who's here, the votes on the game, the chat; the host starts the match (or it
   // starts by itself once everyone's ready) and can take everyone back to the lobby.
   const VOTE_LABEL = {
-    mode: { classic: 'Classic', chef: "Chef's Choice", pots: 'Pot Wars', squads: 'Squads', king: 'King of the Utensil', '?': '🎲 Surprise me' },
+    mode: { classic: 'Classic', chef: "Chef's Choice", pots: 'Pot Wars', squads: 'Squads', king: 'King of the Utensil', rotten: 'Gone Rotten', '?': '🎲 Surprise me' },
     map: { ...Object.fromEntries(VOTE_OPTIONS.map.filter((id) => id !== '?').map((id) => [id, MAPS[id]?.name.replace(/^The /, '') || id])), '?': '🎲 Surprise me' },
     team: { 1: 'Solo', 2: 'Duos', 3: 'Trios', 4: 'Quads' },
     bots: { off: 'No bots', easy: 'Easy', medium: 'Medium', hard: 'Hard' },
@@ -877,11 +879,11 @@ function boot() {
       return `<li${lobby && !p.ready ? ' class="wait"' : ''}><span class="dot" style="background:${/^#[0-9a-f]{6}$/i.test(p.color) ? p.color : '#f2f2f2'}"></span><span class="nm">${esc(p.name)}${p.me ? ' (you)' : ''}</span>${p.host || (p.me && net.isHost) ? '<span class="tag host">host</span>' : ''}${T ? `<span class="tag team" style="--c:${T.color}">${T.short}</span>` : ''}<span class="tag${p.ready ? ' ok' : ''}">${p.ready ? 'ready' : lobby ? 'not ready' : 'watching'}</span></li>`;
     }).join('');
     if ($('lo-players').innerHTML !== ph) $('lo-players').innerHTML = ph;
-    const fixedTeams = next.mode === 'squads' || next.mode === 'king'; // (a surprise mode: the size you vote for, where it applies)
+    const fixedTeams = next.mode === 'squads' || next.mode === 'king' || next.mode === 'rotten'; // (a surprise mode: the size you vote for, where it applies)
     const vh = Object.entries(VOTE_OPTIONS).map(([k, opts]) => `<div class="lo-vrow"><span>${VOTE_TITLE[k]}</span><div>${opts.map((o) => {
       const n = counts[k][o] || 0, off = k === 'team' && (fixedTeams || (next.mode === 'pots' && o === 1));
       return `<button type="button" data-vk="${k}" data-vv="${o}" aria-pressed="${net.votes[k] === o}" class="${next[k] === o && !(k === 'team' && fixedTeams) ? 'win' : ''}"${off ? ' disabled' : ''}>${VOTE_LABEL[k][o]}${n ? `<b>${n}</b>` : ''}</button>`;
-    }).join('')}</div>${k === 'team' && fixedTeams ? `<p class="lo-vnote">${next.mode === 'squads' ? 'Squads: two teams of up to 6' : 'King of the Utensil: every Titan for themselves'}</p>` : ''}</div>`).join('');
+    }).join('')}</div>${k === 'team' && fixedTeams ? `<p class="lo-vnote">${next.mode === 'squads' ? 'Squads: two teams of up to 6' : next.mode === 'rotten' ? 'Gone Rotten: the Fresh against the Rotten' : 'King of the Utensil: every Titan for themselves'}</p>` : ''}</div>`).join('');
     if ($('lo-votes').innerHTML !== vh) $('lo-votes').innerHTML = vh;
     $('lo-start').hidden = !(net.isHost && lobby);
     $('lo-start').textContent = cd != null && net.startReq ? 'Starting…' : ready === people.length ? 'Start' : 'Start anyway'; // (0.69: "anyway": not everyone is ready)
@@ -1097,7 +1099,7 @@ function boot() {
   // team's Titans, the top 3 splatters, your result; online the vote (play again or a new vote) is on it too.
   // The highlight reel only if you choose it.
   const victory = $('victory');
-  const MODE_NAME = { classic: 'Classic', chef: "Chef's Choice", pots: 'Cooking Pot Wars', squads: 'Squads', king: 'King of the Utensil' };
+  const MODE_NAME = { classic: 'Classic', chef: "Chef's Choice", pots: 'Cooking Pot Wars', squads: 'Squads', king: 'King of the Utensil', rotten: 'Gone Rotten' };
   const okColor = (c) => { // (a dark colour is lifted toward white: the name must read on the dark card)
     if (!/^#[0-9a-f]{6}$/i.test(c || '')) return '#ffd447';
     const n = parseInt(c.slice(1), 16), rgb = [n >> 16, (n >> 8) & 255, n & 255], lum = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
@@ -1110,7 +1112,12 @@ function boot() {
     const titans = g.actors.filter((a) => a === P || a.isBot || a.isRemote);
     const tIndex = (name) => TEAMS.findIndex((T) => T.name === name);
     let title, sub, color = '#ffd447', members = [], draw = !!data.draw, won = !!data.won;
-    if (A.active && A.squads) {
+    if (A.active && A.rottenMode) { // (0.79) Gone Rotten: a side wins
+      const side = data.team === ROT_SIDES[1] || (!data.team && A.rot.winner === 'rotten') ? 1 : 0;
+      title = `${ROT_SIDES[side]} win!`; color = side ? ROT.color : '#7fd6ff';
+      sub = side ? 'Nobody Fresh is left: the imposters took the kitchen' : `All ${ROT.zones} zones claimed: the Fresh got away`;
+      members = titans.filter((a) => (side ? !!a.rotten : !a.rotten));
+    } else if (A.active && A.squads) {
       const r = A.ranking();
       draw = r.length > 1 && r[0].score === r[1].score;
       const T = TEAMS[r[0].team];
@@ -1132,7 +1139,7 @@ function boot() {
       title = w ? `${w.name} wins!` : 'Nobody survived!'; color = w ? okColor(w.ownColor || w.color) : '#cdb9c9'; draw = !w;
       sub = w ? 'The Last Bite Standing' : 'The kitchen won this one';
     }
-    if (won) title = members.length ? `${title.replace(/ wins!$/, '')} wins!` : 'You win!';
+    if (won && !A.rottenMode) title = members.length ? `${title.replace(/ wins!$/, '')} wins!` : 'You win!'; // (0.79: Gone Rotten: "The Fresh win!" as it is)
     const top = [...titans].sort((a, b) => (b.kills || 0) - (a.kills || 0)).slice(0, 3);
     return { title, sub, color, members, top, draw, won, mode: MODE_NAME[mode] || 'Match' };
   }

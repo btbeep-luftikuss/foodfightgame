@@ -21,7 +21,7 @@ import { TEAMS, teamCount, teamHome, assignTeams, emptiest, cleanSize, sidesLeft
 import { randomSkinId } from './skins.js';
 import { FOODS, FOOD_IDS, FEED_VERB, SHOOTER_DECIDES, lobSpeed, lobDir, randomFoodId, rollAmmo, pickupAmmo } from './foods.js';
 import { UTENSIL_BY_ID } from './utensils.js';
-import { Arena, ARENA_MODES } from './arena.js';
+import { Arena, ARENA_MODES, ROT, ROT_SIDES } from './arena.js';
 import { Sandbox } from './sandbox.js';
 
 const PLAYER_COLOR = '#ff9a1f';
@@ -45,7 +45,7 @@ const LATE_JOIN = 25; // online: seconds into a round you can still drop in
 const OVER_FOR = 12;  // online: seconds between rounds (0.69: the vote to play again or vote anew; sooner once everyone has voted)
 const REEL_WAIT = 32; // online: seconds more the next round waits for players watching the round's highlights
 const random3 = () => [...FOOD_IDS].sort(() => Math.random() - 0.5).slice(0, 3);
-const MODES = ['classic', 'chef', 'pots', 'squads', 'king', 'sandbox']; // (0.54: Squads and King of the Utensil: arena.js; 0.55: the Test World, sandbox.js)
+const MODES = ['classic', 'chef', 'pots', 'squads', 'king', 'rotten', 'sandbox']; // (0.79: Gone Rotten) // (0.54: Squads and King of the Utensil: arena.js; 0.55: the Test World, sandbox.js)
 const cleanMode = (m) => (MODES.includes(m) ? m : 'classic');
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -267,7 +267,7 @@ export class Game {
     this.camPivotY = p.pos.y;
     R.joined = true;
     const chef = this.mode === 'chef';
-    const what = this.mode === 'king' ? 'King of the Utensil: grab a Legendary in the middle' : this.mode === 'squads' ? `Squads: ${TEAMS[p.team]?.name || ''}, splat the other team` : chef ? "Chef's Choice: your 3 foods never run out" : 'Drop in and grab food';
+    const what = this.mode === 'rotten' ? 'Gone Rotten: run from the Rotten, claim the zones' : this.mode === 'king' ? 'King of the Utensil: grab a Legendary in the middle' : this.mode === 'squads' ? `Squads: ${TEAMS[p.team]?.name || ''}, splat the other team` : chef ? "Chef's Choice: your 3 foods never run out" : 'Drop in and grab food';
     this.hud.banner(`Round ${R.id + 1}`, R.state === 'drop' ? what : this.arena.active ? `Joining: ${what}` : 'Dropping in late: watch out below', 2.4);
     this.onMatchEvent?.('joined');
   }
@@ -443,6 +443,18 @@ export class Game {
   // (0.54) An online Squads or King round ends (the host decided: the clock ran out): who won, coins.
   _arenaOver(name = null) {
     const R = this.round, rank = this.arena.ranking(), P = this.player;
+    if (this.arena.rottenMode) { // (0.79) Gone Rotten: a side wins (the host says which)
+      const win = name ?? (this.arena.rot.winner === 'fresh' ? ROT_SIDES[0] : ROT_SIDES[1]);
+      if (this.net?.isHost) { R.state = 'over'; R.t = 0; R.winner = win; R.fresh = false; }
+      this.state = 'over';
+      this.highlights.onOver();
+      const won = !!P && win === ROT_SIDES[P.rotten ? 1 : 0];
+      this.onMatchEvent?.('roundOver', { won, placement: won ? 1 : 2, winner: null, team: win, draw: false });
+      const what = win === ROT_SIDES[0] ? `The Fresh claimed all ${ROT.zones} zones` : 'Everyone has gone Rotten';
+      if (won) { this.sfx.play('win'); this.hud.banner("Chef's Kiss!", `${what} · next round in ${OVER_FOR} s`, 4); }
+      else this.hud.banner('Round over', `${what} · next round in ${OVER_FOR} s`, 4);
+      return;
+    }
     const top = rank[0], draw = rank.length > 1 && top.score === rank[1].score;
     const win = name ?? (draw ? '' : top?.name || '');
     if (this.net?.isHost) { R.state = 'over'; R.t = 0; R.winner = win; R.fresh = false; }
@@ -510,7 +522,10 @@ export class Game {
 
   // ------------------------------------------------------------------ targeting helpers
   // Cooking Pot Wars: same team (nobody is a teammate in the other modes)
-  teammates(a, b) { return this.teamSize > 1 && !!a && !!b && a !== b && a.team != null && a.team === b.team; }
+  teammates(a, b) {
+    if (this.arena.rottenMode) return !!a && !!b && a !== b && !!a.rotten === !!b.rotten; // (0.79: Gone Rotten: the Fresh together, the Rotten together)
+    return this.teamSize > 1 && !!a && !!b && a !== b && a.team != null && a.team === b.team;
+  }
   nearestEnemy(a, range, from = a.pos) {
     let best = null, bd = range;
     for (const o of this.actors) {
@@ -656,6 +671,7 @@ export class Game {
     if (this.mode === 'sandbox' && withPlayer) { this.sandbox.start(); return; }
     if (withPlayer && this.mode === 'squads') this.hud.banner(`Squads · ${TEAMS[this.player.team].name}`, 'Two teams, 4 minutes: the team with the most splats wins. You respawn', 3.4);
     else if (withPlayer && this.mode === 'king') this.hud.banner('King of the Utensil', 'Two Legendary utensils land in the middle. Most splats in 4 minutes wins. You respawn', 3.4);
+    else if (withPlayer && this.mode === 'rotten') this.hud.banner('Gone Rotten', 'Once everyone lands, an imposter turns Rotten. Fresh: run and claim 5 zones. Splatted? You turn Rotten too', 4);
     else if (withPlayer && nT && this.mode !== 'pots') this.hud.banner(`${TEAMS[this.player.team].name}`, `${{ 2: 'Duos', 3: 'Trios', 4: 'Quads' }[this.teamSize]}: stick with your team. Last team standing wins`, 3.4);
     else if (withPlayer && this.mode !== 'pots') this.hud.banner(chef ? "Chef's Choice" : 'Drop in!', chef ? 'Your 3 foods never run out. Food doesn\'t heal: grab the green crosses' : 'Steer your napkin glider onto the counter');
   }
@@ -664,6 +680,16 @@ export class Game {
   damage(target, amount, attacker, foodId, opts = {}) {
     if (!target.alive || amount <= 0 || this.state === 'over') return 0;
     if (this.teammates(target, attacker) || (this.pots.active && this.pots.setup)) return 0; // never your own team; nobody before the pots are down
+    if (this.arena.rottenMode && target.rotten) { // (0.79) Gone Rotten: the imposters can't be splatted; food knocks them back and slows them
+      if (attacker && attacker !== target && !opts.claimed && this.time > (target.bonkAt || 0)) {
+        target.bonkAt = this.time + 0.35;
+        _v.set(target.pos.x - attacker.pos.x, 0, target.pos.z - attacker.pos.z).normalize().multiplyScalar(Math.min(9, 3 + amount * 0.25)).setY(2.5);
+        target.knock(_v); target.addSticky(0.35, 1.2);
+        if (attacker === this.player) { this.hud.hitmarker(false, false); this.floatText(target, 'BONK!', 'immune'); this.sfx.play('boing', target.pos, 0.6); }
+      }
+      return 0;
+    }
+    if (this.arena.rottenMode && attacker?.rotten) amount *= ROT.dmg;
     if (!opts.claimed) amount *= this.dmgScale;
     // (0.48) a carrot, a berry, a grape online: the thrower's game decides the hit (see SHOOTER_DECIDES)
     if (this.online && attacker && !opts.claimed && opts.shot && SHOOTER_DECIDES.has(foodId)) { // (the food itself hitting: a zone or blast from it is decided as usual)

@@ -18,6 +18,13 @@
 //  - A tie when the clock runs out: sudden death, the next splat wins (a draw after another minute).
 //  - Respawning: in your team's half (Squads) or wherever no enemy is close (King), with 2 tomatoes and a
 //    random food, and 2 s of spawn protection (gone as soon as you throw).
+//  - (0.79) Gone Rotten: a hidden-role chase. Once everyone is down, one Titan (two in a room of 8 or more)
+//    turns Rotten: an imposter, glowing mouldy green, a little faster, with harder hits, who can't be splatted
+//    (food only knocks them back and slows them). Everyone else is Fresh and runs. A Fresh Titan who is splatted
+//    comes back a few seconds later as Rotten too. One zone at a time stands somewhere on the floor, under a tall
+//    beam of light: Fresh Titans standing in it claim it (10 s for one, quicker with more; a Rotten Titan in it
+//    stops the claim; left alone it slowly fades). Then the next zone appears somewhere else. The Fresh win when
+//    they've claimed 5 zones; the Rotten win when there's nobody Fresh left. No clock.
 // Online, the host runs the clock (its round clock) and keeps the team scores (rd), and drops, returns and
 // re-sends the Legendaries; each player respawns their own Titan, the host its bots.
 import * as THREE from 'three';
@@ -26,11 +33,16 @@ import { FOOD_IDS, pickupAmmo } from './foods.js';
 import { LEGENDARY_IDS, UTENSIL_BY_ID, isLegendary } from './utensils.js';
 import { TEAMS } from './teams.js';
 
-export const ARENA_MODES = new Set(['squads', 'king']);
+export const ARENA_MODES = new Set(['squads', 'king', 'rotten']);
+// (0.79) Gone Rotten: zones to win, seconds to claim one alone, zone radius, how fast an empty one fades,
+// seconds before a splatted Fresh is back as Rotten, the Rotten colour, their speed and their hits.
+export const ROT = { zones: 5, claim: 12, radius: 7, decay: 0.3, back: 3, color: '#86c934', speed: 1.15, dmg: 1.7, move: 45 }; // (move: an untouched zone moves after 45 s)
+export const ROT_SIDES = ['The Fresh', 'The Rotten'];
 export const MATCH_LEN = 240, OVERTIME = 60, RESPAWN = 4, SPAWN_SHIELD = 2, LEGEND_IDLE = 30;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const _v = new THREE.Vector3();
 let BEAM_GEO = null;
+const ROT_PUFF = [new THREE.Color('#7fae2a'), new THREE.Color('#9ac94a'), new THREE.Color('#5a7a1a')];
 
 export class Arena {
   constructor(game) {
@@ -40,14 +52,19 @@ export class Arena {
     this.marks = new Map(); // holder -> the beam over them
   }
   get king() { return this.active && this.mode === 'king'; }
+  get rottenMode() { return this.active && this.mode === 'rotten'; }
   get squads() { return this.active && this.mode === 'squads'; }
 
   start(mode) {
     this.clear();
     this.active = ARENA_MODES.has(mode); this.mode = this.active ? mode : null;
     this.score = [0, 0]; this.t = 0; this.over = false; this.sudden = false; this.legendsIn = false; this.missing.clear();
+    this.rot = { roles: false, zone: null, prog: 0, claimed: 0, idx: 0, winner: null, assigned: [], state: 0, tickAt: 0, seenClaimed: 0, seenIdx: 0, pickAt: 0 };
+    for (const a of this.game.actors) { a.rotten = false; if (a.ownColor && a.team == null) a.color = a.ownColor; }
+    this._zoneMesh(false);
   }
   clear() {
+    this._zoneMesh(false);
     for (const m of this.marks.values()) this.game.scene.remove(m);
     this.marks.clear();
     this.active = false; this.mode = null;
@@ -61,9 +78,14 @@ export class Arena {
     const R = g.round;
     return R && R.state !== 'drop' && R.id >= 0 ? Math.max(0, R.t - (R.playAt ?? 0)) : 0;
   }
-  timeLeft() { return Math.max(0, MATCH_LEN - this.clock()); }
+  timeLeft() { return this.rottenMode ? Infinity : Math.max(0, MATCH_LEN - this.clock()); }
   pill() {
     if (this.game.state === 'drop') return 'Drop in';
+    if (this.rottenMode) {
+      const r = this.rot, fresh = this.freshLeft();
+      if (!r.roles) return 'Who is Rotten?';
+      return `Zones ${r.claimed}/${ROT.zones} · ${fresh} fresh${r.prog > 0.2 ? ` · ${Math.round((r.prog / ROT.claim) * 100)}%` : ''}`;
+    }
     const left = this.timeLeft();
     if (left <= 0) return 'Sudden death';
     const s = Math.ceil(left);
@@ -71,6 +93,7 @@ export class Arena {
   }
   // Is the match decided (time's up and not level, or the overtime ran out)?
   decided() {
+    if (this.rottenMode) return !!this.rot.winner;
     const c = this.clock();
     if (c < MATCH_LEN) return false;
     if (c >= MATCH_LEN + OVERTIME) return true;
@@ -80,6 +103,7 @@ export class Arena {
   // Teams (Squads) or Titans (King), best first: [{ team | actor, score, name, color }]
   ranking() {
     const g = this.game;
+    if (this.rottenMode) return g.actors.filter((a) => a.isBot || a.isRemote || a === g.player).map((a) => ({ actor: a, score: a.kills, name: a.name, color: a.color })).sort((a, b) => b.score - a.score);
     if (this.squads) return [0, 1].map((t) => ({ team: t, score: this.teamScore(t), name: TEAMS[t].name, color: TEAMS[t].color })).sort((a, b) => b.score - a.score);
     return g.actors.filter((a) => a.isBot || a.isRemote || a === g.player).map((a) => ({ actor: a, score: a.kills, name: a.name, color: a.color })).sort((a, b) => b.score - a.score);
   }
@@ -100,6 +124,7 @@ export class Arena {
       if (a === g.player && g.online && !g.net?.ready) continue; // (online: only while I want to play)
       if (now >= a.respawnAt) this.respawn(a);
     }
+    if (this.rottenMode) this._rotStep(dt);
     if (!g.online && g.state === 'play' && !this.over && this.decided()) this.finish();
     if (this.king) this._kingStep();
   }
@@ -107,6 +132,12 @@ export class Arena {
   // A Titan went down (any game: called for Titans this game decides about).
   onKill(victim, killer) {
     const g = this.game;
+    if (this.rottenMode) { // (0.79) a splatted Fresh comes back Rotten; a Rotten one (a fall, the burner) just comes back
+      if (!victim.isRemote) { victim.respawnAt = g.time + ROT.back; if (!victim.rotten && this.rot.roles) this.turn(victim, killer); }
+      if (victim === g.player) { g.spectator.focusNext = killer && killer.alive ? killer : null; g.hud.banner(victim.rotten ? "You've gone Rotten!" : 'Splatted!', `Back in ${ROT.back} s as an imposter: splat the Fresh`, 2.6); }
+      else if (killer === g.player) g.hud.banner('Splat!', `${esc(victim.name)} goes Rotten`, 1.4);
+      return;
+    }
     if (this.squads && killer && killer !== victim && killer.team != null && (!g.online || g.net?.isHost)) this.score[killer.team] = (this.score[killer.team] || 0) + 1;
     if (!victim.isRemote) victim.respawnAt = g.time + RESPAWN;
     const sudden = this.clock() >= MATCH_LEN;
@@ -124,7 +155,7 @@ export class Arena {
 
   respawn(a) {
     const g = this.game;
-    const keep = { kills: a.kills, team: a.team, name: a.name, color: a.color, isBot: a.isBot, ownColor: a.ownColor };
+    const keep = { kills: a.kills, team: a.team, name: a.name, color: a.color, isBot: a.isBot, ownColor: a.ownColor, rotten: !!a.rotten };
     a.reset();
     Object.assign(a, keep);
     const s = this.spawnSpot(a);
@@ -140,7 +171,7 @@ export class Arena {
     if (brain) g.brains.set(a, new brain.constructor(a, g)); // (a fresh mind for a fresh life)
     if (a === g.player) {
       g.input.yaw = a.yaw; g.input.pitch = -0.15; g.camPivotY = a.pos.y;
-      g.hud.banner('Back in!', this.squads ? `${TEAMS[a.team]?.name || ''} needs you` : 'Splat your way to the top', 1.4);
+      g.hud.banner('Back in!', this.rottenMode ? (a.rotten ? "You're Rotten: you can't be splatted. Splat the Fresh!" : 'Claim the zones under the beam of light') : this.squads ? `${TEAMS[a.team]?.name || ''} needs you` : 'Splat your way to the top', 1.8);
     }
   }
   // Squads: in your team's half, out of sight of the enemy if it can; King: the spot furthest from any enemy.
@@ -171,6 +202,19 @@ export class Arena {
     const draw = rank.length > 1 && rank[0].score === rank[1].score;
     g.highlights.onOver();
     let won = false, text, winner = null, team = null;
+    if (this.rottenMode) { // (0.79) a side wins
+      const side = this.rot.winner === 'fresh' ? 0 : 1;
+      team = ROT_SIDES[side];
+      won = !!P && (side === 1 ? !!P.rotten : !P.rotten);
+      text = side === 0 ? `The Fresh claimed all ${ROT.zones} zones!${P ? (won ? ' You made it.' : ' The Rotten were too slow.') : ''}` : `Everyone has gone Rotten.${P ? (won ? ' The imposters win!' : '') : ''}`;
+      winner = g.actors.find((a) => (side === 1 ? a.rotten : !a.rotten) && a.alive) || null;
+      const order = [...g.actors].sort((x, y) => ((side === 1 ? !x.rotten : x.rotten) - (side === 1 ? !y.rotten : y.rotten)) || y.kills - x.kills);
+      order.forEach((a, i) => { a.placement = i + 1; });
+      if (won) g.sfx.play('win');
+      if (P) g.hud.banner(won ? "Chef's Kiss!" : 'Match over', text, 4);
+      g.onMatchEvent?.('over', { winner, team, won, text });
+      return;
+    }
     if (this.squads) {
       team = draw ? null : TEAMS[rank[0].team].name;
       won = !draw && P?.team === rank[0].team;
@@ -187,6 +231,136 @@ export class Arena {
     if (won) g.sfx.play('win');
     if (P) g.hud.banner(won ? "Chef's Kiss!" : draw ? "Time's up" : 'Match over', text, 4);
     g.onMatchEvent?.('over', { winner, team, won, text });
+  }
+
+  // ---------------------------------------------------------------- Gone Rotten (0.79)
+  // Titans in this round: Fresh still standing.
+  freshLeft() { return this.game.actors.filter((a) => a.alive && !a.rotten).length; }
+  rottenLeft() { return this.game.actors.filter((a) => a.rotten && (a.alive || a.respawnAt || a.isRemote)).length; }
+  zonePos() { return this.rot.zone; }
+  // A Titan turns Rotten (mine to decide: offline any, online my own Titan and my bots).
+  turn(a, by = null) {
+    const g = this.game;
+    if (a.rotten) return;
+    a.rotten = true; a.color = ROT.color;
+    if (a.isRemote) return;
+    if (a === g.player) {
+      g.sfx.play('boom', null, 0.6);
+      g.hud.banner("You're Rotten!", this.rot.roles && by ? 'You were splatted: now you hunt the Fresh. You can\'t be splatted' : "You're the imposter: splat the Fresh before they claim 5 zones. You can't be splatted", 3.6);
+    }
+    g.hud.feed(`<b style="color:${ROT.color}">${esc(a.name)}</b> <em>${by ? 'has gone Rotten' : 'is a Rotten imposter'}</em>`, a === g.player);
+  }
+  _rotStep(dt) {
+    const g = this.game, r = this.rot, now = g.time, auth = this._authority();
+    if (auth && g.state === 'play' && !r.winner) {
+      // the imposters, once everyone has landed (and again if every Rotten Titan has left the room)
+      if (!r.roles || (this.rottenLeft() === 0 && now > r.pickAt)) {
+        const pool = g.actors.filter((a) => a.alive && !a.rotten).sort(() => Math.random() - 0.5);
+        const n = r.roles ? 1 : pool.length >= 8 ? 2 : 1;
+        if (pool.length >= 2) {
+          for (const a of pool.slice(0, n)) {
+            if (a.isRemote) { const peer = g.net?._peerOf(a); if (peer) r.assigned.push(peer); a.rotten = true; a.color = ROT.color; } else this.turn(a);
+          }
+          r.assigned = r.assigned.slice(-6);
+          if (!r.roles) { r.roles = true; this._newZone(); if (g.player && !g.player.rotten) g.hud.banner("You're Fresh", `${n === 1 ? 'An imposter has' : `${n} imposters have`} gone Rotten. Run, and claim the zones under the beam of light!`, 3.6); }
+          r.pickAt = now + 3;
+        }
+      }
+      // the zone: Fresh inside claim it; Rotten inside stop the claim; empty, it fades
+      const Z = r.zone;
+      if (Z) {
+        let fresh = 0, rot = 0;
+        for (const a of g.actors) {
+          if (!a.alive || Math.hypot(a.pos.x - Z.x, a.pos.z - Z.z) > ROT.radius || Math.abs(a.pos.y - Z.y) > 3) continue;
+          if (a.rotten) rot++; else fresh++;
+        }
+        r.state = fresh && rot ? 2 : fresh ? 1 : 0; // (0 empty, 1 claiming, 2 contested)
+        if (r.state === 1) r.prog += dt * Math.min(2, 1 + 0.35 * (fresh - 1));
+        else if (r.state === 0) r.prog = Math.max(0, r.prog - dt * ROT.decay);
+        if (r.prog > 0) r.workedAt = now;
+        if (now - Math.max(r.zoneAt || 0, r.workedAt || 0) > ROT.move) { // (nobody has got anywhere with it: camped, or out of the way) it moves
+          this._newZone(); r.moved = (r.moved || 0) + 1;
+        }
+        if (r.prog >= ROT.claim) {
+          r.claimed++; r.prog = 0;
+          if (r.claimed >= ROT.zones) r.winner = 'fresh';
+          else this._newZone();
+        }
+      }
+      if (r.roles && !r.winner && this.freshLeft() === 0 && !g.actors.some((a) => !a.rotten && a.respawnAt && !a.isRemote)) r.winner = 'rotten';
+    } else if (!auth) { // online: the host says (rz)
+      const z = g.net?.hostRot;
+      if (z && z.id === g.round.id) {
+        if (z.idx !== r.idx && r.zone) r.lastZone = r.zone.clone(); // (where the last one was claimed: the cheer there)
+        r.roles = z.roles; r.prog = z.prog; r.claimed = z.claimed; r.state = z.state; r.idx = z.idx;
+        r.zone = z.zone ? (r.zone && r.zone.x === z.zone.x && r.zone.z === z.zone.z ? r.zone : new THREE.Vector3(z.zone.x, z.zone.y, z.zone.z)) : null;
+        const me = g.player, peer = g.net.myPeer;
+        if (me?.alive && !me.rotten && z.assigned.includes(peer) && !(r.mine ||= new Set()).has(g.round.id)) { r.mine.add(g.round.id); this.turn(me); }
+      }
+    }
+    if (r.idx > r.seenIdx) { // (a new zone: claimed, or moved)
+      const moved = r.claimed === r.seenClaimed && r.seenIdx > 0;
+      r.seenIdx = r.idx;
+      if (moved && g.player) { g.hud.banner('The zone moved!', 'Nobody claimed it: find the beam of light', 2); g.sfx.play('whirr', null, 0.6); }
+    }
+    // a zone claimed: a cheer (or a groan), for everyone
+    if (r.claimed > r.seenClaimed) {
+      r.seenClaimed = r.claimed;
+      const P = g.player;
+      if (r.lastZone) { g.fx.burst('juice', r.lastZone, 1.2); g.fx.burst('jump', r.lastZone, 3); }
+      g.sfx.play(P && !P.rotten ? 'win' : 'thud', null, 0.7);
+      if (P && r.claimed < ROT.zones) g.hud.banner(`Zone claimed · ${r.claimed}/${ROT.zones}`, P.rotten ? 'The Fresh are getting away: stop the next one!' : 'A new zone has appeared: follow the beam!', 2.2);
+    }
+    // in a zone: a tick every second while it fills
+    const P = g.player, Z = r.zone;
+    if (P?.alive && !P.rotten && Z && r.state === 1 && Math.hypot(P.pos.x - Z.x, P.pos.z - Z.z) < ROT.radius && now > r.tickAt) { r.tickAt = now + 1; g.sfx.play('tick', null, 0.8); }
+    // the Rotten stink a little
+    for (const a of g.actors) if (a.alive && a.rotten && Math.random() < dt * 5) g.fx.spray('puffs', _v.set(a.pos.x + rand(-0.3, 0.3), a.pos.y + rand(0.6, 1.8), a.pos.z + rand(-0.3, 0.3)), 1, { speed: 0.7, up: 0.9, colors: ROT_PUFF, size: 0.26, life: 1.1, grav: -0.15, drag: 1.2, grow: 0.35 });
+    this._zoneMesh(true);
+  }
+  _newZone() {
+    const g = this.game, r = this.rot, W = g.world;
+    r.lastZone = r.zone ? r.zone.clone() : null;
+    let best = null, bd = -1;
+    for (let i = 0; i < 16; i++) { // somewhere new: well away from the last one
+      const p = W.randomOpenSpot('floor', ROT.radius + 1);
+      const d = r.lastZone ? Math.hypot(p.x - r.lastZone.x, p.z - r.lastZone.z) : 999;
+      if (d > bd) { bd = d; best = p; }
+      if (d > 90) break;
+    }
+    r.zone = new THREE.Vector3(best.x, best.y, best.z); r.idx++; r.prog = 0; r.zoneAt = g.time; r.workedAt = 0;
+  }
+  // The zone: a ring on the floor that fills as it's claimed, and a tall beam of light to find it by.
+  _zoneMesh(on) {
+    const g = this.game, r = this.rot;
+    let m = this.zoneMesh;
+    if (!on || !r?.zone || g.state === 'over' && r.winner) { if (m) m.visible = false; return; }
+    if (!m) {
+      // (solid colours, not added light: the kitchen floor is white, where added light can't be seen)
+      const mat = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, fog: false });
+      m = this.zoneMesh = new THREE.Group();
+      const ring = new THREE.Mesh(new THREE.RingGeometry(ROT.radius - 0.9, ROT.radius, 64).rotateX(-Math.PI / 2), mat('#ffb800', 0.95));
+      const fill = new THREE.Mesh(new THREE.CircleGeometry(ROT.radius - 0.9, 64).rotateX(-Math.PI / 2), mat('#3fd23a', 0.55));
+      const floor = new THREE.Mesh(new THREE.CircleGeometry(ROT.radius - 0.9, 64).rotateX(-Math.PI / 2), mat('#ffb800', 0.16));
+      const wall = new THREE.Mesh(new THREE.CylinderGeometry(ROT.radius, ROT.radius, 1.6, 64, 1, true).translate(0, 0.8, 0), mat('#ffb800', 0.28)); // (a low glowing fence: where it starts)
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.8, 120, 20, 1, true).translate(0, 60, 0), mat('#ffb800', 0.38));
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 120, 12, 1, true).translate(0, 60, 0), mat('#fff6c8', 0.7));
+      ring.position.y = 0.09; fill.position.y = 0.11; floor.position.y = 0.08;
+      ring.renderOrder = 4; fill.renderOrder = 5; wall.renderOrder = 6; beam.renderOrder = 6; core.renderOrder = 7;
+      m.add(ring, fill, floor, wall, beam, core);
+      m.userData = { ring, fill, floor, beam, wall };
+      g.scene.add(m);
+    }
+    if (!m.parent) g.scene.add(m);
+    const { ring, fill, floor, beam, wall } = m.userData, t = g.time, k = Math.min(1, r.prog / ROT.claim);
+    m.visible = true;
+    m.position.copy(r.zone);
+    const col = r.state === 2 ? '#ff3b3b' : r.state === 1 ? '#2fc42a' : '#ffb800'; // (gold: free; green: being claimed; red: a Rotten Titan is in it)
+    ring.material.color.set(col); beam.material.color.set(col); floor.material.color.set(col); wall.material.color.set(col);
+    fill.scale.setScalar(Math.max(0.001, k));
+    ring.material.opacity = 0.75 + Math.sin(t * 5) * 0.2;
+    wall.material.opacity = 0.22 + Math.sin(t * 3) * 0.08;
+    beam.material.opacity = 0.32 + Math.sin(t * 2.5) * 0.06 + (r.state ? 0.1 : 0);
   }
 
   // ---------------------------------------------------------------- King of the Utensil

@@ -132,6 +132,7 @@ export class HUD {
     else if (game.state === 'lobby') { const c = game.net?.countdown?.(); ico = 'online'; tt = c != null ? `Starting ${Math.ceil(c)}` : 'Lobby'; tip = `Room ${game.net?.roomName || ''}`; } // (0.68)
     else if (game.mode === 'pots' && game.pots.active && game.state !== 'over') { tt = game.pots.pill(); ico = 'titan'; tip = 'Cooking Pot Wars'; }
     else if (game.sandbox?.active) { tt = 'Test World'; tip = 'T: the test tools'; ico = 'titan'; }
+    else if (game.arena?.rottenMode && game.state !== 'over') { tt = game.arena.pill(); urgent = game.arena.rot.state === 2 || (game.state === 'play' && game.arena.freshLeft() <= 2 && game.arena.rot.roles); tip = 'Gone Rotten: the Fresh win with 5 zones, the Rotten when nobody Fresh is left'; ico = 'titan'; } // (0.79)
     else if (game.arena?.active && game.state !== 'over') { tt = game.arena.pill(); urgent = game.state === 'play' && game.arena.timeLeft() < 30; tip = 'Time left: most splats wins'; ico = 'titan'; }
     else if (game.state === 'over' && game.arena?.active && !game.online) { tt = 'Full time'; tip = 'The match is over'; }
     else if (game.state === 'over') { tt = 'Next round'; tip = 'The next round starts in a few seconds'; }
@@ -261,7 +262,7 @@ export class HUD {
       return li;
     };
     const teams = A?.squads ? A.ranking().sort((x, y) => x.team - y.team).map((r) => line(r.name, r.color, r.score, `team${game.player?.team === r.team ? ' me' : ''}`)) : [];
-    el.replaceChildren(...teams, ...rows.map((a) => line(`${A?.king && A.held(a).length ? '◆ ' : ''}${a === game.player && a.name !== 'You' ? `${a.name} (you)` : a.name}`, a.color, a.kills)));
+    el.replaceChildren(...teams, ...rows.map((a) => line(`${A?.king && A.held(a).length ? '◆ ' : ''}${A?.rottenMode && a.rotten ? '🦠 ' : ''}${a === game.player && a.name !== 'You' ? `${a.name} (you)` : a.name}`, a.color, a.kills)));
   }
 
   // Noise arrows around the crosshair: direction only (plus distance while sniffing).

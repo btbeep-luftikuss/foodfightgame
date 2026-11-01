@@ -63,6 +63,17 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.79: a new mode, Gone Rotten** (`src/arena.js`, `src/game.js`, `src/bots.js`, `src/net.js`, `src/hud.js`, `src/main.js`, `src/actors.js`)
+
+- **The idea:** a hidden-role chase. Everyone drops in as usual; once everyone has landed, one Titan (two when there are 8 or more) turns **Rotten**: an imposter. Everyone else is **Fresh**. A banner tells you which you are, and the kill feed says who went Rotten.
+- **The Rotten:** glow mouldy green and give off a green stink, run 15% faster and hit 70% harder, and **can't be splatted**: food only knocks them back and slows them for a moment ("BONK!"). A 🦠 marks them on the scoreboard.
+- **The Fresh:** run, and claim zones. A Fresh Titan who gets splatted comes back 3 s later as Rotten too.
+- **Zones:** one at a time, somewhere on the floor, under a tall beam of light you can see from anywhere, with a ring on the floor. Stand in it to claim it: 12 s alone, quicker with more Fresh in it (up to twice as fast). It fills green as it's claimed; a Rotten Titan in it stops the claim (it turns red); left empty it slowly fades. Once claimed, a new zone appears somewhere else, far away. A zone nobody has worked on for 45 s moves (no camping it forever).
+- **Winning:** the Fresh win when they've claimed 5 zones; the Rotten win when nobody Fresh is left. No clock. The top bar shows the zones claimed, how many are still Fresh and the zone's progress; the winner screen says which side won.
+- **Bots:** Fresh bots head for the zone and run when a Rotten Titan comes close (they still throw food to knock them back); Rotten bots hunt the nearest Fresh, whoever is claiming the zone first.
+- **Online too:** pick it in the online modes or vote for it in the lobby. The host picks the imposters and keeps the zone; every player's game says when their own Titan turns Rotten. (NET_VERSION 72: everyone in a room needs this version.)
+- **Checked:** bot matches end both ways (the Fresh won 3 of 5 test matches, the Rotten 2; 2½ to 3 minutes each); online, two players saw the same imposters, zones and claims, a splatted player turned Rotten on both screens, and both saw the Rotten win at the end. Classic and Squads still play as before.
+
 **Version 0.78: the Locker is never empty after a match** (`src/main.js`)
 
 - Starting a match hid everything in the Locker (the preview, your skins, the boxes) and nothing showed it again, so after your first match the Locker was only its title until the page was reloaded: it looked like it worked sometimes and not others. Opening the Locker now always shows it. Checked: open the Locker, play a match, quit to the menu, open it again: empty before the fix, all there now.

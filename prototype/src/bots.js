@@ -101,6 +101,35 @@ export class BotBrain {
       }
       if (it) { this.goal = it.pos.clone(); this.goalKind = 'item'; if (it.pos.y > a.pos.y + 2.5 && a.onGround) this._goPad(it.pos); }
     }
+    // (0.79) Gone Rotten: the Fresh run from the Rotten and claim the zone; the Rotten hunt the nearest Fresh
+    const A = g.arena;
+    if (A?.rottenMode && g.state === 'play' && A.rot.roles && !(this.goalKind === 'item' && !a.inv.some(Boolean))) {
+      if (a.rotten) {
+        let prey = null, pd = Infinity;
+        for (const o of g.actors) {
+          if (o === a || !o.alive || o.rotten) continue;
+          const Z = A.zonePos(), inZone = Z && Math.hypot(o.pos.x - Z.x, o.pos.z - Z.z) < 9 ? 25 : 0; // (whoever is claiming the zone first)
+          const d = o.pos.distanceTo(a.pos) - inZone;
+          if (d < pd) { pd = d; prey = o; }
+        }
+        if (prey) { this.goal = prey.pos.clone(); this.goalKind = 'hunt'; if (prey.pos.y > a.pos.y + 3 && onFloor && a.onGround) this._goPad(prey.pos); }
+      } else {
+        let th = null, td = Infinity;
+        for (const o of g.actors) { if (!o.alive || !o.rotten) continue; const d = o.pos.distanceTo(a.pos); if (d < td) { td = d; th = o; } }
+        const Z = A.zonePos(), inZone = Z && Math.hypot(a.pos.x - Z.x, a.pos.z - Z.z) < 6;
+        // run when one is close (braver bots hold the zone a little longer)
+        if (th && td < (inZone ? 6 + (1 - this.skill) * 4 : 12 + this.skill * 3)) {
+          _w.set(a.pos.x - th.pos.x, 0, a.pos.z - th.pos.z).normalize();
+          if (Z) { _q.set(Z.x - a.pos.x, 0, Z.z - a.pos.z).normalize(); if (_q.dot(_w) > -0.2) _w.addScaledVector(_q, 0.4).normalize(); } // (away, and round toward the zone if that's not toward them)
+          const B = FLOOR_BOUNDS;
+          this.goal = new THREE.Vector3(clamp(a.pos.x + _w.x * 16, B.minX + 4, B.maxX - 4), a.pos.y, clamp(a.pos.z + _w.z * 16, B.minZ + 4, B.maxZ - 4)); this.goalKind = 'flee';
+          if (td < 5 && Math.random() < 0.5) this.pendingDodge = true;
+        } else if (Z) {
+          this.goal = Z.clone(); this.goalKind = 'zone';
+          if (Z.y > a.pos.y + 2.5 && a.onGround) this._goPad(Z);
+        }
+      }
+    }
     // No utensil yet: go open a delivery box (or grab a utensil lying on the floor).
     if (!this.goal && !a.utensil && a.inv.some(Boolean) && (!this.target || bestD > 16)) {
       const u = g.utensils.nearestFor(a, this.target ? 30 : 70);
@@ -274,6 +303,7 @@ export class BotBrain {
       mv.set(0, 0, 0);
       it.ladle = true;
     } else if (this.goalKind === 'guard' && Math.hypot(this.goal.x - a.pos.x, this.goal.z - a.pos.z) < 3.5) mv.set(0, 0, 0);
+    else if (this.goalKind === 'zone' && Math.hypot(this.goal.x - a.pos.x, this.goal.z - a.pos.z) < 4) mv.set(0, 0, 0); // (0.79: in the zone: stay put)
 
     // Walls in the way (the island, the fridge, chairs): follow the wall until the way is clear.
     if (this.goal && mv.lengthSq() > 1e-4) {

@@ -72,10 +72,11 @@ import { FOODS, FOOD_IDS, SHOOTER_DECIDES } from './foods.js';
 import { Actor } from './actors.js';
 import { UTENSIL_BY_ID, UTENSIL_IDS } from './utensils.js';
 import { TEAMS, cleanSize } from './teams.js';
+import { ROT } from './arena.js';
 import { p2pLobby } from './p2p.js';
 
 const COLORS = ['#ff9a1f', '#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5', '#f2f2f2'];
-const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048, ladle: 4096, turret: 8192, stream: 16384, guard: 32768 }; // (0.54: stream: a Legendary torch or blender in use; guard: spawn protection)
+const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048, ladle: 4096, turret: 8192, stream: 16384, guard: 32768, rotten: 65536 }; // (0.79: rotten: Gone Rotten, an imposter) // (0.54: stream: a Legendary torch or blender in use; guard: spawn protection)
 const SEND_EVERY = 1 / 30, SEND_LOW = 1 / 10; // (0.45: Low internet)
 // The Online connection setting (0.45), remembered: 'auto', 'normal' or 'low'.
 export function netPref() {
@@ -91,7 +92,7 @@ const MIN_SENT = 6;     // an event leaves the log once it went out this often a
 const BUDGET = 3900;    // bytes of one player's presence (the claude.ai room refuses over 4096)
 // (0.51) The game's version, in every update: players on different copies of the game (one browser still
 // showing an older one) play by different rules, so each is told to reload. Bump it with every release.
-export const NET_VERSION = 71;
+export const NET_VERSION = 72;
 // What a hit did besides its damage, merged into the claim for it (freezes add up to 3, shoves add up)
 function mergeStatus(a, s) {
   for (const [k, v] of Object.entries(s)) {
@@ -109,7 +110,7 @@ const FLOOR_EVENTS = new Set(['it', 'ut', 'ub', 'g', 'ug']); // (0.44)
 const floorKeys = (g) => [...g.items.floorKeys(), ...g.utensils.floorKeys()];
 const digest = (keys) => { let h = 0; for (const k of keys) h = (h + hashStr(k)) >>> 0; return [keys.length, h]; };
 const MAPS_OK = ['kitchen', 'backyard', 'restaurant'], BOTS_OK = ['off', 'easy', 'medium', 'hard'];
-const MODES_OK = ['classic', 'chef', 'pots', 'squads', 'king'];
+const MODES_OK = ['classic', 'chef', 'pots', 'squads', 'king', 'rotten']; // (0.79: Gone Rotten)
 const cleanRS = (rs) => { // eslint-disable-line arrow-body-style
   if (!rs || typeof rs !== 'object') return null;
   const mode = MODES_OK.includes(rs.mode) ? rs.mode : 'classic';
@@ -490,6 +491,8 @@ export class Net {
     msg.hy = this.isHost && H.length ? H.map((h) => Math.round(h.cap)) : null;
     msg.lm = this.isHost ? (g.world.landmark?.alive ? 1 : 0) : null; // (0.44) is the giant tomato standing (the host's says)
     msg.tm = this.isHost && g.mode === 'squads' ? this._squadTeams() : null; // (0.54) Squads: which team each player is on
+    const RT = g.arena.rot; // (0.79) Gone Rotten: the zone, its claim, and who the host made an imposter
+    msg.rz = this.isHost && g.arena.rottenMode && g.round.id >= 0 && RT ? [g.round.id, RT.roles ? 1 : 0, RT.zone ? [r2(RT.zone.x), r2(RT.zone.y), r2(RT.zone.z)] : 0, r2(RT.prog), RT.claimed | 0, RT.state | 0, RT.idx | 0, RT.assigned.slice(-6)] : null;
     if (!this.isHost && t > (this.honeyT || 0)) {
       this.honeyT = t + 0.5;
       H.forEach((h, i) => { if (h.owed >= 1) { this.event('hd', i, Math.round(h.owed)); h.sent = (h.sent || 0) + h.owed; h.sentAt = t; h.owed = 0; } });
@@ -576,6 +579,7 @@ export class Net {
     if (p.inTurret) f |= FLAG.turret;
     if (p.streamOn) f |= FLAG.stream;
     if (t < (p.spawnShieldUntil || 0)) f |= FLAG.guard;
+    if (p.rotten) f |= FLAG.rotten;
     return [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r1(p.vel.x), r1(p.vel.y), r1(p.vel.z), r2(p.yaw), r2(pitch),
       Math.round(fin(p.hp)), Math.round(fin(p.glaze)), p.alive ? 1 : 0, p.selected()?.id || '', f, fin(p.kills), r1(Math.min(99, t - p.noiseAt)), p.utensil || '', invCode(p), kitCode(p), p.team ?? -1, p.carry ?? -1];
   }
@@ -660,6 +664,9 @@ export class Net {
       if (this.hostPeer !== top[0]) { this.hostPeer = top[0]; for (const key of [...this.botProxies.keys()]) if (!key.startsWith(`${top[0]}|`)) this._dropBot(key); }
       this.hostSettings = top[3];
       this.hostRound = cleanRD(top[2].rd);
+      const rz = top[2].rz; // (0.79) Gone Rotten
+      this.hostRot = Array.isArray(rz) ? { id: num(rz[0], 0, 1e6) | 0, roles: rz[1] === 1, zone: Array.isArray(rz[2]) ? { x: num(rz[2][0], -300, 300), y: num(rz[2][1], -40, 120), z: num(rz[2][2], -300, 300) } : null,
+        prog: num(rz[3], 0, ROT.claim), claimed: num(rz[4], 0, ROT.zones) | 0, state: num(rz[5], 0, 2) | 0, idx: num(rz[6], 0, 99) | 0, assigned: Array.isArray(rz[7]) ? rz[7].filter((x) => typeof x === 'string' && x.length < 80).slice(0, 6) : [] } : null;
       this.hostNext = cleanNext(top[2].nx); // (0.68) the votes, as the host counts them
       const lb = top[2].lb;
       this.hostLobby = Array.isArray(lb) ? { phase: lb[0] === 1 ? 1 : 0, count: num(lb[1], -1, 60, -1), why: num(lb[2], 0, 3) | 0 } : null;
@@ -869,7 +876,8 @@ export class Net {
     // teams: their team (its colour on the HUD), and a smashed pot on their back (Cooking Pot Wars)
     const tm = num(s[18], -1, TEAMS.length - 1, -1) | 0;
     a.team = game.teamSize > 1 && tm >= 0 ? tm : null;
-    a.color = a.team != null ? TEAMS[a.team].color : a.ownColor || a.color;
+    if (f & FLAG.rotten && game.state === 'play' && game.arena.rottenMode) a.rotten = true; // (0.79: once Rotten, Rotten for the round)
+    a.color = a.rotten ? ROT.color : a.team != null ? TEAMS[a.team].color : a.ownColor || a.color;
     a.maxHp = game.pots.active ? 75 : 200;
     const carry = num(s[19], -1, TEAMS.length - 1, -1) | 0;
     game.pots.setCarry(a, game.pots.active && a.alive && carry >= 0 ? carry : null);

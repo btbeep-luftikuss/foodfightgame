@@ -58,7 +58,7 @@ export class Actor {
   }
 
   reset() {
-    this.alive = true; this.maxHp = MAX_HP; this.hp = MAX_HP; this.glaze = 0; this.kills = 0;
+    this.alive = true; this.maxHp = MAX_HP; this.hp = MAX_HP; this.glaze = 0; this.kills = 0; this.rotten = false;
     this.carry = null; this.respawnAt = 0; this.ladleT = 0; this.waiting = false; this.inTurret = null; this.netTurret = false;
     this.airJumps = 0; this.airDashes = 0; this.dashT = 0; this.noiseAt = -99; this.fpCam = null;
     this.stamina = STAMINA_MAX; this.staminaUsedAt = -99; this.staminaFlash = 0;
@@ -397,6 +397,7 @@ export class Actor {
     const slow = this.slowAmount();
     let speed = (it.sprint && !this.heavy() ? 8.5 : 5.6) * (1 - slow); // walk 5.6 m/s, sprint 8.5 m/s
     if (now < this.speedBoostUntil) speed *= 1.35; // Hot Feet
+    if (this.rotten) speed *= 1.15; // (0.79: Gone Rotten: the imposters are quicker)
     if (this.shieldUp) speed *= 0.75;
     else if (this.heavy()) speed *= 0.85; // lugging a watermelon
     if (this.eat || this.channel) speed *= 0.5; // eating, or winding up a teleport
@@ -639,7 +640,8 @@ export class Actor {
 
     this.hitFlash = Math.max(0, this.hitFlash - dt * 6);
     const burnGlow = this.isBurning() ? 0.25 + 0.15 * Math.sin(t * 20) : 0;
-    this.rig.material.emissive.setRGB(this.hitFlash * 0.9 + burnGlow, this.hitFlash * 0.9 + burnGlow * 0.3, this.hitFlash * 0.9);
+    const rot = this.rotten ? 0.3 + Math.sin(t * 3 + this.id) * 0.08 : 0; // (0.79: Gone Rotten: a mouldy green glow)
+    this.rig.material.emissive.setRGB(this.hitFlash * 0.9 + burnGlow + rot * 0.45, this.hitFlash * 0.9 + burnGlow * 0.3 + rot, this.hitFlash * 0.9);
 
     // carrot glint while charging
     const glinting = this.charging && this.selected()?.id === 'carrot';

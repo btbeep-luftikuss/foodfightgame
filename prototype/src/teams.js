@@ -18,7 +18,7 @@ export const TEAM_SIZES = [1, 2, 3, 4];
 export const teamCount = (size) => (size > 1 ? Math.floor(12 / size) : 0);
 export const cleanSize = (v, mode) => {
   if (mode === 'squads') return 6; // two teams, always
-  if (mode === 'king') return 1; // every Titan for themselves
+  if (mode === 'king' || mode === 'rotten') return 1; // every Titan for themselves (0.79: Gone Rotten: Fresh or Rotten, see game.teammates)
   const s = TEAM_SIZES.includes(+v) ? +v : 1; return mode === 'pots' && s < 2 ? 3 : s;
 };
 
