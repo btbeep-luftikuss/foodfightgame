@@ -683,8 +683,8 @@ export class Game {
     if (this.arena.rottenMode && target.rotten) { // (0.79) Gone Rotten: the imposters can't be splatted; food knocks them back and slows them
       if (attacker && attacker !== target && !opts.claimed && this.time > (target.bonkAt || 0)) {
         target.bonkAt = this.time + 0.35;
-        _v.set(target.pos.x - attacker.pos.x, 0, target.pos.z - attacker.pos.z).normalize().multiplyScalar(Math.min(9, 3 + amount * 0.25)).setY(2.5);
-        target.knock(_v); target.addSticky(0.35, 1.2);
+        _v.set(target.pos.x - attacker.pos.x, 0, target.pos.z - attacker.pos.z).normalize().multiplyScalar(Math.min(6, 2 + amount * 0.15)).setY(1.8); // (0.80: a smaller shove, a shorter slow)
+        target.knock(_v); target.addSticky(0.2, 0.7);
         if (attacker === this.player) { this.hud.hitmarker(false, false); this.floatText(target, 'BONK!', 'immune'); this.sfx.play('boing', target.pos, 0.6); }
       }
       return 0;

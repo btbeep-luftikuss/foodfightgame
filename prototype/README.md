@@ -63,6 +63,13 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.80: Gone Rotten is harder for the Fresh, and every health bar is the same colour** (`src/arena.js`, `src/game.js`, `index.html`)
+
+- **Harder for the Fresh:** a zone takes 13 s to claim alone (was 12); a Rotten Titan standing in it now drains the claim instead of only pausing it; an empty zone fades twice as fast; food shoves the Rotten back less and slows them for less time. And **the rot spreads**: after the Fresh claim their 2nd and their 4th zone, one more Fresh Titan at random turns Rotten ("caught the rot"), so doing well brings more hunters.
+- **Balance, checked with bot matches (12 Titans, 2 imposters):** the Rotten won 7 of 8; the Fresh usually got 2 to 4 zones before the last of them was caught, and the one Fresh win ended with 4 left. (People dodge better than bots, so expect a few more Fresh wins.) Tried on the way: three imposters from the start won every match for the Rotten (the Fresh got at most 4 zones), so it stays two, with the rot spreading as the zones fall.
+- **Health bars:** the bar over every Titan's head is the same red in every mode (it was each Titan's own colour: green for the Rotten, pink, purple...).
+- Online checked again (both players see the same imposters, zones and spread). NET_VERSION 73.
+
 **Version 0.79: a new mode, Gone Rotten** (`src/arena.js`, `src/game.js`, `src/bots.js`, `src/net.js`, `src/hud.js`, `src/main.js`, `src/actors.js`)
 
 - **The idea:** a hidden-role chase. Everyone drops in as usual; once everyone has landed, one Titan (two when there are 8 or more) turns **Rotten**: an imposter. Everyone else is **Fresh**. A banner tells you which you are, and the kill feed says who went Rotten.

@@ -189,7 +189,7 @@ button { font: inherit; color: inherit; }
 .plate .name { font-size: 12px; font-weight: 800; color: var(--paper); text-shadow: 0 1px 2px var(--ink), 0 0 6px var(--ink); }
 .plate .mini { position: relative; width: 44px; height: 6px; background: rgba(34,20,42,0.75); border-radius: 3px; overflow: hidden; display: grid; }
 .plate .mini i { grid-area: 1/1; height: 100%; }
-.plate .h { background: var(--c, var(--tomato)); }
+.plate .h { background: var(--tomato); } /* (0.80: every Titan's health bar the same colour) */
 .plate .g { background: var(--glaze); opacity: 0.9; height: 2px !important; align-self: start; z-index: 1; }
 .floater { position: absolute; left: 0; top: 0; font-family: var(--display); font-size: 22px; color: var(--paper); text-shadow: 2px 2px 0 var(--ink); pointer-events: none; will-change: transform; }
 .floater.crit { color: var(--butter); font-size: 30px; }
@@ -956,7 +956,7 @@ body.reeling #hud, body.reeling #touch, body.reeling #end, body.reeling #pause {
   <div class="menu-panel">
     <!-- home -->
     <div class="screen" data-screen="home">
-      <p class="eyebrow">Prototype 0.79 · Gone Rotten</p>
+      <p class="eyebrow">Prototype 0.80 · Rotten is harder</p>
       <h1 class="title"><span class="big">Tiny Titans</span><span class="small">Food Fight</span></h1>
       <p class="lede">You're frog-sized, and the whole kitchen is the arena. <b>Food is the only weapon.</b> Fight 11 bots or your friends online, alone or in teams of 2, 3 or 4, until the Soap Tide closes in; smash the other teams' pots in Cooking Pot Wars; outsplat the other team in Squads; or fight over two Legendary utensils in King of the Utensil.</p>
       <nav class="homenav" aria-label="Main menu">

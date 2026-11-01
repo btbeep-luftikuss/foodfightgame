@@ -19,10 +19,10 @@
 //  - Respawning: in your team's half (Squads) or wherever no enemy is close (King), with 2 tomatoes and a
 //    random food, and 2 s of spawn protection (gone as soon as you throw).
 //  - (0.79) Gone Rotten: a hidden-role chase. Once everyone is down, one Titan (two in a room of 8 or more)
-//    turns Rotten: an imposter, glowing mouldy green, a little faster, with harder hits, who can't be splatted
+//    (0.80: two from 6) turns Rotten: an imposter, glowing mouldy green, a little faster, with harder hits, who can't be splatted
 //    (food only knocks them back and slows them). Everyone else is Fresh and runs. A Fresh Titan who is splatted
 //    comes back a few seconds later as Rotten too. One zone at a time stands somewhere on the floor, under a tall
-//    beam of light: Fresh Titans standing in it claim it (10 s for one, quicker with more; a Rotten Titan in it
+//    beam of light (0.80: after the 2nd and 4th zone claimed the rot spreads: one more Fresh Titan turns Rotten): Fresh Titans standing in it claim it (10 s for one, quicker with more; a Rotten Titan in it
 //    stops the claim; left alone it slowly fades). Then the next zone appears somewhere else. The Fresh win when
 //    they've claimed 5 zones; the Rotten win when there's nobody Fresh left. No clock.
 // Online, the host runs the clock (its round clock) and keeps the team scores (rd), and drops, returns and
@@ -36,7 +36,7 @@ import { TEAMS } from './teams.js';
 export const ARENA_MODES = new Set(['squads', 'king', 'rotten']);
 // (0.79) Gone Rotten: zones to win, seconds to claim one alone, zone radius, how fast an empty one fades,
 // seconds before a splatted Fresh is back as Rotten, the Rotten colour, their speed and their hits.
-export const ROT = { zones: 5, claim: 12, radius: 7, decay: 0.3, back: 3, color: '#86c934', speed: 1.15, dmg: 1.7, move: 45 }; // (move: an untouched zone moves after 45 s)
+export const ROT = { zones: 5, claim: 13, radius: 7, decay: 0.6, drain: 0.4, back: 3, color: '#86c934', speed: 1.15, dmg: 1.7, move: 45 }; // (0.80: harder for the Fresh: slower claims, a Rotten in the zone drains it) // (move: an untouched zone moves after 45 s)
 export const ROT_SIDES = ['The Fresh', 'The Rotten'];
 export const MATCH_LEN = 240, OVERTIME = 60, RESPAWN = 4, SPAWN_SHIELD = 2, LEGEND_IDLE = 30;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -246,9 +246,9 @@ export class Arena {
     if (a.isRemote) return;
     if (a === g.player) {
       g.sfx.play('boom', null, 0.6);
-      g.hud.banner("You're Rotten!", this.rot.roles && by ? 'You were splatted: now you hunt the Fresh. You can\'t be splatted' : "You're the imposter: splat the Fresh before they claim 5 zones. You can't be splatted", 3.6);
+      g.hud.banner("You're Rotten!", by === 'spread' ? 'The rot spread to you! Now you hunt the Fresh. You can\'t be splatted' : this.rot.roles && by ? 'You were splatted: now you hunt the Fresh. You can\'t be splatted' : "You're the imposter: splat the Fresh before they claim 5 zones. You can't be splatted", 3.6);
     }
-    g.hud.feed(`<b style="color:${ROT.color}">${esc(a.name)}</b> <em>${by ? 'has gone Rotten' : 'is a Rotten imposter'}</em>`, a === g.player);
+    g.hud.feed(`<b style="color:${ROT.color}">${esc(a.name)}</b> <em>${by === 'spread' ? 'caught the rot' : by ? 'has gone Rotten' : 'is a Rotten imposter'}</em>`, a === g.player);
   }
   _rotStep(dt) {
     const g = this.game, r = this.rot, now = g.time, auth = this._authority();
@@ -256,7 +256,7 @@ export class Arena {
       // the imposters, once everyone has landed (and again if every Rotten Titan has left the room)
       if (!r.roles || (this.rottenLeft() === 0 && now > r.pickAt)) {
         const pool = g.actors.filter((a) => a.alive && !a.rotten).sort(() => Math.random() - 0.5);
-        const n = r.roles ? 1 : pool.length >= 8 ? 2 : 1;
+        const n = r.roles ? 1 : pool.length >= 6 ? 2 : 1; // (0.80: two from 6 Titans)
         if (pool.length >= 2) {
           for (const a of pool.slice(0, n)) {
             if (a.isRemote) { const peer = g.net?._peerOf(a); if (peer) r.assigned.push(peer); a.rotten = true; a.color = ROT.color; } else this.turn(a);
@@ -277,6 +277,7 @@ export class Arena {
         r.state = fresh && rot ? 2 : fresh ? 1 : 0; // (0 empty, 1 claiming, 2 contested)
         if (r.state === 1) r.prog += dt * Math.min(2, 1 + 0.35 * (fresh - 1));
         else if (r.state === 0) r.prog = Math.max(0, r.prog - dt * ROT.decay);
+        else r.prog = Math.max(0, r.prog - dt * ROT.drain); // (0.80: a Rotten Titan in it undoes the claim)
         if (r.prog > 0) r.workedAt = now;
         if (now - Math.max(r.zoneAt || 0, r.workedAt || 0) > ROT.move) { // (nobody has got anywhere with it: camped, or out of the way) it moves
           this._newZone(); r.moved = (r.moved || 0) + 1;
@@ -284,7 +285,16 @@ export class Arena {
         if (r.prog >= ROT.claim) {
           r.claimed++; r.prog = 0;
           if (r.claimed >= ROT.zones) r.winner = 'fresh';
-          else this._newZone();
+          else {
+            this._newZone();
+            // (0.80) the rot spreads: after the 2nd and the 4th zone, one more Fresh Titan turns Rotten
+            const fresh = g.actors.filter((a) => a.alive && !a.rotten);
+            if ((r.claimed === 2 || r.claimed === 4) && fresh.length > 3) {
+              const a = fresh[(Math.random() * fresh.length) | 0];
+              if (a.isRemote) { const peer = g.net?._peerOf(a); if (peer) r.assigned = [...r.assigned, peer].slice(-6); a.rotten = true; a.color = ROT.color; } else this.turn(a, 'spread');
+              r.spreads = (r.spreads || 0) + 1;
+            }
+          }
         }
       }
       if (r.roles && !r.winner && this.freshLeft() === 0 && !g.actors.some((a) => !a.rotten && a.respawnAt && !a.isRemote)) r.winner = 'rotten';
@@ -295,7 +305,7 @@ export class Arena {
         r.roles = z.roles; r.prog = z.prog; r.claimed = z.claimed; r.state = z.state; r.idx = z.idx;
         r.zone = z.zone ? (r.zone && r.zone.x === z.zone.x && r.zone.z === z.zone.z ? r.zone : new THREE.Vector3(z.zone.x, z.zone.y, z.zone.z)) : null;
         const me = g.player, peer = g.net.myPeer;
-        if (me?.alive && !me.rotten && z.assigned.includes(peer) && !(r.mine ||= new Set()).has(g.round.id)) { r.mine.add(g.round.id); this.turn(me); }
+        if (me?.alive && !me.rotten && z.assigned.includes(peer) && z.roles) this.turn(me, z.claimed >= 2 ? 'spread' : null); // (picked as an imposter, or the rot spread to me)
       }
     }
     if (r.idx > r.seenIdx) { // (a new zone: claimed, or moved)
