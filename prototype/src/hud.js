@@ -341,7 +341,7 @@ export class HUD {
       set('nm', a.name, (v) => { c.name.textContent = v; });
       set('hp', Math.round(Math.max(0, a.hp) / (a.maxHp || MAX_HP) * 200) / 2, (v) => { c.h.style.width = `${v}%`; });
       set('gl', Math.round(Math.max(0, a.glaze)), (v) => { c.g.style.width = `${v}%`; });
-      set('col', a.color, (v) => { el.style.setProperty('--c', v); });
+      set('col', game.arena?.rottenMode ? '#f0503a' : a.color, (v) => { el.style.setProperty('--c', v); }); // (0.81: Gone Rotten: every health bar the same red)
       set('lk', a === game.lockCandidate, (v) => { tog(el, 'locked', v); });
     }
     // (0.43) a plate whose Titan has left the match (the bots behind the menu when an online room starts with

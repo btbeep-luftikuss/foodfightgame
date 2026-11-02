@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.81: no rot spreading; same-colour health bars only in Gone Rotten** (`src/arena.js`, `src/hud.js`, `index.html`)
+
+- **The rot no longer spreads:** after the 2nd and 4th zone nobody turns Rotten any more. The rest of 0.80 stays (13 s zones, a Rotten Titan in a zone drains it, empty zones fade faster, a smaller shove and slow on the Rotten). With 2 imposters in a full kitchen, bot matches came out even (the Rotten 4 of 8, the Fresh 4).
+- **Health bars:** back to each Titan's own colour (teams in team colours) in every mode, except Gone Rotten, where every bar is the same red, so the bars don't give anyone away.
+- NET_VERSION 74 (the host's rules changed).
+
 **Version 0.80: Gone Rotten is harder for the Fresh, and every health bar is the same colour** (`src/arena.js`, `src/game.js`, `index.html`)
 
 - **Harder for the Fresh:** a zone takes 13 s to claim alone (was 12); a Rotten Titan standing in it now drains the claim instead of only pausing it; an empty zone fades twice as fast; food shoves the Rotten back less and slows them for less time. And **the rot spreads**: after the Fresh claim their 2nd and their 4th zone, one more Fresh Titan at random turns Rotten ("caught the rot"), so doing well brings more hunters.
