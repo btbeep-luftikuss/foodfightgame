@@ -48,10 +48,12 @@ const busy = (c) => (c?.dataChannel?.bufferedAmount || 0) > BACKLOG;
 const harmless = (e) => e && (e.type === 'message-too-big' || e.type === 'not-open-yet');
 // Finding a way between two browsers (0.33): STUN servers tell a browser its public address (several, in
 // case one is down); TURN servers relay the game when two networks won't allow a direct line (PeerJS's own).
+// (0.82) School and work networks often block everything but web ports: the relays over TCP too, and a second
+// free public relay (the Open Relay Project) on ports 80 and 443, in case PeerJS's is busy or blocked.
 const ICE = [
-  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-  { urls: 'stun:stun.cloudflare.com:3478' },
-  { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+  { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478', 'turn:eu-0.turn.peerjs.com:3478?transport=tcp'], username: 'peerjs', credential: 'peerjsp' },
+  { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' },
 ];
 const rid = () => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
 const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
@@ -182,15 +184,20 @@ class P2PRoom {
   // ------------------------------------------------------------------ connecting
   // Resolves once this player is in the room (as the hub or connected to it); rejects if the
   // introduction server can't be reached (code 'p2p_server'), or the room's hub can't be (code 'p2p_host').
-  async start(timeoutMs = 20000) {
+  // (0.82) It keeps trying for the whole time: one failed try (the free server slow to answer, a blip on the
+  // line) used to end it at once with "couldn't reach the server".
+  async start(timeoutMs = 30000) {
     const until = performance.now() + timeoutMs;
+    this.tries = 0;
     while (!this.closed) {
+      this.tries++;
+      this.onTry?.(this.tries);
       const r = await this._attempt();
       if (r === 'ok') return;
-      if (r === 'fatal' || performance.now() > until) {
+      if (performance.now() > until) {
         throw Object.assign(new Error(this.triedHub ? 'could not connect to the room\'s host' : 'the peer-to-peer service is unreachable'), { code: this.triedHub ? 'p2p_host' : 'p2p_server' });
       }
-      await wait(300 + Math.random() * 700);
+      await wait(r === 'fatal' ? Math.min(4000, 700 * this.tries) : 300 + Math.random() * 700); // (a failed try: a little longer before the next)
     }
   }
   _setOk(ok) {
@@ -377,8 +384,9 @@ class P2PRoom {
 export function p2pLobby(opts = {}) {
   return {
     kind: 'p2p',
-    async join(name) {
+    async join(name, onTry = null) {
       const room = new P2PRoom(name, opts);
+      room.onTry = onTry; // (0.82: each try, for the "still connecting" note)
       try { await room.start(); } catch (e) { await room.leave(); throw e; }
       return room;
     },

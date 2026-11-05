@@ -1024,6 +1024,7 @@ function boot() {
     say('', 'Connecting…');
     const slow = setTimeout(() => { if (btn.disabled) say('', 'Still connecting… (finding the room can take up to half a minute)'); }, 4000);
     const lobby = await roomAvailable();
+    lobby.onTry = (n) => { if (n > 1) say('', `Still connecting… (try ${n}: the free matchmaking server can be slow; this can take up to half a minute)`); }; // (0.82)
     const code = cleanRoom($('roomcode').value);
     try {
       const net = new Net(game);
@@ -1045,8 +1046,8 @@ function boot() {
       const why = err && err.code;
       console.warn('[online] could not join:', why, err && err.message);
       if (why === 'claude_room') say('err', 'This claude.ai page lets only people who are signed in to claude.ai, and whom the game is shared with, play online. Anyone can play together on the public game page:', PUBLIC_URL);
-      else if (why === 'p2p_server') say('err', "Couldn't reach the free matchmaking server (it may be busy, or this network blocks it). Wait a minute and try again.");
-      else if (why === 'p2p_host') say('err', `Found room "${code}" but couldn't link up with the player hosting it (some networks block direct links between players). Try again, or pick a new room code.`);
+      else if (why === 'p2p_server') say('err', "Couldn't reach the free matchmaking server after half a minute of trying. It may be busy (wait a minute and press Join again), or this network blocks it: school and work networks often do. Then try another network, like a phone hotspot.");
+      else if (why === 'p2p_host') say('err', `Found room "${code}" but couldn't link up with the player hosting it. If they just left or reloaded, wait 30 seconds and press Join again (or pick a new room code); school and work networks can also block the link between players.`);
       else say('err', `Couldn't join that room (${why || (err && err.message) || 'unknown error'}). Wait a moment and try again.`);
     } finally { clearTimeout(slow); btn.disabled = false; }
   });
@@ -1209,8 +1210,11 @@ function boot() {
     else if (!game.online && (e.code === 'Enter' || e.code === 'Escape')) { afterVictory(); e.preventDefault(); }
   });
 
+  // (0.82) The touch controls back on a touch screen, once nothing is in front of them: online, the winner
+  // screen used to hide them and a new round (play again) never showed them again.
+  const showTouch = () => { if (playing && input.isTouch && victory.hidden && pause.hidden && !game.highlights.playing && !game.spectator.active) touch.hidden = false; };
   game.onMatchEvent = (type, data) => {
-    if (type === 'start') { pay.due = !game.online; pay.kills = game.player?.kills || 0; $('end-coins').textContent = '+0'; $('end-receipt').textContent = ''; hideVictory(); if (game.online) sfx.play('ready', null, 0.7); }
+    if (type === 'start') { pay.due = !game.online; pay.kills = game.player?.kills || 0; $('end-coins').textContent = '+0'; $('end-receipt').textContent = ''; hideVictory(); if (game.online) sfx.play('ready', null, 0.7); showTouch(); }
     if (type === 'joined') { pay.due = true; pay.kills = game.player?.kills || 0; }
     if (type === 'roundOver') { // online: the round ended; coins for it if I played
       if (!input.isTouch) input.exitLock(); // (0.69: the mouse is free for the vote: play again or a new vote)
@@ -1221,7 +1225,7 @@ function boot() {
       setTimeout(() => { if (playing && game.online && game.round?.state === 'over' && game.round.id === id && !game.round.fresh) showVictory(data, r); }, 900);
       return;
     }
-    if (type === 'joined') { loadout.hidden = true; return; } // online: dropped into a round
+    if (type === 'joined') { loadout.hidden = true; showTouch(); return; } // online: dropped into a round (0.82: the touch controls back, whatever hid them)
     if (type === 'lobby') { end.hidden = true; hideVictory(); openLoadout(); return; } // (0.68) the room went back to its lobby
     if (!playing || !game.player) {
       if (type === 'over') setTimeout(() => { if (!playing) game.newMatch(false); }, 5000);

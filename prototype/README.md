@@ -63,6 +63,12 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.82: touch controls after a rematch, and steadier joining** (`src/main.js`, `src/p2p.js`, `src/net.js`)
+
+- **Touch controls:** online, the winner screen hid the touch controls, and when everyone voted to play again the next round started without bringing them back (only pressing Hide on the winner screen did). Now they come back when the new round starts and when you drop in. Checked: two touch-screen players in a room, a round ended, both voted Play again: before, no controls in round 2 for either of them; now both have them.
+- **Joining a room (the public game page):** one failed try at reaching the free matchmaking server (slow to answer, a blip on the line) used to end it at once with "couldn't reach the free matchmaking server". Now it keeps trying for 30 s, saying "Still connecting… (try 3)", and only then says what to do (wait a minute, or try another network: school and work networks often block it). Checked against a server that refuses every connection: before, it gave up after 0.6 s; now after 10 tries in 32 s.
+- **Backup relays:** for players whose networks won't allow a direct link (often school networks, which may only allow web ports), the game also tries PeerJS's relay over TCP and a second free public relay (the Open Relay Project) on ports 80 and 443. These couldn't be tried from the test machine (it can't reach outside servers), so this is untested against the real services.
+
 **Version 0.81: no rot spreading; same-colour health bars only in Gone Rotten** (`src/arena.js`, `src/hud.js`, `index.html`)
 
 - **The rot no longer spreads:** after the 2nd and 4th zone nobody turns Rotten any more. The rest of 0.80 stays (13 s zones, a Rotten Titan in a zone drains it, empty zones fade faster, a smaller shove and slow on the Rotten). With 2 imposters in a full kitchen, bot matches came out even (the Rotten 4 of 8, the Fresh 4).

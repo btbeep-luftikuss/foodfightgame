@@ -245,7 +245,7 @@ export async function roomAvailable() {
         if (!room) throw Object.assign(new Error('the claude.ai room is not available to this viewer'), { code: 'claude_room' });
         try { return await room.join(name); } catch (e) { throw Object.assign(new Error(e?.message || 'could not join'), { code: e?.code === 'not_granted' || e?.code === 'not_permitted' ? 'claude_room' : e?.code || 'claude_room' }); }
       }
-      return p2p.join(name); // rejects with code 'p2p_server' or 'p2p_host'
+      return p2p.join(name, lobby.onTry); // rejects with code 'p2p_server' or 'p2p_host'
     },
   };
   return lobby;
