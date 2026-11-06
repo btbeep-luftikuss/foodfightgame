@@ -999,6 +999,13 @@ export class HumanRig {
       T.upperArmR[0] = -1.5 * k - 0.3 * (1 - k); T.upperArmR[2] = -0.25; T.foreArmR[0] = -0.25;
       T.chest[1] += 0.3 * k; T.upperArmL[0] += 0.3 * k;
     }
+    if (s.bat != null) { // (0.85) a two-handed bat swing: wound up over the right shoulder, round through the front, follow round
+      const k = s.bat, w = k < 0.18 ? -k / 0.18 : k < 0.5 ? -1 + 2 * ((k - 0.18) / 0.32) : 1 - (k - 0.5) / 0.5; // -1 wound .. +1 followed through
+      T.chest[1] = 0.9 * w; T.spine[1] = 0.35 * w; T.hips[1] += 0.15 * w;
+      T.upperArmR[0] = -1.25 - 0.25 * Math.max(0, -w); T.upperArmR[2] = -0.25 + 0.55 * w; T.foreArmR[0] = -0.6 - 0.8 * Math.max(0, -w);
+      T.upperArmL[0] = -1.25 - 0.25 * Math.max(0, -w); T.upperArmL[2] = -0.65 + 0.55 * w; T.foreArmL[0] = -0.9 - 0.5 * Math.max(0, -w);
+      T.handR[0] = -0.4 * Math.max(0, -w);
+    }
     if (s.eating) { T.upperArmR[0] = -1.95; T.upperArmR[2] = 0.3; T.foreArmR[0] = -2.15; T.handR[0] = -0.3; T.head[0] += 0.12; }
     if (s.shield) { T.upperArmL[0] = -1.25; T.upperArmL[2] = -0.2; T.upperArmR[0] = -1.25; T.upperArmR[2] = 0.2; T.foreArmL[0] = T.foreArmR[0] = -0.6; }
     else if (s.heavy) { T.upperArmL[0] = -0.85; T.upperArmL[2] = -0.1; T.upperArmR[0] = -0.85; T.upperArmR[2] = 0.1; T.foreArmL[0] = T.foreArmR[0] = -1.0; }

@@ -89,7 +89,7 @@ function renderIcons() {
   const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
   for (const id of [...FOOD_IDS, 'peel']) {
     const m = makeFoodMesh(id);
-    const pose = { carrot: [0.2, Math.PI / 2 + 0.5, 0.6], banana: [0.3, 0, 0.2], cheese: [0.6, 0, 0.15], soda: [0.25, 0.4, -0.2], peel: [0.9, 0.3, 0], ice: [0.5, 0.6, 0] }[id] || [0.3, 0.4, 0];
+    const pose = { cucumber: [0.25, Math.PI / 2 + 0.45, 0.5], carrot: [0.2, Math.PI / 2 + 0.5, 0.6], banana: [0.3, 0, 0.2], cheese: [0.6, 0, 0.15], soda: [0.25, 0.4, -0.2], peel: [0.9, 0.3, 0], ice: [0.5, 0.6, 0] }[id] || [0.3, 0.4, 0];
     m.rotation.set(pose[0], pose[1], pose[2]);
     scene.add(m);
     const box = new THREE.Box3().setFromObject(m);

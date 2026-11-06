@@ -5,7 +5,7 @@ import {
   G, FLOOR_Y, STEP, clamp, rand, damp, angleLerp, forwardOf, rightOf,
   groundHeight, resolveHorizontal,
 } from './core.js';
-import { FOODS, makeFoodMesh } from './foods.js';
+import { FOODS, makeFoodMesh, BAT_T } from './foods.js';
 import { dress } from './skins.js';
 import { Utensils } from './utensils.js';
 import { makeUtensilMesh, utensilHold } from './utensil-models.js';
@@ -401,7 +401,7 @@ export class Actor {
     if (this.shieldUp) speed *= 0.75;
     else if (this.heavy()) speed *= 0.85; // lugging a watermelon
     if (this.eat || this.channel) speed *= 0.5; // eating, or winding up a teleport
-    if (this.charging && this.selected()?.id === 'carrot') speed *= 0.6;
+    if (this.charging && this.selectedFood()?.chargeSlow) speed *= this.selectedFood().chargeSlow; // (the carrot, 0.85: the cucumber)
     if (this.charging && this.chargeRule?.slow && this.chargeT > 0.25) speed *= this.chargeRule.slow; // Blow Torch: exposed while it heats up
     let accel = this.onGround ? 55 : 10;
     if (this.onSlick) { accel = 5; speed *= 1.3; }
@@ -587,6 +587,7 @@ export class Actor {
   // ------------------------------------------------------------------ visuals
   updateVisual(dt, camera) {
     const t = this.game.time;
+    if (this.batT > 0) this.batT = Math.max(0, this.batT - dt); // (0.85) a bat swing in progress
     const r = this.root;
     r.position.copy(this.pos);
     r.rotation.y = angleLerp(r.rotation.y, this.yaw + Math.PI, 1 - Math.exp(-18 * dt));
@@ -629,6 +630,7 @@ export class Actor {
         t, phase: this.walkPhase, stride: moving ? clamp(speed / 7.7, 0, 1.3) : 0, sprint: speed > 7.3, onGround: this.onGround, vy: this.vel.y,
         gliding: this.gliding, dashing: this.dashT > 0, tripped: this.isTripped(), frozen: this.isFrozen(),
         charging: this.charging, charge: this.charging && food ? clamp(this.chargeT / Math.max(0.2, food.charge || 1), 0, 1) : 0,
+        bat: this.batT > 0 ? 1 - this.batT / BAT_T : null, // (0.85: a Cucumber bat swing)
         throwK: this.armT / 0.3, auto: !!(food && food.auto && this.armT > 0), eating: !!this.eat, shield: this.shieldUp,
         heavy: this.heavy() && !this.shieldUp, holding: !!this.heldMesh, tool: !!this.uMesh && this.uHold === 'grip', toolPalm: !!this.uMesh && this.uHold !== 'grip', pitch: clamp(pitch, -1, 1), hit: this.hitFlash,
       }, pdt);

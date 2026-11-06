@@ -781,6 +781,7 @@ export class Abilities {
       case 'tc': this.trail(a, 'tp', 1.6); g.sfx.play('tpcharge', a.pos, 0.8); break;
       case 'tx': this.trail(a, 'tp', 0); break;
       case 'pn': g.utensils.panShock(a, P(), typeof d[3] === 'string' ? d[3] : 'tomato', true); break; // (0.44) a Pan slam
+      case 'bw': a.batT = 0.42; g.sfx.play('whirr', a.pos, 1); break; // (0.85) someone swung a Cucumber bat (the swing, for everyone to see)
       case 'bt': { // (0.83) a Cucumber bat swing hit one of my Titans
         const t = typeof d[0] === 'string' ? g.net?._actorOf(d[0]) : null;
         if (t && !t.isRemote && t.alive && t.pos.distanceTo(a.pos) < 8) this.batHit(a, t, D(1));

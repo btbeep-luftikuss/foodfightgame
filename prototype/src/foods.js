@@ -223,31 +223,38 @@ const MAKERS = {
     return new THREE.Mesh(once(geo, 'pineChunk', () => new THREE.BoxGeometry(0.36, 0.3, 0.3)),
       once(mat, 'pineFlesh', () => new THREE.MeshPhysicalMaterial({ color: '#ffd23a', roughness: 0.3, clearcoat: 0.6, emissive: '#5a3a00', emissiveIntensity: 0.15 })));
   },
-  cucumber() { // (0.84) a fresh cucumber: tapered, glossy, striped lengthwise, little pale bumps, a flower end and a stalk; its length along z
+  cucumber() { // (0.85) like the other foods: a smooth, glossy, gently curved green cucumber (a tapered tube, as the
+    // banana), a few soft bumps, the tomato's and carrot's leaf green at the stalk end, a little yellow flower at the other;
+    // its length along z
     const g = new THREE.Group();
-    const skin = once(mat, 'cuke', () => {
-      const c = document.createElement('canvas'); c.width = 128; c.height = 64;
-      const x = c.getContext('2d');
-      x.fillStyle = '#2b6e2a'; x.fillRect(0, 0, 128, 64);
-      for (let i = 0; i < 128; i += 16) { x.fillStyle = 'rgba(110,170,70,0.3)'; x.fillRect(i + 6, 0, 3, 64); } // (faint lighter stripes along it)
-      x.fillStyle = 'rgba(210,240,170,0.8)';
-      for (let i = 0; i < 70; i++) { x.beginPath(); x.arc(Math.random() * 128, Math.random() * 64, 0.6 + Math.random() * 0.8, 0, Math.PI * 2); x.fill(); } // (speckles)
-      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.repeat.set(2, 1);
-      return new THREE.MeshPhysicalMaterial({ map: t, roughness: 0.42, clearcoat: 0.55, clearcoatRoughness: 0.35 });
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, -0.05, -0.62), new THREE.Vector3(0, 0.02, -0.3), new THREE.Vector3(0, 0.05, 0), new THREE.Vector3(0, 0.02, 0.3), new THREE.Vector3(0, -0.05, 0.62),
+    ]);
+    const body = new THREE.Mesh(once(geo, 'cuke3', () => {
+      const tg = new THREE.TubeGeometry(curve, 24, 0.19, 14, false);
+      const pos = tg.attributes.position;
+      for (let i = 0; i < pos.count; i++) { // round off the ends
+        const u = Math.min(1, ((i / 15) | 0) / 24), taper = Math.pow(Math.sin(Math.PI * u), 0.42) * 0.97 + 0.03;
+        const p = curve.getPointAt(u);
+        pos.setXYZ(i, p.x + (pos.getX(i) - p.x) * taper, p.y + (pos.getY(i) - p.y) * taper, p.z + (pos.getZ(i) - p.z) * taper);
+      }
+      tg.computeVertexNormals();
+      return tg;
+    }), once(mat, 'cuke3', () => new THREE.MeshPhysicalMaterial({ color: '#2f8a2c', roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.15 })));
+    g.add(body);
+    const bump = once(mat, 'cukeBump3', () => new THREE.MeshPhysicalMaterial({ color: '#45a83a', roughness: 0.3, clearcoat: 1 }));
+    const bg = once(geo, 'cukeBump3', () => new THREE.SphereGeometry(0.035, 8, 6));
+    [[0.4, -0.35], [2.2, -0.15], [4.1, 0.05], [1.2, 0.2], [3.2, 0.36], [5.3, -0.42], [0.1, 0.42], [2.8, -0.48]].forEach(([ang, z]) => {
+      const p = curve.getPointAt((z + 0.62) / 1.24), r = 0.19 * Math.pow(Math.sin(Math.PI * ((z + 0.62) / 1.24)), 0.42);
+      const b = new THREE.Mesh(bg, bump); b.position.set(p.x + Math.cos(ang) * r, p.y + Math.sin(ang) * r, z); b.scale.set(1, 1, 1.4); g.add(b);
     });
-    const body = once(geo, 'cuke', () => { // a lathe: rounded ends, a touch fuller in the middle
-      const pts = [];
-      for (let i = 0; i <= 16; i++) { const k = i / 16, y = -0.62 + k * 1.24; const r = 0.17 * Math.pow(Math.sin(Math.PI * k), 0.32) * (0.93 + 0.07 * Math.sin(Math.PI * k)); pts.push(new THREE.Vector2(Math.max(0.004, r), y)); }
-      return new THREE.LatheGeometry(pts, 18).rotateX(Math.PI / 2);
-    });
-    g.add(new THREE.Mesh(body, skin));
-    const bump = once(mat, 'cukeBump', () => new THREE.MeshStandardMaterial({ color: '#a8d878', roughness: 0.5 }));
-    const bg = once(geo, 'cukeBump2', () => new THREE.SphereGeometry(0.022, 6, 4));
-    for (let i = 0; i < 12; i++) { const b = new THREE.Mesh(bg, bump), a = i * 2.39, z = -0.42 + (i / 11) * 0.84, r = 0.17 * Math.pow(Math.sin(Math.PI * (z + 0.62) / 1.24), 0.32) * 0.98; b.position.set(Math.cos(a) * r, Math.sin(a) * r, z); g.add(b); }
-    const flower = new THREE.Mesh(once(geo, 'cukeFlower', () => new THREE.SphereGeometry(0.045, 8, 6)), once(mat, 'cukeFlower', () => new THREE.MeshStandardMaterial({ color: '#f2df6a', roughness: 0.6 })));
-    flower.position.z = 0.62; flower.scale.set(1, 1, 0.6); g.add(flower);
-    const stalk = new THREE.Mesh(once(geo, 'cukeStalk2', () => new THREE.CylinderGeometry(0.025, 0.04, 0.1, 6).rotateX(Math.PI / 2)), once(mat, 'cukeStalk2', () => new THREE.MeshStandardMaterial({ color: '#5a7a2a', roughness: 0.85 })));
-    stalk.position.z = -0.66; g.add(stalk);
+    const leaf = once(mat, 'leaf', () => new THREE.MeshStandardMaterial({ color: '#3f8f2f', roughness: 0.6 })); // (the tomato's and carrot's leaves)
+    const stalk = new THREE.Mesh(once(geo, 'cukeStalk3', () => new THREE.CylinderGeometry(0.035, 0.05, 0.12, 6).rotateX(Math.PI / 2)), leaf);
+    stalk.position.set(0, -0.05, -0.66); g.add(stalk);
+    const calyx = new THREE.Mesh(once(geo, 'cukeCalyx', () => new THREE.ConeGeometry(0.13, 0.08, 5).rotateX(-Math.PI / 2)), leaf);
+    calyx.position.set(0, -0.05, -0.6); g.add(calyx);
+    const flower = new THREE.Mesh(once(geo, 'cukeFlower3', () => new THREE.SphereGeometry(0.05, 10, 8)), once(mat, 'cukeFlower3', () => new THREE.MeshStandardMaterial({ color: '#ffd84a', roughness: 0.5 })));
+    flower.position.set(0, -0.05, 0.63); flower.scale.set(1, 1, 0.6); g.add(flower);
     return g;
   },
   cukeslice() { // (0.84) a coin of cucumber: dark rind round the edge, pale flesh with a ring of seeds
@@ -361,6 +368,7 @@ const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _s = new THREE.Vector
 const CUKE_JUICE = [new THREE.Color('#7cc24a'), new THREE.Color('#a8dc6a'), new THREE.Color('#cdeea0')]; // (0.83, 0.84: the Cucumber)
 const CUKE_MIST = [new THREE.Color('#dff4c8'), new THREE.Color('#eefbe0')];
 const SWING = [new THREE.Color('#ffffff'), new THREE.Color('#e9f8d8')];
+export const BAT_T = 0.42; // (0.85) seconds a bat swing takes: wind, swing through, follow round
 
 // (0.49) A carrot that hits a wall, a table or the floor sinks its tip in where it really met the
 // surface (the impact is found a step late, up to 0.45 m past or short of it), pointing the way it flew.
@@ -508,7 +516,7 @@ export const FOODS = {
 
   carrot: {
     name: 'Carrot', role: 'Sniper', maxStack: 4, give: 2, weight: 28,
-    profile: 'line', charge: 1.6, speed: 210, recovery: 0.9, radius: 0.18, verb: 'sniped',
+    profile: 'line', charge: 1.6, speed: 210, recovery: 0.9, radius: 0.18, verb: 'sniped', zoom: 1, chargeSlow: 0.6, // (0.85: zoom and slow while charging: the carrot all the way, the cucumber a little)
     hint: 'Hold to zoom and charge. Face hits deal x1.75. Your glint gives you away.',
     altName: 'Teleport', altLabel: 'Teleport: wind up (a hit cancels it), then throw a slow carrot and warp to where it lands (uses 3, 6 s)', altCd: 6,
     alt(a, game) { return game.abilities.teleportStart(a); },
@@ -967,17 +975,19 @@ export const FOODS = {
   // whoever is right in front of you takes a hit and flies.
   cucumber: {
     name: 'Cucumber', role: 'Rocket launcher · bat', maxStack: 4, give: 2, weight: 7,
-    profile: 'line', charge: 0, speed: 30, recovery: 1.1, radius: 0.28, dmg: 45, verb: 'cucumbered',
+    profile: 'line', charge: 1.2, speed: 44, gravity: 0, recovery: 1.1, radius: 0.28, dmg: 45, verb: 'cucumbered', zoom: 0.4, chargeSlow: 0.75,
     ammo: () => 2 + Math.floor(Math.random() * 3),
-    hint: 'A rocket: a big pickle-juice blast where it hits that hurts you too if you\'re close, so keep your distance (or rocket-jump, carefully).',
+    hint: 'Hold to charge, like the carrot: a full charge flies fast and blasts big. It flies dead straight, and its blast hurts you too if you\'re close.',
     altName: 'Bat Swing', altLabel: 'Bat Swing: swing it like a baseball bat: whoever is right in front of you takes a hit and goes flying (3 s)', altCd: 3,
-    blast: { r: 5.5, dmg: 45, force: 17, self: 0.5 },
+    // (0.85) a quick flick is a slow rocket and a small blast; a full charge (1.2 s) a fast one and the full blast
+    blast: (c) => ({ r: 3.5 + 2 * c, dmg: 24 + 21 * c, force: 11 + 6 * c, self: 0.5 }),
     release(a, c, game) {
       const from = a.handPos();
       const dir = a.isBot ? a.aimDir.clone() : _v.subVectors(a.aimPoint, from).normalize().clone();
-      game.projectiles.launch({ food: 'cucumber', owner: a, pos: from, vel: dir.multiplyScalar(this.speed), gravity: 0.12, radius: 0.28, orient: true, spin: 14, life: 5 });
+      const speed = this.speed * (0.35 + 0.65 * c * c); // (15 m/s flicked, 44 m/s fully charged)
+      game.projectiles.launch({ food: 'cucumber', owner: a, pos: from, vel: dir.multiplyScalar(speed), gravity: 0, radius: 0.28, orient: true, spin: 14, life: 6, charge: c }); // (dead straight)
       a.consume(1);
-      game.sfx.play('whirr', a.pos, 1.1); game.sfx.play('fizz', a.pos, 0.35);
+      game.sfx.play('whirr', a.pos, 0.8 + 0.4 * c); game.sfx.play('fizz', a.pos, 0.35);
       game.fx.spray('blobs', from, 5, { speed: 2.5, up: 1, colors: CUKE_JUICE, size: 0.07, life: 0.35 }); // (a little squirt as it leaves)
     },
     fly(p, game, dt) { // a fine trail of juice droplets and a pale green mist
@@ -985,11 +995,11 @@ export const FOODS = {
       if (Math.random() < dt * 14) game.fx.spray('puffs', p.pos, 1, { speed: 0.3, up: 0.2, colors: CUKE_MIST, size: 0.16, life: 0.55, grav: -0.05, drag: 2, grow: 0.9 });
     },
     impact(p, hit, game) {
-      const B = this.blast, pt = hit.point;
-      if (hit.actor) game.damage(hit.actor, 10, p.owner, 'cucumber'); // (a direct hit: a little extra)
+      const c = p.charge ?? 1, B = this.blast(c), pt = hit.point;
+      if (hit.actor) game.damage(hit.actor, 5 + 5 * c, p.owner, 'cucumber'); // (a direct hit: a little extra)
       game.explode(pt, B.r, B.dmg, p.owner, 'cucumber', B.force, 1, B.self);
-      game.fx.burst('cucumber', pt, 2.1); game.fx.burst('jump', pt, 3);
-      game.world.paintSplat(pt.x, pt.y, pt.z, 5, 'cucumber');
+      game.fx.burst('cucumber', pt, 1.3 + 0.8 * c); game.fx.burst('jump', pt, 2 + c);
+      game.world.paintSplat(pt.x, pt.y, pt.z, 3 + 2 * c, 'cucumber');
       game.abilities.wave?.(pt, B.r + 1, '#9be15d');
       game.sfx.play('splat', pt, 1.2); game.sfx.play('boom', pt, 1); game.sfx.play('fizz', pt, 0.6);
       return true;
@@ -1016,7 +1026,8 @@ export const FOODS = {
         game.fx.spray('puffs', _v.set(a.pos.x + x * 2, a.pos.y + 1.2, a.pos.z + z * 2), 1, { speed: 1, up: 0.2, colors: SWING, size: 0.3, life: 0.28, grav: 0, drag: 4, grow: 0.8 });
         game.fx.spray('blobs', _v, 1, { speed: 2, up: 0.5, colors: CUKE_JUICE, size: 0.06, life: 0.3 }); // (juice off the bat)
       }
-      a.armT = 0.3;
+      a.batT = BAT_T; // (0.85) the swing, in your hands and on your Titan
+      if (game.net) game.abilities.send(a, 'bw'); // (everyone else sees it swing)
       game.sfx.play('whirr', a.pos, 1.2);
       if (hits) { game.sfx.play('thud', a.pos, 1); game.sfx.play('boing', a.pos, 0.8); }
       game.abilities.punch(a, { fov: hits ? 9 : 4, shake: hits ? 0.18 : 0.04, stop: hits ? 70 : 0, flash: hits ? '#7cd23a' : null, call: hits ? 'HOME RUN!' : null });

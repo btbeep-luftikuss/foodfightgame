@@ -63,6 +63,14 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.85: the Cucumber flies straight, charges, swings, and looks the part** (`src/foods.js`, `src/viewmodel.js`, `src/human.js`, `src/actors.js`, `src/game.js`, `src/abilities.js`, `src/main.js`)
+
+- **Dead straight:** no drop at all any more; it goes exactly where you aim (and bots aim at it that way).
+- **A charge like the carrot's:** hold to charge (1.2 s). A quick flick is a slow rocket (15 m/s) with a small blast; a full charge flies at 44 m/s with the full blast (a 3.5 m blast at no charge up to 5.5 m, 24 up to 45 damage). While you charge, your view zooms in a little and you walk a bit slower (the carrot does both, more). Measured on a dummy 12 m away: 27 damage flicked, 39 half charged, 51 fully charged.
+- **A real bat swing:** the Bat Swing now has its animation. In your own hands the cucumber comes up on the right, then whips level across your view to the left. Your Titan winds up two-handed over the shoulder, twists and swings round, and everyone else online sees it swing (a new 'bw' event).
+- **Looks like the other foods:** built like them: a smooth, glossy, gently curved cucumber (a tapered tube, like the banana), the tomato's and carrot's leaf green at the stalk, a few soft bumps and a little yellow flower at the end; its icon shows it lengthwise, like the carrot's and the banana's. (0.84's was a striped, speckled, textured one that didn't match the rest.)
+- NET_VERSION 77.
+
 **Version 0.84: the Cucumber, fixed and in the game's style** (`src/foods.js`, `src/fx.js`, `src/stains.js`, `src/utensils.js`, `src/legendary.js`, `src/projectiles.js`)
 
 - **Fixed: utensils made it a rocket barrage.** Every utensil that cuts food into pieces turned one Cucumber into several whole rockets, each a full blast that hurt the thrower too: 3 per throw with the Knife (39 in 3 s held down), 7 with the Blender, 5 with the Spoon, and the Legendary Grater rained them. Now a cut Cucumber is **cucumber slices**: little coins of cucumber that hit for 9 and pop with juice (measured: Knife 3 slices, Grater 8, Spoon 5, Blender 7, no blasts). Mixed into another food with the Mixer it adds a slice's pop, not a rocket. The Legendary Oven Mitt fires it as 2 straight rockets (was 4).

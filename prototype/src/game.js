@@ -1130,7 +1130,7 @@ export class Game {
       cam.lookAt(0, -2, 0);
     } else if (p.alive && this.firstPerson) {
       // First person: the camera is the Titan's eyes; your arm and food are the viewmodel.
-      const zoom = p.charging && p.selected()?.id === 'carrot' ? clamp(p.chargeT / FOODS.carrot.charge, 0, 1) : 0;
+      const zf = p.charging ? p.selectedFood() : null, zoom = zf?.zoom ? clamp(p.chargeT / zf.charge, 0, 1) * zf.zoom : 0; // (0.85: the carrot, and a little the cucumber)
       fov = lerp(78, 30, zoom) + (p.dashT > 0 ? 8 : 0);
       this.camDist = 0.4;
       this.input.zoomSens = lerp(1, 0.4, zoom);
@@ -1141,7 +1141,7 @@ export class Game {
       cam.position.set(p.pos.x, this.camPivotY + eyeY + bob, p.pos.z);
       cam.rotation.set(this.input.pitch, this.input.yaw, p.dashT > 0 ? -0.03 : 0, 'YXZ');
     } else if (p.alive) {
-      const zoom = p.charging && p.selected()?.id === 'carrot' ? clamp(p.chargeT / FOODS.carrot.charge, 0, 1) : 0;
+      const zf = p.charging ? p.selectedFood() : null, zoom = zf?.zoom ? clamp(p.chargeT / zf.charge, 0, 1) * zf.zoom : 0;
       fov = lerp(70, 30, zoom);
       const dist = lerp(5.6, 3.6, zoom), shoulder = lerp(1.15, 0.75, zoom);
       this.camDist = dist;

@@ -1,7 +1,7 @@
 // First-person viewmodel: your arm and the food you're holding, attached to the camera.
 import * as THREE from 'three';
 import { clamp, damp } from './core.js';
-import { makeFoodMesh } from './foods.js';
+import { makeFoodMesh, BAT_T } from './foods.js';
 import { fpArmGeometry, FP_ARM_UP, FP_PALM_N, GRIP } from './human.js';
 import { makeUtensilMesh, utensilHold } from './utensil-models.js';
 
@@ -79,6 +79,7 @@ export class ViewModel {
       if (this.held) {
         this.held.scale.setScalar((HELD_SCALE[id] || 0.9) * 0.42);
         if (id === 'carrot') this.held.rotation.y = 0.2;
+        if (id === 'cucumber') this.held.rotation.set(0.5, 0.35, 0); // (0.85: held like a bat handle, tip up and out)
         this.held.traverse((o) => { if (o.isMesh) o.castShadow = false; });
         this.hand.add(this.held);
       }
@@ -106,7 +107,20 @@ export class ViewModel {
     this.sway.position.set(damp(this.sway.position.x, x, 16, dt), damp(this.sway.position.y, y, 16, dt), damp(this.sway.position.z, z, 16, dt));
     this.sway.rotation.x = damp(this.sway.rotation.x, rx, 16, dt);
     this.sway.rotation.z = damp(this.sway.rotation.z, rz, 10, dt);
-    if (this.held) this.held.rotation.y += dt * (id === 'blueberry' ? 0 : 0.3);
+    this.sway.rotation.y = damp(this.sway.rotation.y, 0, 12, dt);
+    if (player.batT > 0) { // (0.85) a bat swing: wound up to the right and raised, sweeping across to the left and round (not smoothed: it's quick)
+      const k = 1 - player.batT / BAT_T, w = k < 0.18 ? -k / 0.18 : k < 0.5 ? -1 + 2 * ((k - 0.18) / 0.32) : 1 - (k - 0.5) / 0.5;
+      const wound = Math.max(0, -w), through = Math.max(0, w);
+      this.sway.position.set(0.12 * wound - 0.62 * through, 0.2 * wound + 0.06 * through, -0.05 * wound - 0.3 * through); // (right and up, then across to the left, out in front)
+      this.sway.rotation.set(-0.35 * wound, -0.5 * wound + 0.9 * through, -0.6 * wound + 0.45 * through);
+    }
+    if (this.held) {
+      if (id === 'cucumber') { // the bat: upright when wound up, swung level across the view through the hit
+        const k = player.batT > 0 ? 1 - player.batT / BAT_T : 0, w = k < 0.18 ? -k / 0.18 : k < 0.5 ? -1 + 2 * ((k - 0.18) / 0.32) : 1 - (k - 0.5) / 0.5;
+        this.held.rotation.set(0.5 - 0.9 * Math.max(0, -w) * (player.batT > 0 ? 1 : 0), 0.35 + 1.3 * Math.max(0, w) * (player.batT > 0 ? 1 : 0), 0);
+      }
+      else this.held.rotation.y += dt * (id === 'blueberry' ? 0 : 0.3);
+    }
   }
 
   // Put the utensil in the left hand: a handle through the hollow of the fist (along the knuckles,
