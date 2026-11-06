@@ -63,6 +63,14 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.84: the Cucumber, fixed and in the game's style** (`src/foods.js`, `src/fx.js`, `src/stains.js`, `src/utensils.js`, `src/legendary.js`, `src/projectiles.js`)
+
+- **Fixed: utensils made it a rocket barrage.** Every utensil that cuts food into pieces turned one Cucumber into several whole rockets, each a full blast that hurt the thrower too: 3 per throw with the Knife (39 in 3 s held down), 7 with the Blender, 5 with the Spoon, and the Legendary Grater rained them. Now a cut Cucumber is **cucumber slices**: little coins of cucumber that hit for 9 and pop with juice (measured: Knife 3 slices, Grater 8, Spoon 5, Blender 7, no blasts). Mixed into another food with the Mixer it adds a slice's pop, not a rocket. The Legendary Oven Mitt fires it as 2 straight rockets (was 4).
+- **Fixed: smoke in your face.** Throwing one put big grey smoke clouds right over your own view. Gone: it leaves your hand with a small squirt of juice.
+- **In the game's style:** every food bursts in its own juice, so the Cucumber does too. Its blast is now a pickle-juice burst (green juice everywhere, chunks of rind and flesh, seeds, a green mist and a quick green pop) with a green shockwave and a big pickle-juice splat on the floor, instead of a fireball and dark smoke. In flight it twists along its length like a dart and trails fine droplets of juice. Same blast size, damage and self-damage as before.
+- **A real cucumber:** slimmer and tapered, glossy, dark green with faint lighter stripes and speckles, little pale bumps, a yellow flower end and a stalk (it was a plain capsule with dots, more like a pickle).
+- NET_VERSION 76.
+
 **Version 0.83: a crooked Blender, a rapid Knife, a milder Chili, and the Cucumber** (`src/utensils.js`, `src/actors.js`, `src/foods.js`, `src/game.js`, `src/abilities.js`, `src/bots.js`)
 
 - **Blender:** its shots aren't dead-on any more. About 1 in 3 goes a little crooked (up to 4°), and shots in quick succession build up a spread, up to 17° off, that settles about 3 s after you stop. Up close it still hits; at mid range a stream of shots sprays. Measured, 10 shots as fast as it goes: from about 1° off at first to 10° by the end.

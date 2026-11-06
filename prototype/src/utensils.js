@@ -36,13 +36,13 @@ const WITH_PEEL = [...THROWN, 'peel'];
 // the Knife, Spoon and Grater treat them differently. Everything else counts as soft.
 const FIRM = new Set(['carrot', 'cheese', 'cookie', 'ice', 'pineapple', 'chili', 'cucumber']);
 // projectile id -> hotbar food
-const ROOT = { grape: 'grapes', berry: 'blueberry', melonchunk: 'watermelon', cheesechunk: 'cheese', bananaslice: 'banana', pinechunk: 'pineapple' };
+const ROOT = { grape: 'grapes', berry: 'blueberry', melonchunk: 'watermelon', cheesechunk: 'cheese', bananaslice: 'banana', pinechunk: 'pineapple', cukeslice: 'cucumber' };
 // Whole foods that are cut into a different kind of piece (a wheel can't be cut into wheels)
-const PIECE = { cheese: 'cheesechunk', watermelon: 'melonchunk', banana: 'bananaslice', pineapple: 'pinechunk' };
-const FX_OF = { cucumber: 'fire', tomato: 'tomato', carrot: 'carrot', ice: 'ice', soda: 'soda', chili: 'fire', jelly: 'jelly', cookie: 'crumb', pineapple: 'pine', banana: 'banana', cheese: 'cheese', watermelon: 'melon', melonchunk: 'melon', grape: 'grape', berry: 'berry', cheesechunk: 'cheese', bananaslice: 'banana', pinechunk: 'pine' };
-const TINT = { cucumber: '#3f9a3a', tomato: '#e8321f', carrot: '#ff8a1c', ice: '#bfe9ff', soda: '#8a4a22', chili: '#ff3d00', jelly: '#5fd35a', cookie: '#c98a4c', pineapple: '#f2c230', banana: '#ffe14a', cheese: '#ffc93c', watermelon: '#f25a6a', melonchunk: '#f25a6a', grape: '#8e3fae', berry: '#4a52c8', cheesechunk: '#ffc93c', bananaslice: '#ffe14a', pinechunk: '#f2c230' };
+const PIECE = { cheese: 'cheesechunk', watermelon: 'melonchunk', banana: 'bananaslice', pineapple: 'pinechunk', cucumber: 'cukeslice' }; // (0.84: a cut cucumber is slices, not more rockets)
+const FX_OF = { cucumber: 'cucumber', cukeslice: 'cukeslice', tomato: 'tomato', carrot: 'carrot', ice: 'ice', soda: 'soda', chili: 'fire', jelly: 'jelly', cookie: 'crumb', pineapple: 'pine', banana: 'banana', cheese: 'cheese', watermelon: 'melon', melonchunk: 'melon', grape: 'grape', berry: 'berry', cheesechunk: 'cheese', bananaslice: 'banana', pinechunk: 'pine' };
+const TINT = { cucumber: '#7cc24a', cukeslice: '#7cc24a', tomato: '#e8321f', carrot: '#ff8a1c', ice: '#bfe9ff', soda: '#8a4a22', chili: '#ff3d00', jelly: '#5fd35a', cookie: '#c98a4c', pineapple: '#f2c230', banana: '#ffe14a', cheese: '#ffc93c', watermelon: '#f25a6a', melonchunk: '#f25a6a', grape: '#8e3fae', berry: '#4a52c8', cheesechunk: '#ffc93c', bananaslice: '#ffe14a', pinechunk: '#f2c230' };
 // Mixer: which projectile's impact a second food adds
-const MIX_IMPACT = { cucumber: 'cucumber', tomato: 'tomato', carrot: 'carrot', ice: 'ice', soda: 'soda', chili: 'chili', cookie: 'cookie', jelly: 'jelly', grapes: 'grape', blueberry: 'berry', watermelon: 'melonchunk', cheese: 'cheesechunk', banana: 'bananaslice', pineapple: 'pinechunk' };
+const MIX_IMPACT = { cucumber: 'cukeslice', tomato: 'tomato', carrot: 'carrot', ice: 'ice', soda: 'soda', chili: 'chili', cookie: 'cookie', jelly: 'jelly', grapes: 'grape', blueberry: 'berry', watermelon: 'melonchunk', cheese: 'cheesechunk', banana: 'bananaslice', pineapple: 'pinechunk' };
 
 export const UTENSILS = [
   { id: 'knife', tip: '3 slices · hold to rapid-fire · cuts through cheese shields', name: 'Knife', role: 'Rapid-Fire Chopper', color: '#ff5a3c', works: THROWN,

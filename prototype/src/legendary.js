@@ -72,17 +72,18 @@ export const MITT_FOOD = {
   watermelon: { shots: 2, m: 1.6, sc: 1.3, push: 14, note: '2 heavy shots' },
   banana: { shots: 3, note: '3 boomerang shots' }, // (still a boomerang: out dead straight, then home)
   chili: { shots: 4, m: 1.2, note: '4 burning shots' },
+  cucumber: { shots: 2, m: 1, note: '2 straight rockets' }, // (0.84: each still a full blast)
 };
 export const mittFood = (id) => ({ shots: BAL.mitt.shots, gap: BAL.mitt.gap, m: BAL.mitt.m, pellets: 1, fan: 0, pierce: 0, sc: 1.1, push: BAL.mitt.push, note: `${BAL.mitt.shots} shots`, ...MITT_FOOD[rootOf(id)] });
 
 // what flies for each food (a wheel or a melon can't be thrown in pieces of itself: its chunks do)
-const PIECE_OF = { grapes: 'grape', blueberry: 'berry', cheese: 'cheesechunk', watermelon: 'melonchunk', banana: 'bananaslice', pineapple: 'pinechunk' };
-const ROOT_OF = { grape: 'grapes', berry: 'blueberry', melonchunk: 'watermelon', cheesechunk: 'cheese', bananaslice: 'banana', pinechunk: 'pineapple' };
+const PIECE_OF = { cucumber: 'cukeslice', grapes: 'grape', blueberry: 'berry', cheese: 'cheesechunk', watermelon: 'melonchunk', banana: 'bananaslice', pineapple: 'pinechunk' };
+const ROOT_OF = { cukeslice: 'cucumber', grape: 'grapes', berry: 'blueberry', melonchunk: 'watermelon', cheesechunk: 'cheese', bananaslice: 'banana', pinechunk: 'pineapple' };
 export const rootOf = (id) => ROOT_OF[id] || id;
 export const pieceOf = (id) => PIECE_OF[id] || id;
-const TINT = { cucumber: '#3f9a3a', tomato: '#e8321f', carrot: '#ff8a1c', ice: '#bfe9ff', soda: '#8a4a22', chili: '#ff3d00', jelly: '#5fd35a', cookie: '#c98a4c', pineapple: '#f2c230', banana: '#ffe14a', cheese: '#ffc93c', watermelon: '#f25a6a', grapes: '#8e3fae', blueberry: '#4a52c8' };
-const BURST = { cucumber: 'fire', tomato: 'tomato', carrot: 'carrot', ice: 'ice', soda: 'soda', chili: 'fire', jelly: 'jelly', cookie: 'crumb', pineapple: 'pine', banana: 'banana', cheese: 'cheese', watermelon: 'melon', grapes: 'grape', blueberry: 'berry' };
-const STAIN = { tomato: 'tomato', carrot: 'carrot', soda: 'soda', chili: 'chili', jelly: 'jelly', banana: 'banana', cheese: 'cheese', watermelon: 'melon', grapes: 'grape', blueberry: 'berry' };
+const TINT = { cucumber: '#7cc24a', tomato: '#e8321f', carrot: '#ff8a1c', ice: '#bfe9ff', soda: '#8a4a22', chili: '#ff3d00', jelly: '#5fd35a', cookie: '#c98a4c', pineapple: '#f2c230', banana: '#ffe14a', cheese: '#ffc93c', watermelon: '#f25a6a', grapes: '#8e3fae', blueberry: '#4a52c8' };
+const BURST = { cucumber: 'cucumber', tomato: 'tomato', carrot: 'carrot', ice: 'ice', soda: 'soda', chili: 'fire', jelly: 'jelly', cookie: 'crumb', pineapple: 'pine', banana: 'banana', cheese: 'cheese', watermelon: 'melon', grapes: 'grape', blueberry: 'berry' };
+const STAIN = { cucumber: 'cucumber', tomato: 'tomato', carrot: 'carrot', soda: 'soda', chili: 'chili', jelly: 'jelly', banana: 'banana', cheese: 'cheese', watermelon: 'melon', grapes: 'grape', blueberry: 'berry' };
 export const tintOf = (id) => TINT[rootOf(id)] || '#ffffff';
 export const burstOf = (id) => BURST[rootOf(id)] || 'dust';
 

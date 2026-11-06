@@ -95,6 +95,7 @@ export const PALETTE = { // (also the highlight reels' knockout splash)
   melon: [C('#f25a6a'), C('#ff8a94'), C('#2f7a30'), C('#1d1616')],
   pine: [C('#f2c230'), C('#d99a1e'), C('#4f9a3a')],
   jelly: [C('#5fd35a'), C('#9cf09a'), C('#3fae3a')],
+  cuke: [C('#7cc24a'), C('#a8dc6a'), C('#d8eda8'), C('#2b6e2a'), C('#fbfbe8'), C('#b4e07c')], // (0.84) juice, flesh, rind, seeds, mist
   fire: [C('#ff3d00'), C('#ff8a00'), C('#ffd000')],
   juice: [C('#6b2a86'), C('#9b3fc0'), C('#d9a8f0')],
   tele: [C('#c77dff'), C('#9d4edd'), C('#f3c4ff'), C('#ffffff')],
@@ -246,6 +247,17 @@ export class FX {
         break;
       case 'jelly':
         this.spray('blobs', pos, 22, { speed: 6, up: 6, colors: P.jelly, size: 0.18, life: 0.8 });
+        break;
+      case 'cucumber': // (0.84) the Cucumber's blast: pickle juice everywhere, slices of rind and flesh, seeds, a pale green mist
+        this.spray('blobs', pos, 60 * power, { speed: 11 * power, up: 8, colors: [P.cuke[0], P.cuke[0], P.cuke[1]], size: 0.27, life: 1.1 });
+        this.spray('chunks', pos, 18 * power, { speed: 9, up: 8, colors: [P.cuke[2], P.cuke[3], P.cuke[2]], size: 0.26, life: 1.2 });
+        this.spray('blobs', pos, 24 * power, { speed: 7, up: 6, colors: [P.cuke[4]], size: 0.06, life: 0.9 });
+        this.spray('puffs', pos, 9 * power, { speed: 5 * power, up: 2.5, colors: [P.cuke[5], P.cuke[2], P.cuke[1]], size: 1.0, life: 0.7, grav: -0.2, drag: 2.5, grow: 2 });
+        this.spray('puffs', pos, 4, { speed: 0.5, up: 0.5, colors: [P.cuke[1], P.cuke[5]], size: 1.6 * power, life: 0.25, grav: 0, drag: 6, grow: 1.5 }); // (a bright pop at the heart of it)
+        break;
+      case 'cukeslice': // a slice's little pop
+        this.spray('blobs', pos, 9 * power, { speed: 4, up: 3, colors: [P.cuke[0], P.cuke[1]], size: 0.12, life: 0.5 });
+        this.spray('chunks', pos, 3 * power, { speed: 3, up: 3, colors: [P.cuke[2], P.cuke[3]], size: 0.12, life: 0.6 });
         break;
       case 'fire':
         this.spray('blobs', pos, 20, { speed: 5, up: 6, colors: P.fire, size: 0.14, life: 0.6, grav: -0.2 });

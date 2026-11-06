@@ -28,6 +28,7 @@ const LOOKS = {
   jelly: ['rgba(90,200,90,0.5)'],
   berry: ['rgba(45,55,140,0.7)', 'rgba(80,60,150,0.55)'],
   chili: ['rgba(40,20,10,0.35)'],
+  cucumber: ['rgba(120,190,70,0.62)', 'rgba(165,215,105,0.5)'], // (0.84: pickle juice)
 };
 const KINDS = Object.keys(LOOKS);
 const VARIANTS = 2;

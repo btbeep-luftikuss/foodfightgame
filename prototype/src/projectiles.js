@@ -130,6 +130,7 @@ export class Projectiles {
     m.position.copy(p.pos);
     if (p.orient) {
       m.lookAt(_t.copy(p.pos).sub(p.vel)); // carrot tip (-z) leads
+      if (p.spin) m.rotateZ(p.life * p.spin); // (0.84: and twists along its length, like a dart: the Cucumber)
     } else if (p.roll) {
       m.rotation.y = Math.atan2(p.vel.x, p.vel.z);
       p.rollAngle += Math.hypot(p.vel.x, p.vel.z) * dt / p.radius;
