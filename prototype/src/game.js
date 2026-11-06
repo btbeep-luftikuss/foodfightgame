@@ -780,7 +780,7 @@ export class Game {
     }
   }
 
-  explode(point, r, dmg, owner, foodId, force, ownShake = 1) { // ownShake: how hard it shakes the thrower's own screen
+  explode(point, r, dmg, owner, foodId, force, ownShake = 1, selfDmg = 0) { // ownShake: how hard it shakes the thrower's own screen; selfDmg: the share of the damage the thrower takes in it (0.83: the Cucumber)
     for (const a of this.actors) {
       if (!a.alive) continue;
       const c = a.center(_c);
@@ -790,7 +790,7 @@ export class Game {
       if (a !== owner) {
         if (a.shieldUp && this._inFront(a, point)) this.damageShield(a, dmg * k, owner);
         else this.damage(a, dmg * k, owner, foodId);
-      }
+      } else if (selfDmg > 0 && !a.isRemote) this.damage(a, dmg * k * selfDmg, null, foodId); // (your own blast: their game decides theirs)
       if (!a.alive) continue;
       _d.subVectors(c, point); _d.y = Math.max(_d.y, 0.1);
       _d.normalize(); _d.y = Math.max(_d.y, 0.45); _d.normalize();

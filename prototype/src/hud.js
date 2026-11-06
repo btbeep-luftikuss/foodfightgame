@@ -15,7 +15,7 @@ const _p = new THREE.Vector3(), _e = new THREE.Vector3();
 const ALT_SHORT = { cheese: 'Shield', banana: 'Eat', jelly: 'Jump Pad' };
 const ALT_BUTTON = {
   tomato: 'Dash', carrot: 'Teleport', ice: 'Storm', soda: 'Mega jump', chili: 'Flames', cookie: 'Rush', jelly: 'Pad',
-  grapes: 'Juice', watermelon: 'Smash', pineapple: 'Spikes', blueberry: 'Spiral',
+  grapes: 'Juice', watermelon: 'Smash', pineapple: 'Spikes', blueberry: 'Spiral', cucumber: 'Bat',
 };
 const altShort = (id, food) => ALT_SHORT[id] || food.altName || (food.altLabel || '').split(':')[0];
 

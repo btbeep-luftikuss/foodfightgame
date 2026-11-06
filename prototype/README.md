@@ -63,6 +63,17 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.83: a crooked Blender, a rapid Knife, a milder Chili, and the Cucumber** (`src/utensils.js`, `src/actors.js`, `src/foods.js`, `src/game.js`, `src/abilities.js`, `src/bots.js`)
+
+- **Blender:** its shots aren't dead-on any more. About 1 in 3 goes a little crooked (up to 4°), and shots in quick succession build up a spread, up to 17° off, that settles about 3 s after you stop. Up close it still hits; at mid range a stream of shots sprays. Measured, 10 shots as fast as it goes: from about 1° off at first to 10° by the end.
+- **Knife:** hold the throw button to rapid-fire (no charging up with a Knife in hand): 13 throws of 3 slices in 3 s.
+- **Chili Pepper:** a hit does 7 damage (was 15); it still sets them on fire, which burns on afterwards.
+- **New food, the Cucumber** (a rocket launcher; on the floor now and then, 2 to 4 at a time):
+  - **Throw:** a rocket that flies straight at a medium speed (30 m/s) with a smoke trail and a little flame, and explodes where it hits: a 5.5 m blast of up to 45 damage (plus 10 on a direct hit) that throws everyone in it; a fireball, smoke and flying cucumber bits. **It hurts you too** if you're in the blast (half the damage, and it throws you: a rocket jump that costs health). Measured: 52 on a direct hit; one at my own feet took 19 of my health and threw me 6.5 m.
+  - **Alt, Bat Swing (3 s):** swing it like a baseball bat: whoever is right in front of you (3.5 m) takes 16 damage and flies, about 30 m: "HOME RUN!". Online too (the hit goes to the other player's game).
+  - Bots use it: rockets from 10 m out (never up close), the bat when someone is right next to them. It works with the utensils as a firm food.
+- NET_VERSION 75: everyone in a room needs this version.
+
 **Version 0.82: touch controls after a rematch, and steadier joining** (`src/main.js`, `src/p2p.js`, `src/net.js`)
 
 - **Touch controls:** online, the winner screen hid the touch controls, and when everyone voted to play again the next round started without bringing them back (only pressing Hide on the winner screen did). Now they come back when the new round starts and when you drop in. Checked: two touch-screen players in a room, a round ended, both voted Play again: before, no controls in round 2 for either of them; now both have them.

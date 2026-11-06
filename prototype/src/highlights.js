@@ -87,7 +87,7 @@ const foodName = (id) => (FOODS[id]?.name || '').replace(/ies$/, 'y').replace(/s
 const danger = (food) => FOODS[food]?.dmg ?? 25; // (most foods work out their damage as they land)
 const mult = (n) => ['', '', 'Double', 'Triple', 'Quadruple'][n] || `${n}x`;
 // each food's splash (fx.js bursts), for the knockout's big one
-const BURST = { tomato: 'tomato', banana: 'banana', carrot: 'carrot', ice: 'ice', soda: 'soda', cheese: 'cheese', grapes: 'grape', grape: 'grape', chili: 'fire', cookie: 'crumb', watermelon: 'melon', melonchunk: 'melon', pineapple: 'pine', jelly: 'jelly', blueberry: 'berry', berry: 'berry' };
+const BURST = { cucumber: 'fire', bat: 'jump', tomato: 'tomato', banana: 'banana', carrot: 'carrot', ice: 'ice', soda: 'soda', cheese: 'cheese', grapes: 'grape', grape: 'grape', chili: 'fire', cookie: 'crumb', watermelon: 'melon', melonchunk: 'melon', pineapple: 'pine', jelly: 'jelly', blueberry: 'berry', berry: 'berry' };
 // (0.50) a splat by an ability (its damage's name): what it's called, its colour, the big word
 const ABILITY = {
   storm: ['Ice Storm', ULT_COLOR.ice, 'Blizzard!'], spikes: ['Spike Line', ULT_COLOR.pineapple, 'Skewered!'],

@@ -168,7 +168,7 @@ export class Actor {
     if (id) {
       // held in the right palm, pushed out so the food sits in the hand instead of around it
       this.heldMesh = makeFoodMesh(id);
-      const s = { cheese: 0.55, carrot: 0.7, banana: 0.75, watermelon: 0.55, pineapple: 0.6 }[id] || 0.7;
+      const s = { cheese: 0.55, carrot: 0.7, banana: 0.75, watermelon: 0.55, pineapple: 0.6, cucumber: 0.65 }[id] || 0.7;
       this.heldMesh.scale.setScalar(s);
       if (id === 'carrot') this.heldMesh.rotation.x = Math.PI / 2;
       const r = new THREE.Box3().setFromObject(this.heldMesh).getBoundingSphere(new THREE.Sphere()).radius;
@@ -550,6 +550,9 @@ export class Actor {
     const chargeLen = this.chargeLen = Math.max(food.charge, rule ? rule.need : 0);
     if (food.auto) { // rapid fire: keeps firing while held
       if (it.primary) this._release(food, 1);
+    } else if (g.utensils.rapid(this, slot.id)) { // (0.83) the Knife: hold to rapid-fire (no charging up)
+      this.charging = false;
+      if (it.primary) { this._release(food, 0.7); this.recoverUntil = Math.max(this.recoverUntil, now + 0.22); }
     } else if (chargeLen > 0) {
       if (it.primary && !this.charging && !this.primaryPrev) { this.charging = true; this.chargeT = 0; this.releaseQueued = false; }
       if (this.charging) {

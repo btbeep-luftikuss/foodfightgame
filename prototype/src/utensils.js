@@ -27,25 +27,25 @@ import { UTENSIL_ART } from './utensil-art.js';
 import { makeUtensilMesh } from './utensil-models.js';
 import { Legends, BAL, streamVisuals, rootOf, mittFood } from './legendary.js';
 
-const SINGLE = ['tomato', 'carrot', 'ice', 'soda', 'chili', 'jelly', 'cookie', 'pineapple', 'banana'];
+const SINGLE = ['tomato', 'carrot', 'ice', 'soda', 'chili', 'jelly', 'cookie', 'pineapple', 'banana', 'cucumber'];
 const ROLL = ['cheese', 'watermelon'];
 const PELLET = ['grape', 'berry']; // projectile ids of the volley foods
 const THROWN = [...SINGLE, ...ROLL, 'grapes', 'blueberry']; // everything you throw, by hotbar id
 const WITH_PEEL = [...THROWN, 'peel'];
 // (0.49) Firm foods (cut clean, grate into shreds, bonk off a spoon) and soft ones (squash and splat):
 // the Knife, Spoon and Grater treat them differently. Everything else counts as soft.
-const FIRM = new Set(['carrot', 'cheese', 'cookie', 'ice', 'pineapple', 'chili']);
+const FIRM = new Set(['carrot', 'cheese', 'cookie', 'ice', 'pineapple', 'chili', 'cucumber']);
 // projectile id -> hotbar food
 const ROOT = { grape: 'grapes', berry: 'blueberry', melonchunk: 'watermelon', cheesechunk: 'cheese', bananaslice: 'banana', pinechunk: 'pineapple' };
 // Whole foods that are cut into a different kind of piece (a wheel can't be cut into wheels)
 const PIECE = { cheese: 'cheesechunk', watermelon: 'melonchunk', banana: 'bananaslice', pineapple: 'pinechunk' };
-const FX_OF = { tomato: 'tomato', carrot: 'carrot', ice: 'ice', soda: 'soda', chili: 'fire', jelly: 'jelly', cookie: 'crumb', pineapple: 'pine', banana: 'banana', cheese: 'cheese', watermelon: 'melon', melonchunk: 'melon', grape: 'grape', berry: 'berry', cheesechunk: 'cheese', bananaslice: 'banana', pinechunk: 'pine' };
-const TINT = { tomato: '#e8321f', carrot: '#ff8a1c', ice: '#bfe9ff', soda: '#8a4a22', chili: '#ff3d00', jelly: '#5fd35a', cookie: '#c98a4c', pineapple: '#f2c230', banana: '#ffe14a', cheese: '#ffc93c', watermelon: '#f25a6a', melonchunk: '#f25a6a', grape: '#8e3fae', berry: '#4a52c8', cheesechunk: '#ffc93c', bananaslice: '#ffe14a', pinechunk: '#f2c230' };
+const FX_OF = { cucumber: 'fire', tomato: 'tomato', carrot: 'carrot', ice: 'ice', soda: 'soda', chili: 'fire', jelly: 'jelly', cookie: 'crumb', pineapple: 'pine', banana: 'banana', cheese: 'cheese', watermelon: 'melon', melonchunk: 'melon', grape: 'grape', berry: 'berry', cheesechunk: 'cheese', bananaslice: 'banana', pinechunk: 'pine' };
+const TINT = { cucumber: '#3f9a3a', tomato: '#e8321f', carrot: '#ff8a1c', ice: '#bfe9ff', soda: '#8a4a22', chili: '#ff3d00', jelly: '#5fd35a', cookie: '#c98a4c', pineapple: '#f2c230', banana: '#ffe14a', cheese: '#ffc93c', watermelon: '#f25a6a', melonchunk: '#f25a6a', grape: '#8e3fae', berry: '#4a52c8', cheesechunk: '#ffc93c', bananaslice: '#ffe14a', pinechunk: '#f2c230' };
 // Mixer: which projectile's impact a second food adds
-const MIX_IMPACT = { tomato: 'tomato', carrot: 'carrot', ice: 'ice', soda: 'soda', chili: 'chili', cookie: 'cookie', jelly: 'jelly', grapes: 'grape', blueberry: 'berry', watermelon: 'melonchunk', cheese: 'cheesechunk', banana: 'bananaslice', pineapple: 'pinechunk' };
+const MIX_IMPACT = { cucumber: 'cucumber', tomato: 'tomato', carrot: 'carrot', ice: 'ice', soda: 'soda', chili: 'chili', cookie: 'cookie', jelly: 'jelly', grapes: 'grape', blueberry: 'berry', watermelon: 'melonchunk', cheese: 'cheesechunk', banana: 'bananaslice', pineapple: 'pinechunk' };
 
 export const UTENSILS = [
-  { id: 'knife', tip: '3 slices · cut through cheese shields', name: 'Knife', role: 'Rapid-Fire Chopper', color: '#ff5a3c', works: THROWN,
+  { id: 'knife', tip: '3 slices · hold to rapid-fire · cuts through cheese shields', name: 'Knife', role: 'Rapid-Fire Chopper', color: '#ff5a3c', works: THROWN,
     buff: 'Slices your food into a fan of 3 that flies far and cuts straight through cheese shields. Firm foods (carrot, cookie, ice, chili, pineapple, cheese) cut clean and hit harder. A cheese wheel or watermelon is diced into 5 mini balls that roll out in a spread (grapes and berries split in two).', trade: 'Uses 1 extra food per throw, and each slice or mini ball hits softer than a whole food.' },
   { id: 'ice-cream-machine', tip: 'Freezes on hit · leaves an ice patch', peelTip: 'Your peel lands on an ice patch', name: 'Ice Cream Machine', role: 'Cryo Converter', color: '#7fe3cf', works: WITH_PEEL,
     buff: 'Coats your food in soft-serve: it freezes whoever it hits and leaves an ice patch. A dropped peel gets an ice patch too.', trade: 'Takes half a second to churn, and the frozen shot flies slowly.' },
@@ -179,6 +179,10 @@ let WEB_MAT = null;
 // ---------------------------------------------------------------------------- launch helpers
 const clone = (o) => ({ ...o, pos: o.pos.clone(), vel: o.vel.clone() });
 const radiusOf = (o) => o.radius ?? FOODS[o.food]?.radius ?? 0.35;
+// (0.83) The Blender's spread: a crooked shot now and then (chance: base, else min), plus a bloom that grows
+// by `step` with each shot in quick succession (up to max), and drains `decay` shots' worth a second.
+// Angles in radians (0.07 is 4 degrees; max 0.3, 17).
+export const BLOOM = { chance: 0.35, base: 0.07, min: 0.012, step: 0.045, max: 0.3, decay: 2.5, auto: 0.3 };
 function jitter(v, s) {
   const L = v.length();
   v.x += rand(-s, s) * L; v.y += rand(-s, s) * L * 0.6; v.z += rand(-s, s) * L;
@@ -386,10 +390,21 @@ const RULES = {
   blender: {
     cost: 1,
     launch(o, a, rel, I) {
-      if (I.kind === 'pellet') { // a dead-straight juice jet
-        return [{ ...clone(o), vel: aimOf(a).setLength(o.vel.length() * 1.1), delay: rel.auto ? 0 : I.k * 0.045, x: { m: 0.9, sc: 0.85, ...(I.lead ? { sl: 1 } : {}) } }];
+      // (0.83) not dead-on any more: some shots go a little crooked, and shots in quick succession more and
+      // more so (the bloom builds with each, and settles when you stop for a moment): close up it still
+      // hits, at mid range it sprays
+      const s = a.uState, t = a.game.time;
+      if (I.k === 0 || rel.auto) {
+        s.bloom = Math.max(0, (s.bloom || 0) - (t - (s.bloomAt ?? t)) * BLOOM.decay) + (rel.auto ? BLOOM.auto : 1);
+        s.bloomAt = t;
+        const k = (Math.random() < BLOOM.chance ? BLOOM.base : BLOOM.min) + Math.min(BLOOM.max, Math.max(0, s.bloom - 1) * BLOOM.step);
+        s.crook = [(Math.random() * 2 - 1) * k, (Math.random() * 2 - 1) * k * 0.45];
       }
-      return pieces(o, a, 7, { m: 0.25, sc: 0.45, jit: 0.025, delay: 0.055, speed: 1.15, grav: 0.7, r: 0.6, x: { sl: 1 } });
+      const bend = (list) => { const [yw, pt] = s.crook || [0, 0]; for (const q of list) { q.vel.applyAxisAngle(_up, yw); q.vel.y += Math.hypot(q.vel.x, q.vel.z) * pt; } return list; };
+      if (I.kind === 'pellet') { // a juice jet
+        return bend([{ ...clone(o), vel: aimOf(a).setLength(o.vel.length() * 1.1), delay: rel.auto ? 0 : I.k * 0.045, x: { m: 0.9, sc: 0.85, ...(I.lead ? { sl: 1 } : {}) } }]);
+      }
+      return bend(pieces(o, a, 7, { m: 0.25, sc: 0.45, jit: 0.025, delay: 0.055, speed: 1.15, grav: 0.7, r: 0.6, x: { sl: 1 } }));
     },
     released(a, U) { a.surfaceSlow = 0.4; a.surfaceSlowUntil = U.game.time + 0.8; },
     post(p, hit, U) { if (p.x.sl && hit.world && hit.top) U.stampGround(hit.point, 1.6, 'slick', 3); },
@@ -775,6 +790,8 @@ export class Utensils {
     }
   }
 
+  // (0.83) the Knife: hold to rapid-fire (not a peel)
+  rapid(a, foodId) { return a.utensil === 'knife' && foodId !== 'peel' && this.works(a, foodId); }
   works(a, foodId) {
     const u = a.utensil && UTENSIL_BY_ID[a.utensil];
     return !!u && u.works.includes(foodId);

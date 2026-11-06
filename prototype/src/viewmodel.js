@@ -5,7 +5,7 @@ import { makeFoodMesh } from './foods.js';
 import { fpArmGeometry, FP_ARM_UP, FP_PALM_N, GRIP } from './human.js';
 import { makeUtensilMesh, utensilHold } from './utensil-models.js';
 
-const HELD_SCALE = { cheese: 0.55, watermelon: 0.5, carrot: 0.75, banana: 0.8, grapes: 0.7, blueberry: 0.8, pineapple: 0.7 };
+const HELD_SCALE = { cheese: 0.55, watermelon: 0.5, carrot: 0.75, banana: 0.8, grapes: 0.7, blueberry: 0.8, pineapple: 0.7, cucumber: 0.65 };
 
 export class ViewModel {
   constructor(camera) {

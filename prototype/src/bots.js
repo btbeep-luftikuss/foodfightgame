@@ -21,7 +21,7 @@ const RANGE = {
   carrot: [20, 70, 3.2], tomato: [6, 28, 2.6], ice: [5, 24, 2.3], soda: [5, 22, 2.5],
   banana: [5, 34, 2.1], cheese: [4, 20, 2.4], peel: [0, 7, 1.2],
   grapes: [2, 14, 2.6], chili: [6, 40, 2.5], cookie: [5, 30, 1.9], watermelon: [4, 22, 2.4],
-  pineapple: [6, 24, 2.4], jelly: [5, 22, 2.1], blueberry: [2, 35, 2.7],
+  pineapple: [6, 24, 2.4], jelly: [5, 22, 2.1], blueberry: [2, 35, 2.7], cucumber: [10, 40, 2.7], // (0.83: a rocket: never up close, its blast hurts you too)
 };
 
 // Bot difficulty (picked on the menu): how sharp, quick, far-sighted, trigger-happy and nimble bots are.
@@ -221,6 +221,7 @@ export class BotBrain {
         break;
       }
       case 'chili': if (t && d < 6.5) this.pendingAlt = true; break; // flamethrower range
+      case 'cucumber': if (t && d < 3.2 && Math.abs(dy) < 2) this.pendingAlt = true; break; // (0.83) close enough to swing the bat
       default: break;
     }
   }

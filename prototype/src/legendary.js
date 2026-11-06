@@ -80,8 +80,8 @@ const PIECE_OF = { grapes: 'grape', blueberry: 'berry', cheese: 'cheesechunk', w
 const ROOT_OF = { grape: 'grapes', berry: 'blueberry', melonchunk: 'watermelon', cheesechunk: 'cheese', bananaslice: 'banana', pinechunk: 'pineapple' };
 export const rootOf = (id) => ROOT_OF[id] || id;
 export const pieceOf = (id) => PIECE_OF[id] || id;
-const TINT = { tomato: '#e8321f', carrot: '#ff8a1c', ice: '#bfe9ff', soda: '#8a4a22', chili: '#ff3d00', jelly: '#5fd35a', cookie: '#c98a4c', pineapple: '#f2c230', banana: '#ffe14a', cheese: '#ffc93c', watermelon: '#f25a6a', grapes: '#8e3fae', blueberry: '#4a52c8' };
-const BURST = { tomato: 'tomato', carrot: 'carrot', ice: 'ice', soda: 'soda', chili: 'fire', jelly: 'jelly', cookie: 'crumb', pineapple: 'pine', banana: 'banana', cheese: 'cheese', watermelon: 'melon', grapes: 'grape', blueberry: 'berry' };
+const TINT = { cucumber: '#3f9a3a', tomato: '#e8321f', carrot: '#ff8a1c', ice: '#bfe9ff', soda: '#8a4a22', chili: '#ff3d00', jelly: '#5fd35a', cookie: '#c98a4c', pineapple: '#f2c230', banana: '#ffe14a', cheese: '#ffc93c', watermelon: '#f25a6a', grapes: '#8e3fae', blueberry: '#4a52c8' };
+const BURST = { cucumber: 'fire', tomato: 'tomato', carrot: 'carrot', ice: 'ice', soda: 'soda', chili: 'fire', jelly: 'jelly', cookie: 'crumb', pineapple: 'pine', banana: 'banana', cheese: 'cheese', watermelon: 'melon', grapes: 'grape', blueberry: 'berry' };
 const STAIN = { tomato: 'tomato', carrot: 'carrot', soda: 'soda', chili: 'chili', jelly: 'jelly', banana: 'banana', cheese: 'cheese', watermelon: 'melon', grapes: 'grape', blueberry: 'berry' };
 export const tintOf = (id) => TINT[rootOf(id)] || '#ffffff';
 export const burstOf = (id) => BURST[rootOf(id)] || 'dust';
@@ -101,6 +101,7 @@ const FLAVOR = {
   pineapple: (T) => T.addSticky(0.2, 2),
   jelly: (T) => T.applyHardCC('rooted', 0.6),
   blueberry: (T) => T.addSticky(0.1, 1.5),
+  cucumber: (T, d) => T.knock(push(d, 8, 3)), // (0.83)
 };
 const BEAM_MULT = { carrot: 1.15 }; // (a carrot beam is the sharpest)
 

@@ -223,6 +223,19 @@ const MAKERS = {
     return new THREE.Mesh(once(geo, 'pineChunk', () => new THREE.BoxGeometry(0.36, 0.3, 0.3)),
       once(mat, 'pineFlesh', () => new THREE.MeshPhysicalMaterial({ color: '#ffd23a', roughness: 0.3, clearcoat: 0.6, emissive: '#5a3a00', emissiveIntensity: 0.15 })));
   },
+  cucumber() { // (0.83) a long green cucumber with bumps, a pale end and a stub of stalk; its length along z
+    const g = new THREE.Group();
+    const skin = once(mat, 'cuke', () => new THREE.MeshStandardMaterial({ color: '#2f7d32', roughness: 0.5 }));
+    g.add(new THREE.Mesh(once(geo, 'cuke', () => new THREE.CapsuleGeometry(0.19, 0.8, 6, 16).rotateX(Math.PI / 2)), skin));
+    const bump = once(mat, 'cukeBump', () => new THREE.MeshStandardMaterial({ color: '#5aa83a', roughness: 0.6 }));
+    const bg = once(geo, 'cukeBump', () => new THREE.SphereGeometry(0.035, 6, 4));
+    for (let i = 0; i < 14; i++) { const b = new THREE.Mesh(bg, bump); const a = i * 2.4; b.position.set(Math.cos(a) * 0.185, Math.sin(a) * 0.185, -0.4 + (i / 13) * 0.8); g.add(b); }
+    const end = new THREE.Mesh(once(geo, 'cukeEnd', () => new THREE.SphereGeometry(0.12, 10, 8)), once(mat, 'cukeEnd', () => new THREE.MeshStandardMaterial({ color: '#c8e07a', roughness: 0.5 })));
+    end.position.z = 0.55; end.scale.set(1, 1, 0.5); g.add(end);
+    const stalk = new THREE.Mesh(once(geo, 'cukeStalk', () => new THREE.CylinderGeometry(0.03, 0.04, 0.12, 6).rotateX(Math.PI / 2)), once(mat, 'cukeStalk', () => new THREE.MeshStandardMaterial({ color: '#6a5a2a', roughness: 0.9 })));
+    stalk.position.z = -0.62; g.add(stalk);
+    return g;
+  },
   pineapple() {
     const g = new THREE.Group();
     const body = new THREE.Mesh(once(geo, 'pine', () => new THREE.SphereGeometry(0.38, 16, 12).scale(1, 1.35, 1)), once(mat, 'pine', () => {
@@ -317,6 +330,11 @@ const MAKERS = {
 // ---------------------------------------------------------------------------
 const UP_BIAS = new THREE.Vector3(0, 0.1, 0);
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _s = new THREE.Vector3();
+const SMOKE = [new THREE.Color('#d8d8d8'), new THREE.Color('#a8a8a8'), new THREE.Color('#ececec')]; // (0.83: the Cucumber)
+const CUKE_BITS = [new THREE.Color('#2f7d32'), new THREE.Color('#9be15d'), new THREE.Color('#e4f2b0')];
+const SWING = [new THREE.Color('#ffffff'), new THREE.Color('#e8f6ff')];
+const FIREBALL = [new THREE.Color('#ffb21a'), new THREE.Color('#ff6a00'), new THREE.Color('#ffe066')];
+const DARK_SMOKE = [new THREE.Color('#5a5a5a'), new THREE.Color('#7a7a7a'), new THREE.Color('#444444')];
 
 // (0.49) A carrot that hits a wall, a table or the floor sinks its tip in where it really met the
 // surface (the impact is found a step late, up to 0.45 m past or short of it), pointing the way it flew.
@@ -682,7 +700,7 @@ export const FOODS = {
 
   chili: {
     name: 'Chili Pepper', role: 'Homing · burn', maxStack: 3, give: 2, weight: 9,
-    profile: 'seek', charge: 0, speed: 32, recovery: 1.8, radius: 0.25, dmg: 15, verb: 'torched',
+    profile: 'seek', charge: 0, speed: 32, recovery: 1.8, radius: 0.25, dmg: 7, verb: 'torched',
     hint: 'Locks onto the Titan nearest your crosshair and sets them on fire. Water puts it out. Careful: 3 in 10 are so hot you catch fire too.',
     altName: 'Flamethrower', altLabel: 'Flamethrower: very close range; the flames stay burning on the ground (uses 1, 7 s)', altCd: 7,
     alt(a, game) { return game.abilities.flamethrower(a); },
@@ -696,7 +714,7 @@ export const FOODS = {
     },
     impact(p, hit, game) {
       if (hit.actor) {
-        game.damage(hit.actor, 15, p.owner, 'chili');
+        game.damage(hit.actor, 7, p.owner, 'chili'); // (0.83: was 15)
         hit.actor.burn(4);
         game.sfx.play('sizzle', hit.point);
       }
@@ -903,6 +921,71 @@ export const FOODS = {
     },
   },
 
+  // (0.83) The Cucumber: a rocket launcher. It flies straight (a touch of drop) at a medium speed, trailing smoke,
+  // and blows up big wherever it hits: everyone in the blast is hurt and thrown, you too if you're in it
+  // (half the damage: rocket jumps hurt). Its alt is a baseball-bat swing: whoever is right in front of you
+  // takes a hit and flies.
+  cucumber: {
+    name: 'Cucumber', role: 'Rocket launcher · bat', maxStack: 4, give: 2, weight: 7,
+    profile: 'line', charge: 0, speed: 30, recovery: 1.1, radius: 0.28, dmg: 45, verb: 'cucumbered',
+    ammo: () => 2 + Math.floor(Math.random() * 3),
+    hint: 'A rocket: a big blast where it hits that hurts you too if you\'re close, so keep your distance (or rocket-jump, carefully).',
+    altName: 'Bat Swing', altLabel: 'Bat Swing: swing it like a baseball bat: whoever is right in front of you takes a hit and goes flying (3 s)', altCd: 3,
+    blast: { r: 5.5, dmg: 45, force: 17, self: 0.5 },
+    release(a, c, game) {
+      const from = a.handPos();
+      const dir = a.isBot ? a.aimDir.clone() : _v.subVectors(a.aimPoint, from).normalize().clone();
+      game.projectiles.launch({ food: 'cucumber', owner: a, pos: from, vel: dir.multiplyScalar(this.speed), gravity: 0.12, radius: 0.28, orient: true, life: 5 });
+      a.consume(1);
+      game.sfx.play('whirr', a.pos, 1.1); game.sfx.play('boom', a.pos, 0.25);
+      game.fx.spray('puffs', from, 6, { speed: 2, up: 0.5, colors: SMOKE, size: 0.45, life: 0.5, grav: 0, drag: 3, grow: 1 });
+    },
+    fly(p, game, dt) { // a smoke trail and a little flame out of the back
+      if (Math.random() < dt * 45) game.fx.spray('puffs', p.pos, 1, { speed: 0.4, up: 0.3, colors: SMOKE, size: 0.32, life: 0.9, grav: -0.05, drag: 1.5, grow: 1.4 });
+      if (Math.random() < dt * 20) game.fx.burst('ember', p.pos, 0.25);
+    },
+    impact(p, hit, game) {
+      const B = this.blast, pt = hit.point;
+      if (hit.actor) game.damage(hit.actor, 10, p.owner, 'cucumber'); // (a direct hit: a little extra)
+      game.explode(pt, B.r, B.dmg, p.owner, 'cucumber', B.force, 1, B.self);
+      game.fx.burst('fire', pt, 2); game.fx.burst('jump', pt, 3);
+      game.fx.spray('puffs', _v.copy(pt).setY(pt.y + 1), 22, { speed: 7, up: 3, colors: FIREBALL, size: 1.3, life: 0.55, grav: -0.3, drag: 3.5, grow: 2.2 }); // (a fireball)
+      game.fx.spray('puffs', _v.copy(pt).setY(pt.y + 1.5), 16, { speed: 3.5, up: 3, colors: DARK_SMOKE, size: 1.2, life: 1.6, grav: -0.25, drag: 1.8, grow: 2 });
+      game.fx.spray('chunks', pt, 40, { speed: 12, up: 8, colors: CUKE_BITS, size: 0.18, life: 1.1 });
+      game.world.paintSplat(pt.x, pt.y, pt.z, 4, 'jelly');
+      game.abilities.wave?.(pt, B.r + 1, '#9be15d');
+      game.sfx.play('boom', pt, 1.3);
+      return true;
+    },
+    alt(a, game) {
+      if (!a.canControl?.()) return false;
+      const fwd = (a.isBot || !a.aimDir ? forwardOf(a.yaw, _s) : _s.set(a.aimDir.x, 0, a.aimDir.z)).normalize();
+      let hits = 0;
+      for (const o of game.actors) {
+        if (o === a || !o.alive || game.teammates(a, o)) continue;
+        _v.subVectors(o.pos, a.pos);
+        const dy = _v.y; _v.y = 0;
+        const d = _v.length();
+        if (d > 3.6 || Math.abs(dy) > 2.2 || (d > 0.7 && _v.normalize().dot(fwd) < 0.3)) continue;
+        hits++;
+        if (o.isRemote) { // online: their game takes the hit (and shows it)
+          if (game.net) game.abilities.send(a, 'bt', [game.net._peerOf(o), Math.round(fwd.x * 100) / 100, Math.round(fwd.z * 100) / 100]);
+        } else game.abilities.batHit(a, o, fwd);
+        game.fx.burst('jump', o.center(_v), 1.4);
+      }
+      // the swing: a sweep of air in front of you
+      for (let i = 0; i < 7; i++) {
+        const ang = -0.9 + i * 0.3, x = fwd.x * Math.cos(ang) - fwd.z * Math.sin(ang), z = fwd.z * Math.cos(ang) + fwd.x * Math.sin(ang);
+        game.fx.spray('puffs', _v.set(a.pos.x + x * 2, a.pos.y + 1.2, a.pos.z + z * 2), 1, { speed: 1, up: 0.2, colors: SWING, size: 0.35, life: 0.3, grav: 0, drag: 4, grow: 0.8 });
+      }
+      a.armT = 0.3;
+      game.sfx.play('whirr', a.pos, 1.2);
+      if (hits) { game.sfx.play('thud', a.pos, 1); game.sfx.play('boing', a.pos, 0.8); }
+      game.abilities.punch(a, { fov: hits ? 9 : 4, shake: hits ? 0.18 : 0.04, stop: hits ? 70 : 0, flash: hits ? '#7cd23a' : null, call: hits ? 'HOME RUN!' : null });
+      return true;
+    },
+  },
+
   jelly: {
     name: 'Jelly Cube', role: 'Root · trampoline', maxStack: 2, give: 1, weight: 8,
     profile: 'lob', charge: 0.2, speed: 24, recovery: 0.3, radius: 0.35, dmg: 12, verb: 'jellied',
@@ -940,7 +1023,7 @@ export const FOODS = {
 export const AMMO_MIN = 4, AMMO_MAX = 15, STACK_MAX = 99; // (0.28: stacks up to 99, blueberries 600)
 export const pickupAmmo = (id) => (FOODS[id].ammo ? FOODS[id].ammo() : rollAmmo());
 export const rollAmmo = () => AMMO_MIN + Math.floor(Math.random() * (AMMO_MAX - AMMO_MIN + 1));
-export const FOOD_IDS = ['tomato', 'banana', 'carrot', 'ice', 'soda', 'cheese', 'grapes', 'chili', 'cookie', 'watermelon', 'pineapple', 'jelly', 'blueberry'];
+export const FOOD_IDS = ['tomato', 'banana', 'carrot', 'ice', 'soda', 'cheese', 'grapes', 'chili', 'cookie', 'watermelon', 'pineapple', 'jelly', 'blueberry', 'cucumber']; // (0.83: the Cucumber, last so the others keep their numbers)
 
 // Food casts real shadows only when the shadow map updates every frame (High).
 let FOOD_SHADOWS = true;
@@ -997,7 +1080,7 @@ export function randomFoodId() {
 export const FEED_VERB = {
   tomato: "tomato'd", banana: 'boomeranged', peel: 'slipped up', carrot: 'sniped', ice: 'iced',
   soda: 'fizzed', cheese: 'rolled over', landmark: 'buried', grapes: 'grape-shot', chili: 'torched',
-  cookie: 'cookied', watermelon: 'flattened', pineapple: 'spiked', jelly: 'jellied', blueberry: 'berry-blasted',
+  cookie: 'cookied', watermelon: 'flattened', pineapple: 'spiked', jelly: 'jellied', blueberry: 'berry-blasted', cucumber: 'rocketed', bat: 'home-run batted',
   // the ultimate alts (0.31)
   tslam: 'tomato-slammed', storm: 'blizzarded', smash: 'melon-smashed', megajump: 'fizz-launched', juice: 'juiced',
   spikes: 'skewered', flames: 'flame-grilled', warp: 'carrot-warped',

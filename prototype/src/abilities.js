@@ -34,7 +34,7 @@ const col = (hex) => new THREE.Color(hex);
 // Ability colours (screen flashes, shockwaves, call-outs).
 export const ULT_COLOR = {
   tomato: '#ff3b2a', ice: '#8fdcff', watermelon: '#ff5a6e', soda: '#ffb347', grapes: '#b05be0',
-  pineapple: '#ffd23a', jelly: '#5fd35a', carrot: '#c77dff', blueberry: '#6f7bff', chili: '#ff7a1a',
+  pineapple: '#ffd23a', cucumber: '#7cd23a', jelly: '#5fd35a', carrot: '#c77dff', blueberry: '#6f7bff', chili: '#ff7a1a',
 };
 const FIRE = [col('#ff3d00'), col('#ff8a00'), col('#ffd000'), col('#ffb000')];
 const ICE = [col('#e8f8ff'), col('#aee4ff'), col('#ffffff')];
@@ -118,6 +118,16 @@ export class Abilities {
   // ------------------------------------------------------------------ small helpers
   isLocal(a) { return !!a && !a.isRemote && (a === this.game.player || a.isBot); }
   // An ability on my own Titan (or, hosting, one of my bots) tells the room.
+  // (0.83) A Cucumber bat swing connects: a hit and a home run (thrown far along the swing, and up).
+  batHit(a, t, dir) {
+    const g = this.game;
+    g.damage(t, 16, a, 'bat');
+    if (!t.alive) return;
+    t.knock(_v.set(dir.x * 26, 12, dir.z * 26));
+    if (!t.isRemote) t.knockUntil = g.time + 1.1; // (a long flight: no braking until they land)
+    g.floatText(t, 'HOME RUN!', 'crit');
+    g.fx.burst('jump', t.center(_c), 1.4);
+  }
   send(a, kind, data = []) {
     const net = this.game.net;
     if (!net || !a) return;
@@ -771,6 +781,11 @@ export class Abilities {
       case 'tc': this.trail(a, 'tp', 1.6); g.sfx.play('tpcharge', a.pos, 0.8); break;
       case 'tx': this.trail(a, 'tp', 0); break;
       case 'pn': g.utensils.panShock(a, P(), typeof d[3] === 'string' ? d[3] : 'tomato', true); break; // (0.44) a Pan slam
+      case 'bt': { // (0.83) a Cucumber bat swing hit one of my Titans
+        const t = typeof d[0] === 'string' ? g.net?._actorOf(d[0]) : null;
+        if (t && !t.isRemote && t.alive && t.pos.distanceTo(a.pos) < 8) this.batHit(a, t, D(1));
+        break;
+      }
       case 'tb': { // (0.44) a tomato dash bumped one of my Titans (no second tomato: no splat)
         const t = typeof d[0] === 'string' ? g.net?._actorOf(d[0]) : null;
         if (t && !t.isRemote && t.alive) { const v = D(1); g.damage(t, 8, a, 'tomato'); t.knock(v.set(v.x * 8, 4, v.z * 8)); }
