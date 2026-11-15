@@ -106,7 +106,7 @@ export class PotWars {
     this.setupUntil = g.time + SETUP; this.setup = true;
     this.raidAllAt = g.time + SETUP + 70; // after a while every bot goes raiding
     this.pots = TEAMS.slice(0, n).map((t, i) => ({ team: i, ...t, placed: false, alive: true, menu: [], carried: false, carrier: null, gunner: null, hp: POT_LIFE, maxHp: POT_LIFE, captures: 0, pos: new THREE.Vector3(), mesh: null, collider: null, spitAt: 0, flash: 0, firedAt: -9, label: null, out: false }));
-    this.menuAt = 0;
+    this.menuAt = 0; this.capped = new Set(); // (0.86) captures counted this match
     if (this.auth) for (const p of this.pots) p.menu = this._menuFor(p.team);
     const seen = new Array(n).fill(0);
     for (const a of g.actors) {
@@ -299,9 +299,10 @@ export class PotWars {
   // (host) Another player brought a pot home.
   remoteCapture(a, fromTeam) {
     const mine = this.pots[a.team], from = this.pots[fromTeam];
-    if (!mine || !from || !mine.alive || from.alive || !from.carried || a.capturedFrom === fromTeam + 100 * from.captures) return;
+    const key = `${a.id}:${fromTeam}:${from.captures}`; // (0.86: per match; on the Titan it outlived the round, and a capture next round was refused)
+    if (!mine || !from || !mine.alive || from.alive || !from.carried || this.capped?.has(key)) return;
     if (Math.hypot(a.pos.x - mine.pos.x, a.pos.z - mine.pos.z) > POT_R + 8) return;
-    a.capturedFrom = fromTeam + 100 * from.captures; // once per smashed pot
+    this.capped?.add(key); // once per smashed pot
     this.capture(mine, from, a);
   }
 

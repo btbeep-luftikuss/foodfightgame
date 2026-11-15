@@ -1,6 +1,7 @@
 // Surface State Grid (GDD section 12.2): a sparse 1 m grid of gameplay surface states
 // (slick, sticky...) written by "stamps", plus pooled zone meshes that show them.
 import * as THREE from 'three';
+import { soapClip, inSoap } from './stains.js';
 
 const CELL = 1;
 const key = (level, ix, iz) => level * 16777216 + (ix + 2048) * 4096 + (iz + 2048);
@@ -36,7 +37,7 @@ export class Surface {
       for (let iz = z0; iz <= z1; iz++) {
         const cx = (ix + 0.5) * CELL - x, cz = (iz + 0.5) * CELL - z;
         if (cx * cx + cz * cz > r2) continue;
-        this.cells.set(key(level, ix, iz), { state, until: now + duration, slow: opts.slow || 0, owner: opts.owner || null, y });
+        this.cells.set(key(level, ix, iz), { state, until: now + duration, slow: opts.slow || 0, owner: opts.owner || null, y, map: !!opts.map });
       }
     }
     if (opts.visual && ZONE_LOOKS[opts.visual]) this._addZone(x, y, z, radius, opts.visual, now, duration);
@@ -48,6 +49,7 @@ export class Surface {
     if (!c) return null;
     if (c.until < now) { this.cells.delete(k); return null; }
     if (Math.abs(c.y - y) > 1.6) return null; // stamped on a different surface height
+    if (!c.map && inSoap(x, z)) return null; // (0.86) the Soap Tide washed it off (a map's own spill stays)
     return c;
   }
 
@@ -74,7 +76,7 @@ export class Surface {
   puddle(x, y, z, r, look, now, duration) {
     let mesh = this.pool.pop();
     if (!mesh) {
-      mesh = new THREE.Mesh(this.geo, new THREE.MeshPhysicalMaterial({ transparent: true, depthWrite: false }));
+      mesh = new THREE.Mesh(this.geo, soapClip(new THREE.MeshPhysicalMaterial({ transparent: true, depthWrite: false }), 'soap-puddle'));
       mesh.receiveShadow = true;
       mesh.renderOrder = 2;
       this.scene.add(mesh);

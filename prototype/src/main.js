@@ -198,6 +198,12 @@ function boot() {
     b.classList.toggle('potact', !!act);
   }
   setInterval(potActionLabel, 200);
+  // The touch buttons a mode has (0.86: also at each online round's start: a room changes modes between rounds,
+  // and King of the Utensil's Drop button never showed online)
+  function modeButtons() {
+    $('tLadle').hidden = game.mode !== 'king'; $('tTurret').hidden = true;
+    $('tLadle').textContent = 'Drop'; // (0.54: King of the Utensil: drop the Legendary in hand)
+  }
   function enterPlay(lock = true) {
     closeStage(); // (0.78: the Locker's contents stay; they used to be hidden here for good: an empty Locker after a match)
     game.paused = false;
@@ -207,8 +213,7 @@ function boot() {
     hud.show(true);
     touch.hidden = !input.isTouch;
     // (0.57) Cooking Pot Wars on a touch screen: one action button does the sniff, the ladle and the turret (potAction)
-    $('tLadle').hidden = game.mode !== 'king'; $('tTurret').hidden = true;
-    $('tLadle').textContent = 'Drop'; // (0.54: King of the Utensil: drop the Legendary in hand)
+    modeButtons();
     potActionLabel();
     $('sb-open').hidden = game.mode !== 'sandbox'; $('sandbox').hidden = true; // (0.55: the Test World's tools)
     $('pause-lobby').hidden = !game.online; $('chatbar').hidden = true; // (0.68: the room lobby and chat, online)
@@ -1031,6 +1036,8 @@ function boot() {
       const nick = $('nick').value || 'Titan';
       // what I'd host with (if the room has no host yet); joiners take the room's settings
       await net.connect(lobby, code, nick, { map: mapId, mode: selMode, team: teamSize, bots: onlineBots, loadout: chefPick.length === 3 ? [...chefPick] : null, utensil: chefUtensil || null });
+      // (0.86) gave up waiting and went elsewhere (back to the menu, a match vs bots): don't pull them into the room now
+      if (playing || menu.hidden || document.querySelector('.screen[data-screen="online"]')?.hidden) { net.leave().catch(() => {}); return; }
       try { localStorage.setItem('tt-nick', nick); } catch { /* storage blocked */ }
       game.startOnline(net);
       net.onChat = (m) => { // (0.68) chat: in the lobby card, else in the feed
@@ -1214,7 +1221,7 @@ function boot() {
   // screen used to hide them and a new round (play again) never showed them again.
   const showTouch = () => { if (playing && input.isTouch && victory.hidden && pause.hidden && !game.highlights.playing && !game.spectator.active) touch.hidden = false; };
   game.onMatchEvent = (type, data) => {
-    if (type === 'start') { pay.due = !game.online; pay.kills = game.player?.kills || 0; $('end-coins').textContent = '+0'; $('end-receipt').textContent = ''; hideVictory(); if (game.online) sfx.play('ready', null, 0.7); showTouch(); }
+    if (type === 'start') { pay.due = !game.online; pay.kills = game.player?.kills || 0; $('end-coins').textContent = '+0'; $('end-receipt').textContent = ''; hideVictory(); if (game.online) sfx.play('ready', null, 0.7); showTouch(); modeButtons(); }
     if (type === 'joined') { pay.due = true; pay.kills = game.player?.kills || 0; }
     if (type === 'roundOver') { // online: the round ended; coins for it if I played
       if (!input.isTouch) input.exitLock(); // (0.69: the mouse is free for the vote: play again or a new vote)
@@ -1239,7 +1246,8 @@ function boot() {
       $('end-place').textContent = `#${data.placement}`;
       payOut(data.placement, false);
       $('spectate').hidden = false;
-      setTimeout(() => { if (!game.highlights.playing) showEndCard(); }, 1400);
+      const n = game.matchNo; // (0.86) only if it's still that match (Play again in the spectator bar starts another)
+      setTimeout(() => { if (game.matchNo === n && playing && !game.highlights.playing) showEndCard(); }, 1400);
     }
     if (type === 'over') {
       const won = data.won ?? (data.winner && data.winner === game.player);
@@ -1251,7 +1259,8 @@ function boot() {
       const r = payOut(won ? 1 : game.player.placement || 2, !!won);
       $('spectate').hidden = true;
       // (0.70) the winner screen first; then you choose: the match's highlights, or straight to the card
-      setTimeout(() => { if (playing && !game.highlights.playing) { end.hidden = true; showVictory({ ...data, won: !!won }, r); } }, 1400);
+      const n = game.matchNo;
+      setTimeout(() => { if (game.matchNo === n && playing && !game.highlights.playing) { end.hidden = true; showVictory({ ...data, won: !!won }, r); } }, 1400);
     }
   };
 
@@ -1446,6 +1455,7 @@ function boot() {
     <label class="field" for="${presetId}">Preset <select id="${presetId}" data-gfx="preset"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
     <label class="field">Ray tracing <select data-gfx="rt">${Object.entries(RT_LABEL).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
     <label class="field">Resolution <select data-gfx="res"><option value="auto">Auto (keeps it smooth)</option><option value="50">50%</option><option value="75">75%</option><option value="100">100%</option><option value="125">125% (sharpest)</option></select></label>
+    <label class="field">Camera effects <select data-camfx><option value="full">Full (shake, kicks, leans)</option><option value="reduced">Reduced</option><option value="off">Off (a still camera)</option></select></label>
     <label class="field">Particle effects <select data-gfx="particles"><option value="auto">Preset</option><option value="off">Off</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="ultra">Ultra</option></select></label>
     <p class="gfx-note">Ray tracing is heavy: it traces reflections and soft shadows on screen every frame. Best on a strong computer; on phones, try Reflections with Resolution at 75%.</p>`;
   $('gfx-menu').innerHTML = gfxPanel('quality');
@@ -1455,6 +1465,18 @@ function boot() {
   for (const el of document.querySelectorAll('[data-ctl]')) el.value = controlsPref();
   // Online connection (0.45): takes effect at once, also in a room
   for (const el of document.querySelectorAll('[data-netmode]')) el.value = netPref();
+  // Camera effects (0.86): how much the view shakes, kicks and leans (camfx.js); at once, remembered
+  const CAMFX = { full: 1, reduced: 0.4, off: 0 };
+  let camPref = 'full';
+  try { const v = localStorage.getItem('tt-camfx'); if (v in CAMFX) camPref = v; } catch { /* storage blocked */ }
+  const applyCamPref = () => { game.camfx.level = CAMFX[camPref]; for (const el of document.querySelectorAll('[data-camfx]')) el.value = camPref; };
+  applyCamPref();
+  document.addEventListener('change', (e) => {
+    if (!e.target.matches?.('[data-camfx]') || !(e.target.value in CAMFX)) return;
+    camPref = e.target.value;
+    try { localStorage.setItem('tt-camfx', camPref); } catch { /* storage blocked */ }
+    applyCamPref();
+  });
   document.addEventListener('change', (e) => {
     if (!e.target.matches?.('[data-netmode]')) return;
     setNetPref(e.target.value);

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G, COUNTER, FLOOR_Y, addBox, addCyl, clearColliders, groundHeight, rand, clamp, withSeed } from './core.js';
-import { Stains } from './stains.js';
+import { Stains, setSoap } from './stains.js';
 import { buildBackyard, BACKYARD_REGIONS } from './map-backyard.js';
 import { buildTestWorld, TEST_REGIONS } from './map-test.js';
 import { buildRestaurant, RESTAURANT_REGIONS } from './map-restaurant.js';
@@ -1180,6 +1180,7 @@ export class World {
     this.tideMesh.scale.set(Math.max(r, 0.1), 60, Math.max(r, 0.1));
     this.tideMesh.material.uniforms.uRadius.value = r;
     this.tideMesh.visible = r < 300;
+    setSoap(x, z, r); // (0.86) the stains and puddles it covers are washed off, to the pixel
   }
 
   // Sunbeam through the window and floating dust (Medium and High only).

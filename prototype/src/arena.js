@@ -59,6 +59,7 @@ export class Arena {
     this.clear();
     this.active = ARENA_MODES.has(mode); this.mode = this.active ? mode : null;
     this.score = [0, 0]; this.t = 0; this.over = false; this.sudden = false; this.legendsIn = false; this.missing.clear();
+    this.inPlay = new Set(); // (0.86) this match's Legendaries (last match's used to land in the middle too)
     this.rot = { roles: false, zone: null, prog: 0, claimed: 0, idx: 0, winner: null, assigned: [], state: 0, tickAt: 0, seenClaimed: 0, seenIdx: 0, pickAt: 0 };
     for (const a of this.game.actors) { a.rotten = false; if (a.ownColor && a.team == null) a.color = a.ownColor; }
     this._zoneMesh(false);

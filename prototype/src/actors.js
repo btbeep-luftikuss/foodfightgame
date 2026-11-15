@@ -575,7 +575,9 @@ export class Actor {
     const U = this.game.utensils;
     U.beginRelease(this, food, this.chargeT);
     this.spawnShieldUntil = 0; // (0.54: throwing ends your spawn protection)
+    const fid = this.inv[this.sel]?.id; // (before it's used up)
     food.release(this, c, this.game);
+    if (this === this.game.player && fid) this.game.camfx.throwKick(fid, c, !!food.auto || U.rapid(this, fid)); // (0.86) the throw moves the view a little
     this.uLock = 0;
     const rec = U.endRelease(this);
     this.charging = false; this.chargeT = 0; this.releaseQueued = false;

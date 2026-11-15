@@ -31,6 +31,30 @@ const LOOKS = {
   cucumber: ['rgba(120,190,70,0.62)', 'rgba(165,215,105,0.5)'], // (0.84: pickle juice)
 };
 const KINDS = Object.keys(LOOKS);
+
+// (0.86) The Soap Tide washes food off where it covers it, to the pixel: the part of a stain (or a puddle)
+// outside the safe circle isn't drawn, so a splat half under the soap is half gone, cut along the soap's
+// edge. The circles only shrink, each inside the last, so what's washed stays washed until the next round's
+// clean kitchen (a highlight reel shows the tide, and so the stains, of the moment it replays).
+// x, z: the circle's centre; y: its radius (huge: no tide).
+export const SOAP = { value: new THREE.Vector3(0, 0, 1e5) };
+export function setSoap(x, z, r) { SOAP.value.set(x, z, r >= 300 ? 1e5 : Math.max(0, r)); }
+export const inSoap = (x, z) => SOAP.value.z < 1e4 && Math.hypot(x - SOAP.value.x, z - SOAP.value.y) > SOAP.value.z;
+// Patch a lit material (Standard/Physical, and the Phong/Lambert stand-ins of the low settings) to wash out.
+export function soapClip(mat, key = 'soap') {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uSoap = SOAP;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vSoapXZ;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\n  vSoapXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uSoap;\nvarying vec2 vSoapXZ;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+  { float e = uSoap.z - length(vSoapXZ - uSoap.xy); // metres inside the safe circle (below 0: under the soap)
+    diffuseColor.a *= clamp(e / max(fwidth(e), 1e-4) + 0.5, 0.0, 1.0); // a clean cut, smooth to the pixel
+    if (diffuseColor.a < 0.003) discard; }`);
+  };
+  mat.customProgramCacheKey = () => key;
+  return mat;
+}
 const VARIANTS = 2;
 const GRID = 5;          // atlas cells per side (25 >= 11 kinds x 2 looks)
 const REACH = 1.9;       // a splat of radius r reaches 1.9 r with its streaks
@@ -116,8 +140,8 @@ export class Stains {
     g.setDrawRange(0, 0);
     this.geo = g;
     this.atlas = buildAtlas((quality.splatRes || 1536) <= 1024 ? 1024 : 2048);
-    const mat = new THREE.MeshStandardMaterial({ map: this.atlas, transparent: true, roughness: 0.5, envMapIntensity: 0.35, depthWrite: false,
-      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+    const mat = soapClip(new THREE.MeshStandardMaterial({ map: this.atlas, transparent: true, roughness: 0.5, envMapIntensity: 0.35, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }), 'soap-stains');
     this.mesh = new THREE.Mesh(g, mat);
     this.mesh.frustumCulled = false; this.mesh.renderOrder = 1; this.mesh.receiveShadow = true;
     this.mesh.matrixAutoUpdate = false;
@@ -299,8 +323,15 @@ export class Stains {
     this.flushT += dt;
     if (this.dirtyTo < 0 || this.flushT < 0.05) return;
     for (const [name, n] of [['position', 3], ['normal', 3], ['uv', 2]]) {
-      const a = this.geo.attributes[name];
-      a.clearUpdateRanges();
+      const a = this.geo.attributes[name], R = a.updateRanges;
+      // (0.86) added to what's waiting to go up, not instead of it (three.js clears the list once it has
+      // uploaded): a slow device runs up to 3 steps a drawn frame, and a second flush before the draw used
+      // to drop the first one's stains, which then never showed. (Many waiting: one span covers them.)
+      if (R.length >= 16) {
+        let lo = Infinity, hi = -1;
+        for (const r of R) { lo = Math.min(lo, r.start); hi = Math.max(hi, r.start + r.count); }
+        a.clearUpdateRanges(); a.addUpdateRange(lo, hi - lo);
+      }
       a.addUpdateRange(this.dirtyFrom * n, (this.dirtyTo - this.dirtyFrom) * n);
       a.needsUpdate = true;
     }
@@ -308,6 +339,7 @@ export class Stains {
   }
   clear() {
     this.queue.length = 0;
+    for (const name of ['position', 'normal', 'uv']) this.geo.attributes[name].clearUpdateRanges();
     this.head = 0; this.used = 0; this.wrapped = false;
     this.geo.setDrawRange(0, 0);
     this.dirtyFrom = Infinity; this.dirtyTo = -1;

@@ -23,6 +23,7 @@ import { FOODS, FOOD_IDS, FEED_VERB, SHOOTER_DECIDES, lobSpeed, lobDir, randomFo
 import { UTENSIL_BY_ID } from './utensils.js';
 import { Arena, ARENA_MODES, ROT, ROT_SIDES } from './arena.js';
 import { Sandbox } from './sandbox.js';
+import { CamFX } from './camfx.js';
 
 const PLAYER_COLOR = '#ff9a1f';
 const BOT_COLORS = ['#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#f2f2f2', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5'];
@@ -84,6 +85,9 @@ export class Game {
     this.player = null;
     this.tide = { x: 0, z: 0, r: 330, dps: 2, phase: 0, mode: 'wait', t: 99, phases: TIDE_PHASES };
     this.hitStopUntil = 0;
+    this.slowUntil = 0; this.slowLen = 1; this.slowMin = 1; // (0.86) a moment of slow motion on a splat (offline)
+    this.camfx = new CamFX(this); // (0.86) camera feel: shake, kicks, leans (camfx.js)
+    this.camBase = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() }; // the camera before them: the aim
     this.camYaw = 0; this.camPivotY = 0; this.camDist = 5.6;
     this.firstPerson = true; // V toggles
     this.viewModel = new ViewModel(camera);
@@ -126,11 +130,12 @@ export class Game {
   // and shares them; everyone else follows. Since 0.24 you pick 3 foods and a utensil after joining
   // and drop in with them (or only watch); knocked-out players watch until the next round.
   startOnline(net) {
+    this.matchNo = (this.matchNo || 0) + 1;
     this.net = net; this.online = true;
     this.highlights.stop(); this.highlights.stopRecording(); // (each round is recorded, from its start)
     this.pots.clear(); this.teamSize = 1; this.autoTeam = null;
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear(); this.abilities.reset();
-    this.world.resetRound(); this.hud.clearFeed(); this.brains.clear(); this.utensils.reset(); this.slickAt = 0;
+    this.world.resetRound(); this.camfx.reset(); this.slowUntil = 0; this.hud.clearFeed(); this.brains.clear(); this.utensils.reset(); this.slickAt = 0;
     for (const a of this.botActors.slice(1)) { a.alive = false; a.hide(); }
     this.actors = [this.botActors[0]];
     this.player = this.botActors[0];
@@ -165,6 +170,7 @@ export class Game {
     this.round = { id: -1, state: 'lobby', t: 0, started: 0, winner: '', joined: false };
     this.state = 'lobby'; this.stateT = 0;
     net.ready = false; net.lobbyAt = null; net.startReq = false; net.matchSettings = null; net.teamMap = null;
+    net.rematch = null; for (const pr of net.proxies.values()) pr.rematch = null; // (0.86) rounds count from 0 again: last match's votes would end the next one's first round
     this.spectator.reset();
     this.hud.banner('Back in the lobby', 'Vote, pick your team, ready up', 2.6);
     this.onMatchEvent?.('lobby');
@@ -193,6 +199,7 @@ export class Game {
   beginRound(id, rs) {
     this.highlights.stop(); // (a reel still playing ends: a new round, maybe a new map)
     if (this.net.isHost) this.net.matchSettings = { ...rs }; // (0.68: this round's, whatever the votes say meanwhile)
+    this.net.rematch = null; // (0.86) my vote was for the round before
     if (rs.map) this.setMap(rs.map);
     this.mode = cleanMode(rs.mode);
     this.teamSize = cleanSize(rs.team, this.mode);
@@ -200,7 +207,7 @@ export class Game {
     this.round = { id, state: 'drop', t: 0, started: 0, winner: '', joined: false, fresh: false, idle: 0, playAt: 0, score: [0, 0] };
     this.arena.start(this.mode); // (first: what the resets share goes out as this round's)
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear(); this.abilities.reset();
-    this.world.resetRound(); this.utensils.reset(); this.slickAt = 0;
+    this.world.resetRound(); this.camfx.reset(); this.slowUntil = 0; this.utensils.reset(); this.slickAt = 0;
     for (const z of this.spikes) this.scene.remove(z.group);
     this.spikes.length = 0;
     this.state = 'drop'; this.stateT = 0; this.winner = null;
@@ -391,6 +398,11 @@ export class Game {
     this.state = 'over';
     this._showRoundOver(w, fresh, tName);
   }
+  // (0.86) Online: the host left mid-game and I host now; their bots left with them: a fresh round in 3 s.
+  hostTookOver() {
+    Object.assign(this.round, { state: 'over', t: OVER_FOR - 3, winner: '', fresh: true });
+    this.state = 'over';
+  }
   // (0.38) Someone in the room (me too) is watching the round's highlight reel.
   watchingReel() {
     return !!this.highlights.playing?.live || [...(this.net?.proxies.values() || [])].some((pr) => pr.watching);
@@ -460,7 +472,8 @@ export class Game {
     if (this.net?.isHost) { R.state = 'over'; R.t = 0; R.winner = win; R.fresh = false; }
     this.state = 'over';
     this.highlights.onOver();
-    const won = !!win && (this.arena.squads ? TEAMS[P?.team]?.name === win : win === P?.name);
+    const won = !!win && (this.arena.squads ? TEAMS[P?.team]?.name === win
+      : win === P?.name && (top?.actor === P || !rank.some((r) => r.actor !== P && r.name === win))); // (0.86: two "Titan"s both won)
     const place = Math.max(1, rank.findIndex((r) => (this.arena.squads ? r.team === P?.team : r.actor === P)) + 1);
     this.onMatchEvent?.('roundOver', { won, placement: won ? 1 : this.arena.squads ? 2 : place, winner: this.arena.squads ? null : top?.actor || null, team: this.arena.squads && win ? win : null, draw: !win }); // (0.70: for the winner screen)
     const sc = this.arena.squads ? `${rank[0].score}–${rank[1].score}` : `${top?.score ?? 0} splats`;
@@ -606,10 +619,17 @@ export class Game {
   }
 
   aliveCount() { return this.actors.filter((a) => a.alive).length; }
+  // (0.86) A moment of slow motion: `len` seconds of real time, from `min` of full speed easing back up.
+  // Only offline (online the match goes on without you); the hit-stop of a heavy hit still comes first.
+  slowMo(len, min) {
+    if (this.online) return;
+    this.slowUntil = performance.now() + len * 1000; this.slowLen = len * 1000; this.slowMin = min;
+  }
 
   // opts.mode 'chef' = Chef's Choice: every Titan brings 3 foods with endless ammo and no food spawns.
   // opts.team: team size (1 Solo, 2 Duos, 3 Trios, 4 Squads); opts.myTeam: the team you picked (-1: any).
   newMatch(withPlayer, opts = {}) {
+    this.matchNo = (this.matchNo || 0) + 1; // (0.86) which match a late timer belongs to
     this.highlights.stop(); // (a reel playing ends first)
     this.mode = cleanMode(opts.mode);
     this.teamSize = withPlayer || ARENA_MODES.has(this.mode) ? cleanSize(opts.team, this.mode) : 1;
@@ -620,7 +640,7 @@ export class Game {
     const chef = this.mode === 'chef';
     this.actors = this.botActors;
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear(); this.abilities.reset();
-    this.world.resetRound();
+    this.world.resetRound(); this.camfx.reset(); this.slowUntil = 0;
     this.hud.clearFeed();
     this.utensils.reset();
     this.slickAt = 0;
@@ -703,6 +723,7 @@ export class Game {
         this.hud.float(target.headPos(_c).setY(target.pos.y + 2.3), Math.round(amount), opts.head ? 'crit' : 'dmg');
         this.hud.hitmarker(opts.head, false);
         this.sfx.play(opts.head ? 'headshot' : 'hit', null, 0.9);
+        this.camfx.hitConfirm(amount, opts.head);
       }
       return amount;
     }
@@ -728,10 +749,14 @@ export class Game {
       this.hud.hitmarker(opts.head, target.hp <= 0);
       this.sfx.play(opts.head ? 'headshot' : 'hit', null, 0.9);
       if (amt >= 35) this.hitStopUntil = performance.now() + 45;
+      if (target.hp > 0) this.camfx.hitConfirm(amt, opts.head); // (a splat gets its own punch: kill())
     }
     if (target === this.player) {
       this.hud.hurt();
-      if (!ENV.has(foodId) || amt > 4) this.fx.shake(Math.min(0.45, amt / 70));
+      if (!ENV.has(foodId) || amt > 4) {
+        this.fx.shake(Math.min(0.45, amt / 70));
+        this.camfx.hurt(amt, attacker && attacker !== target ? attacker.pos : null); // (0.86) knocked away from the thrower
+      }
     }
     if (target.hp <= 0) this.kill(target, attacker, foodId);
     return amt;
@@ -797,7 +822,9 @@ export class Game {
       a.knock(_d.multiplyScalar(force * k * (a === owner ? 0.9 : 1) * Math.min(1, Math.sqrt(this.dmgScale)))); // small utensil pieces push less
     }
     const camD = this.camera.position.distanceTo(point);
-    this.fx.shake(clamp(0.6 - camD / 60, 0, 0.6) * (owner && owner === this.player ? ownShake : 1));
+    const own = owner && owner === this.player ? ownShake : 1;
+    this.fx.shake(clamp(0.6 - camD / 60, 0, 0.6) * own);
+    if (this.player?.alive) this.camfx.blast(point, clamp(1 - camD / 22, 0, 1) * Math.min(1, r / 4) * own); // (0.86) pushed away from it
   }
 
   _inFront(a, point) {
@@ -838,6 +865,13 @@ export class Game {
     if (!killer && this.time - victim.lastHitAt < 6 && victim.lastHitBy !== victim) killer = victim.lastHitBy;
     if (killer) killer.kills++;
     this.highlights.onKill(victim, killer, foodId);
+    // (0.86) a splat you land: the lens punches in, and offline the moment slows down (the last one longest);
+    // your own splat slows it too
+    if (killer === this.player && victim !== this.player) {
+      const last = !this.online && !this.sandbox.active && !this.arena.active && !this.pots.active && sidesLeft(this) <= 1; // (the splat that wins it)
+      this.camfx.splat(last);
+      if (!this.online) this.slowMo(last ? 0.9 : 0.4, last ? 0.2 : 0.35);
+    } else if (victim === this.player && !this.online && !this.sandbox.active) this.slowMo(0.6, 0.3);
     victim.koBy = killer; // the spectator camera moves on to them
     victim.placement = this.aliveCount() + 1;
     const c = victim.center(_c).clone();
@@ -931,6 +965,7 @@ export class Game {
       this.player.kills++;
       this.hud.banner('Splat!', `${esc(victim.name)} is out`, 1.6);
       this.sfx.play('headshot', null, 0.8);
+      this.camfx.splat(false); // (0.86; online the match can't slow down for you)
     }
   }
 
@@ -975,7 +1010,9 @@ export class Game {
     if (reel && !reel.live) { reel.update(realDt); return; } // (0.36) a highlight reel: the match waits
     reel?.unpose(); // (0.38) online the match goes on under the reel: its own state back before it steps
     let total = this.paused ? 0 : Math.min(realDt, 0.1);
-    if (performance.now() < this.hitStopUntil) total *= 0.08; // local hit-stop on heavy hits
+    const nowMs = performance.now();
+    if (nowMs < this.hitStopUntil) total *= 0.08; // local hit-stop on heavy hits
+    else if (nowMs < this.slowUntil) { const k = 1 - (this.slowUntil - nowMs) / this.slowLen; total *= lerp(this.slowMin, 1, k * k); } // (0.86) easing back to full speed
     // Up to 3 fixed substeps of <= 1/30 s, so a slow device plays at normal speed.
     const steps = Math.min(3, Math.max(1, Math.ceil(total * 30 - 1e-6)));
     const dt = total / steps;
@@ -1040,7 +1077,7 @@ export class Game {
     this.utensils.update(dt);
     if (this.time >= (this.slickAt || 0)) { // permanent slippery patches (the cracked egg)
       this.slickAt = this.time + 4;
-      for (const s of this.world.slickSpots) this.surface.stamp(s.x, s.y, s.z, s.r, 'slick', 5, this.time);
+      for (const s of this.world.slickSpots) this.surface.stamp(s.x, s.y, s.z, s.r, 'slick', 5, this.time, { map: true });
     }
     this.surface.update(dt, this.time);
     this._spikeStep(dt);
@@ -1104,8 +1141,8 @@ export class Game {
   }
 
   _playerAim() {
-    const p = this.player, cam = this.camera;
-    cam.getWorldDirection(_d);
+    const p = this.player, cam = this.camBase; // (0.86) the camera as placed, before any shake or kick
+    _d.set(0, 0, -1).applyQuaternion(cam.quaternion);
     const o = _o.copy(cam.position).addScaledVector(_d, this.camDist * 0.95);
     let t = raycastWorld(o, _d, 320);
     for (const a of this.actors) {
@@ -1139,7 +1176,7 @@ export class Game {
       const bob = p.onGround && speed > 0.5 ? Math.abs(Math.sin(p.walkPhase)) * 0.06 * Math.min(1.5, speed / 6) : 0;
       const eyeY = p.isTripped() ? 0.5 : 1.72; // the Titan's eyes
       cam.position.set(p.pos.x, this.camPivotY + eyeY + bob, p.pos.z);
-      cam.rotation.set(this.input.pitch, this.input.yaw, p.dashT > 0 ? -0.03 : 0, 'YXZ');
+      cam.rotation.set(this.input.pitch, this.input.yaw, 0, 'YXZ'); // (0.86: the dash's roll is a kick now: camfx.js)
     } else if (p.alive) {
       const zf = p.charging ? p.selectedFood() : null, zoom = zf?.zoom ? clamp(p.chargeT / zf.charge, 0, 1) * zf.zoom : 0;
       fov = lerp(70, 30, zoom);
@@ -1163,11 +1200,11 @@ export class Game {
     } else {
       fov = this.spectator.camera(dt, cam); // cinematic, overview or following a Titan
     }
-    if (this.fx.shakeAmt > 0) {
-      const s = this.fx.shakeAmt * 0.25;
-      cam.position.x += rand(-s, s); cam.position.y += rand(-s, s); cam.position.z += rand(-s, s);
-    }
     const fp = !!(p && p.alive && this.firstPerson && this.state !== 'menu');
+    // (0.86) the aim is the camera as placed; then the feel on top: smooth shake, kicks, leans (camfx.js)
+    this.camBase.position.copy(cam.position); this.camBase.quaternion.copy(cam.quaternion);
+    this.camfx.update(dt, !!(p && p.alive && this.state !== 'menu'));
+    if (p && this.state !== 'menu') fov += this.camfx.apply(cam, this.fx.shakeAmt, fp);
     if (p) { if (p.alive) p.root.visible = !fp; p.fpCam = fp ? cam : null; if (fp) p.glint.visible = false; }
     this.viewModel.update(dt, p || this.actors[0], fp);
     fov += this.fovKick; this.fovKick = damp(this.fovKick, 0, 5, dt); // big moves punch the view

@@ -595,7 +595,7 @@ export const FOODS = {
     impact(p, hit, game) {
       const pt = hit.point, c = p.charge;
       const dmg = 20 + 20 * c, r = 3 + 1.5 * c, force = 12 + 8 * c;
-      game.explode(pt, r, dmg, p.owner, 'soda', force, hit.actor);
+      game.explode(pt, r, dmg, p.owner, 'soda', force); // (0.86: it passed the Titan it hit as the shake, which broke screen shake for good)
       stampAtGround(game, pt, 5.5, 'sticky', 6, { slow: 0.3, visual: 'soda' });
       game.world.paintSplat(pt.x, pt.y, pt.z, 5, 'soda');
       game.fx.burst('soda', pt, 0.8 + 0.5 * c);

@@ -63,6 +63,30 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.86: the soap washes splats off exactly, a camera with feel, and 12 bugs fixed** (`src/stains.js`, `src/surface.js`, `src/world.js`, `src/camfx.js` (new), `src/game.js`, `src/actors.js`, `src/fx.js`, `src/foods.js`, `src/main.js`, `src/input.js`, `src/arena.js`, `src/potwars.js`, `src/net.js`)
+
+- **The Soap Tide washes food off, to the pixel:** whatever part of a splat lies outside the safe circle is gone, cut cleanly along the soap's edge, so a splat half under the soap is half erased (walls and counters too). The puddles (soda, melted cheese, ice rinks, Juice Balls) wash off the same way, and where they're washed they no longer slow you or slide you (a map's own spills stay). The circles only shrink, each inside the last, so what's washed stays washed until the next round; a highlight reel shows the stains as they were at its moment. (In the splat shader: a clean, anti-aliased cut, no extra cost.)
+- **Camera effects** (`src/camfx.js`), layered on the camera after it's placed, so **your aim never moves** (measured: the aim follows the steady camera every frame, through the heaviest shake):
+  - **Smooth shake:** hits, blasts and big moves shake the view with layered waves, a little turn, roll and move (it used to be random jumps of the camera's position).
+  - **Kicks on springs** that overshoot a touch and settle: a throw lunges the view after the food, more for heavy foods and full charges, barely for rapid fire (a cucumber rocket or a carrot shot snaps it back instead); a hit you land thumps the lens; a hit you take knocks the view away from whoever threw it; a blast pushes it away; a hard landing dips it (a jump a little, a drop from the sky a lot); a dash rolls into it.
+  - **Leans:** a slight roll into a strafe; the lens opens up when you fly fast (knocked flying, a jump pad, a Mega Jump).
+  - **Splats you land:** the lens punches in and the view rolls; offline the moment goes into slow motion (a third of the speed, easing back over 0.4 s; the splat that wins the match longest, 0.9 s; your own splat too). Online the match can't wait for you, so no slow motion there.
+  - **Settings, Camera effects:** Full, Reduced or Off (a still camera), remembered.
+- **Bugs fixed:**
+  - Some splats never showed, mostly on slower devices: the game runs up to 3 steps a frame there, and a second upload of new stains before the frame was drawn replaced the first one's.
+  - A soda can that hit someone directly turned screen shake off for the rest of the session (since 0.57 it passed the Titan it hit where the shake strength goes).
+  - Online, after a "New vote", the next match's first round ended almost at once and went back to the lobby: rounds count from 0 again, so the old votes counted again.
+  - V dashed as well as switching the view (C is the dash).
+  - King of the Utensil: each later match dropped the previous matches' Legendaries too, up to all 6.
+  - Online, a slow join that finished after you'd gone back (or started a match vs bots) pulled you into the room anyway; now it's cancelled.
+  - Cooking Pot Wars online: bringing the same team's pot home again in a later round was refused by the host (and the pot came back 3 s later).
+  - On touch screens, King of the Utensil's Drop button never showed online.
+  - Online, when the host left mid-match, the new host played the lobby's votes instead of the match (with "Surprise me", on a different map from everyone else), and "new round in 3 s" took 9.
+  - Pressing Play within 1.4 s of being splatted: the old match's end card or winner screen popped up over the new match (and hid the touch controls).
+  - King of the Utensil online: two players with the same name both won.
+  - A player's name in the "older/newer copy of the game" banner went into the page unescaped.
+- NET_VERSION 78.
+
 **Version 0.85: the Cucumber flies straight, charges, swings, and looks the part** (`src/foods.js`, `src/viewmodel.js`, `src/human.js`, `src/actors.js`, `src/game.js`, `src/abilities.js`, `src/main.js`)
 
 - **Dead straight:** no drop at all any more; it goes exactly where you aim (and bots aim at it that way).

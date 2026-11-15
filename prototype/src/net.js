@@ -75,6 +75,8 @@ import { TEAMS, cleanSize } from './teams.js';
 import { ROT } from './arena.js';
 import { p2pLobby } from './p2p.js';
 
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
 const COLORS = ['#ff9a1f', '#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5', '#f2f2f2'];
 const FLAG = { charging: 1, shield: 2, frozen: 4, rooted: 8, tripped: 16, burning: 32, wet: 64, gliding: 128, eating: 256, dashing: 512, juiced: 1024, ground: 2048, ladle: 4096, turret: 8192, stream: 16384, guard: 32768, rotten: 65536 }; // (0.79: rotten: Gone Rotten, an imposter) // (0.54: stream: a Legendary torch or blender in use; guard: spawn protection)
 const SEND_EVERY = 1 / 30, SEND_LOW = 1 / 10; // (0.45: Low internet)
@@ -92,7 +94,7 @@ const MIN_SENT = 6;     // an event leaves the log once it went out this often a
 const BUDGET = 3900;    // bytes of one player's presence (the claude.ai room refuses over 4096)
 // (0.51) The game's version, in every update: players on different copies of the game (one browser still
 // showing an older one) play by different rules, so each is told to reload. Bump it with every release.
-export const NET_VERSION = 77; // (0.83: the Cucumber; 0.84: cut into slices; 0.85: charged, the swing)
+export const NET_VERSION = 78; // (0.83: the Cucumber; 0.84: cut into slices; 0.85: charged, the swing)
 // What a hit did besides its damage, merged into the claim for it (freezes add up to 3, shoves add up)
 function mergeStatus(a, s) {
   for (const [k, v] of Object.entries(s)) {
@@ -701,8 +703,9 @@ export class Net {
         this.isHost = true; this.hostSince = Date.now(); this.hostPeer = this.myPeer;
         for (const key of [...this.botProxies.keys()]) this._dropBot(key);
         if (takeover) { // their bots left with them: a fresh round (with my bots) in 3 s
-          Object.assign(this.game.round, { state: 'over', t: 3, winner: '', fresh: true }); // (fresh: nobody won it)
-          this.game.state = 'over';
+          // (0.86) the match goes on as it was (not the lobby's votes, whose "Surprise me" put us on different maps)
+          this.matchSettings = this.hostSettings ? { ...this.hostSettings } : this.resolve(this.tally());
+          this.game.hostTookOver(); // (fresh: nobody won it; 0.86: really in 3 s, it was 9)
           this.game.hud.banner('The host left', 'You host the room now · new round in 3 s', 3);
         } else this.game.hud.toast('You are hosting this room');
       }
@@ -817,7 +820,7 @@ export class Net {
     pr.version = theirs;
     if (theirs === NET_VERSION || now < (pr.versionToldAt ?? -1e9) + 30) return;
     pr.versionToldAt = now;
-    const name = pr.actor.name || 'Someone', hud = this.game.hud;
+    const name = esc(pr.actor.name || 'Someone'), hud = this.game.hud; // (0.86: escaped, it goes into the page as HTML)
     if (theirs < NET_VERSION) hud.banner(`${name} has an older copy of the game`, 'They need to reload the game page, or online play glitches', 6);
     else hud.banner('There is a newer version of the game', `${name} has it: reload this page so you play by the same rules`, 6);
     console.warn(`[online] ${name} plays version ${theirs || 'older than 51'}, this is ${NET_VERSION}`);

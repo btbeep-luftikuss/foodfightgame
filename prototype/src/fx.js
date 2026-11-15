@@ -138,7 +138,7 @@ export class FX {
     this.shakeAmt = Math.max(0, this.shakeAmt - dt * 2.5);
   }
   clear() { this.blobs.clear(); this.chunks.clear(); this.puffs.clear(); this.flames.clear(); }
-  shake(a) { this.shakeAmt = Math.min(1.2, this.shakeAmt + a); }
+  shake(a) { if (a > 0) this.shakeAmt = Math.min(1.2, this.shakeAmt + a); } // (0.86: never a non-number)
 
   n(count) { return this.scale <= 0 ? 0 : Math.max(1, Math.round(count * this.scale)); } // Off: no particles at all
 

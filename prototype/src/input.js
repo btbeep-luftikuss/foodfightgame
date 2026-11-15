@@ -38,7 +38,7 @@ export class Input {
       if (e.repeat) return;
       this.keys.add(e.code);
       if (e.code === 'Space') this.pressed.jump = true;
-      if (e.code === 'KeyC' || e.code === 'KeyV') this.pressed.dodge = true;
+      if (e.code === 'KeyC') this.pressed.dodge = true; // (0.86: V dashed too, as well as switching the view)
       if (e.code === 'KeyQ' || e.code === 'KeyF') this.pressed.alt = true;
       if (e.code === 'KeyB' || e.code === 'KeyE') this.pressed.sniff = true;
       if (e.code === 'KeyV') this.pressed.view = true;
