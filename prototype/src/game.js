@@ -24,6 +24,7 @@ import { UTENSIL_BY_ID } from './utensils.js';
 import { Arena, ARENA_MODES, ROT, ROT_SIDES } from './arena.js';
 import { Sandbox } from './sandbox.js';
 import { CamFX } from './camfx.js';
+import { Afterimages } from './afterimage.js';
 
 const PLAYER_COLOR = '#ff9a1f';
 const BOT_COLORS = ['#6fc2ff', '#9be15d', '#c38bff', '#ff6f91', '#4fd1c5', '#f2f2f2', '#ffcf3a', '#ff7b54', '#8fa8ff', '#e0a0ff', '#63e6a5'];
@@ -87,6 +88,7 @@ export class Game {
     this.hitStopUntil = 0;
     this.slowUntil = 0; this.slowLen = 1; this.slowMin = 1; // (0.86) a moment of slow motion on a splat (offline)
     this.camfx = new CamFX(this); // (0.86) camera feel: shake, kicks, leans (camfx.js)
+    this.ghosts = new Afterimages(scene); // (0.87) a dash's trail of afterimages (afterimage.js)
     this.camBase = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() }; // the camera before them: the aim
     this.camYaw = 0; this.camPivotY = 0; this.camDist = 5.6;
     this.firstPerson = true; // V toggles
@@ -135,7 +137,7 @@ export class Game {
     this.highlights.stop(); this.highlights.stopRecording(); // (each round is recorded, from its start)
     this.pots.clear(); this.teamSize = 1; this.autoTeam = null;
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear(); this.abilities.reset();
-    this.world.resetRound(); this.camfx.reset(); this.slowUntil = 0; this.hud.clearFeed(); this.brains.clear(); this.utensils.reset(); this.slickAt = 0;
+    this.world.resetRound(); this.camfx.reset(); this.ghosts.clear(); this.slowUntil = 0; this.hud.clearFeed(); this.brains.clear(); this.utensils.reset(); this.slickAt = 0;
     for (const a of this.botActors.slice(1)) { a.alive = false; a.hide(); }
     this.actors = [this.botActors[0]];
     this.player = this.botActors[0];
@@ -207,7 +209,7 @@ export class Game {
     this.round = { id, state: 'drop', t: 0, started: 0, winner: '', joined: false, fresh: false, idle: 0, playAt: 0, score: [0, 0] };
     this.arena.start(this.mode); // (first: what the resets share goes out as this round's)
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear(); this.abilities.reset();
-    this.world.resetRound(); this.camfx.reset(); this.slowUntil = 0; this.utensils.reset(); this.slickAt = 0;
+    this.world.resetRound(); this.camfx.reset(); this.ghosts.clear(); this.slowUntil = 0; this.utensils.reset(); this.slickAt = 0;
     for (const z of this.spikes) this.scene.remove(z.group);
     this.spikes.length = 0;
     this.state = 'drop'; this.stateT = 0; this.winner = null;
@@ -640,7 +642,7 @@ export class Game {
     const chef = this.mode === 'chef';
     this.actors = this.botActors;
     this.surface.reset(); this.projectiles.reset(); this.items.reset(); this.fx.clear(); this.abilities.reset();
-    this.world.resetRound(); this.camfx.reset(); this.slowUntil = 0;
+    this.world.resetRound(); this.camfx.reset(); this.ghosts.clear(); this.slowUntil = 0;
     this.hud.clearFeed();
     this.utensils.reset();
     this.slickAt = 0;
@@ -1007,7 +1009,7 @@ export class Game {
   update(realDt) {
     realDt = Math.max(0, realDt);
     const reel = this.highlights.playing;
-    if (reel && !reel.live) { reel.update(realDt); return; } // (0.36) a highlight reel: the match waits
+    if (reel && !reel.live) { this.ghosts.clear(); reel.update(realDt); return; } // (0.36) a highlight reel: the match waits
     reel?.unpose(); // (0.38) online the match goes on under the reel: its own state back before it steps
     let total = this.paused ? 0 : Math.min(realDt, 0.1);
     const nowMs = performance.now();
@@ -1034,6 +1036,7 @@ export class Game {
     this.poseCull = _frus.setFromProjectionMatrix(_pv.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
     for (const a of this.actors) a.updateVisual(realDt, cam);
     this.poseCull = null;
+    this.ghosts.update(realDt);
     this.utensils.updateVisual(realDt);
     this._camera(realDt);
     this._preview();
@@ -1168,7 +1171,7 @@ export class Game {
     } else if (p.alive && this.firstPerson) {
       // First person: the camera is the Titan's eyes; your arm and food are the viewmodel.
       const zf = p.charging ? p.selectedFood() : null, zoom = zf?.zoom ? clamp(p.chargeT / zf.charge, 0, 1) * zf.zoom : 0; // (0.85: the carrot, and a little the cucumber)
-      fov = lerp(78, 30, zoom) + (p.dashT > 0 ? 8 : 0);
+      fov = lerp(78, 30, zoom); // (0.87: the dash's punch of the lens is a kick now: camfx.js)
       this.camDist = 0.4;
       this.input.zoomSens = lerp(1, 0.4, zoom);
       this.camPivotY = damp(this.camPivotY, p.pos.y, 20, dt);
@@ -1204,11 +1207,15 @@ export class Game {
     // (0.86) the aim is the camera as placed; then the feel on top: smooth shake, kicks, leans (camfx.js)
     this.camBase.position.copy(cam.position); this.camBase.quaternion.copy(cam.quaternion);
     this.camfx.update(dt, !!(p && p.alive && this.state !== 'menu'));
-    if (p && this.state !== 'menu') fov += this.camfx.apply(cam, this.fx.shakeAmt, fp);
+    const fxFov = p && this.state !== 'menu' ? this.camfx.apply(cam, this.fx.shakeAmt, fp) : 0;
     if (p) { if (p.alive) p.root.visible = !fp; p.fpCam = fp ? cam : null; if (fp) p.glint.visible = false; }
     this.viewModel.update(dt, p || this.actors[0], fp);
     fov += this.fovKick; this.fovKick = damp(this.fovKick, 0, 5, dt); // big moves punch the view
-    if (Math.abs(cam.fov - fov) > 0.05) { cam.fov = damp(cam.fov, fov, 12, dt); cam.updateProjectionMatrix(); }
+    // (0.87) the lens eases to where it should be; the camera effects' kicks go on top unsmoothed (smoothing
+    // took the punch out of them)
+    this.fovBase = Math.abs((this.fovBase ?? fov) - fov) > 0.05 ? damp(this.fovBase ?? fov, fov, 12, dt) : fov;
+    const lens = clamp(this.fovBase + fxFov, 20, 112);
+    if (Math.abs(cam.fov - lens) > 0.01) { cam.fov = lens; cam.updateProjectionMatrix(); }
     rightOf(this.input.yaw, _r);
     this.sfx.setListener(cam.position, p ? _r : _r.set(1, 0, 0));
   }

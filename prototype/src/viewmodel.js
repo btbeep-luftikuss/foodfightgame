@@ -103,7 +103,7 @@ export class ViewModel {
     else { y += 0.25 * this.kick; } // coming up after a swap
     if (player.eat) { x -= 0.25; y += 0.12; z += 0.1; rx += 0.6; }
     if (player.shieldUp) { x -= 0.3; y += 0.05; z -= 0.1; }
-    if (player.dashT > 0) rz -= 0.25;
+    if (player.dashT > 0) { rz -= 0.3; z += 0.1; y -= 0.07; rx += 0.3; } // (0.87: the arm pumps back and down with the burst)
     this.sway.position.set(damp(this.sway.position.x, x, 16, dt), damp(this.sway.position.y, y, 16, dt), damp(this.sway.position.z, z, 16, dt));
     this.sway.rotation.x = damp(this.sway.rotation.x, rx, 16, dt);
     this.sway.rotation.z = damp(this.sway.rotation.z, rz, 10, dt);

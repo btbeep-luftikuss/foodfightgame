@@ -2,6 +2,8 @@
 import * as THREE from 'three';
 import { G, rand, clamp } from './core.js';
 
+const _dk = new THREE.Vector3();
+
 // ---------------------------------------------------------------------------
 // Particles: one InstancedMesh per look, structure-of-arrays storage, swap-remove.
 class ParticlePool {
@@ -139,6 +141,14 @@ export class FX {
   }
   clear() { this.blobs.clear(); this.chunks.clear(); this.puffs.clear(); this.flames.clear(); }
   shake(a) { if (a > 0) this.shakeAmt = Math.min(1.2, this.shakeAmt + a); } // (0.86: never a non-number)
+  // (0.87) A dash kicking off: a gust blown back from the feet (against the dash), a quick ring of air, a
+  // few white specks flung back
+  dashKick(pos, dir) {
+    const back = _dk.set(-dir.x, 0.08, -dir.z);
+    this.spray('puffs', pos, 7, { speed: 7, up: 0.2, spread: 0.5, dir: back, colors: PALETTE.foam, size: 0.3, life: 0.34, grav: 0, drag: 6, grow: 1.4 });
+    this.spray('puffs', pos, 8, { speed: 4.5, up: 0.05, spread: 1.4, colors: PALETTE.foam, size: 0.24, life: 0.28, grav: 0, drag: 7, grow: 1.2 });
+    this.spray('blobs', pos, 6, { speed: 9, up: 1.2, spread: 0.35, dir: back, colors: PALETTE.foam, size: 0.06, life: 0.35, grav: 0.6, drag: 2 });
+  }
 
   n(count) { return this.scale <= 0 ? 0 : Math.max(1, Math.round(count * this.scale)); } // Off: no particles at all
 
@@ -271,6 +281,9 @@ export class FX {
         break;
       case 'dash':
         this.spray('puffs', pos, 2, { speed: 0.6, up: 0.3, colors: P.foam, size: 0.35, life: 0.35, grav: 0, drag: 4, grow: 0.6 });
+        break;
+      case 'skid': // (0.87) a dash braking on the ground: a low scuff of dust
+        this.spray('puffs', pos, 7 * power, { speed: 3.2, up: 0.15, spread: 1.2, colors: P.foam, size: 0.3, life: 0.32, grav: 0, drag: 6, grow: 1.1 });
         break;
       case 'jump':
         this.spray('puffs', pos, 12, { speed: 5, up: 0.2, spread: 1.4, colors: P.foam, size: 0.4, life: 0.4, grav: 0, drag: 5, grow: 1.2 });
@@ -488,8 +501,13 @@ export class Sfx {
       case 'tide':
         this._noise(o, t, 1.4, { f0: 500, f1: 900, vol: 0.4 });
         break;
-      case 'dodge':
-        this._noise(o, t, 0.15, { type: 'bandpass', f0: 1500, f1: 600, q: 1, vol: 0.4 });
+      case 'dodge': // (0.87) a kick-off thump under a whoosh that sweeps past, and a little swish on top
+        this._tone(o, t, 0.11, { type: 'sine', f0: 150, f1: 52, vol: 0.45 });
+        this._noise(o, t, 0.24, { type: 'bandpass', f0: 2600, f1: 420, q: 1.1, vol: 0.62 });
+        this._noise(o, t + 0.015, 0.07, { type: 'highpass', f0: 5200, f1: 2600, vol: 0.18 });
+        break;
+      case 'skid': // (0.87) a dash braking: a short scuff
+        this._noise(o, t, 0.12, { type: 'lowpass', f0: 1400, f1: 300, vol: 0.32 });
         break;
       case 'shield':
         this._tone(o, t, 0.12, { f0: 240, f1: 180, vol: 0.4 });

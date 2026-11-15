@@ -63,6 +63,20 @@ You play one Tiny Titan against 11 bots across the whole Grand Kitchen. You drop
 
 ## Run it
 
+**Version 0.87: speed you can feel, and a juicy dash** (`src/camfx.js`, `src/afterimage.js` (new), `src/actors.js`, `src/fx.js`, `src/game.js`, `src/viewmodel.js`, `src/main.js`)
+
+- **Speed:**
+  - The view widens as you speed up: about 5 degrees at a sprint, up to 13 when you really fly (knocked flying, a jump pad, a Mega Jump, a long fall), easing back as you slow down.
+  - Cartoon speed lines stream past the edges of the view when you go fast (from about twice a sprint: a dash, a long fall, knocked flying). They run out from the point you're heading for, in toward it when you fly backwards, up the screen as you fall; the middle of the view stays clear for aiming. White with a soft dark edge, so they show on the bright kitchen and in dark corners alike, with a light vignette. One quad with a small shader, drawn over the finished frame only while you're fast.
+  - At the very fastest the view hums a little.
+- **The dash:**
+  - The lens punches out (about 8 degrees) and settles, the view lags behind the burst and catches up, rolls into a sideways dash and tips into a forward one, with a burst of speed lines and a jolt. (It used to be a flat 8 degrees wider, in first person only.)
+  - **Afterimages:** a trail of see-through copies of the Titan in its colour, frozen mid-dash and fading out, on every dash: yours in third person, the bots', and online every player's (from their dash flag). Each copy shares the Titan's body shape with a frozen copy of its skeleton: one small draw, from a pool of at most 28.
+  - A gust of air kicks back from the feet, the Titan squashes as it pushes off and leans hard into the dash whichever way it goes (sideways too), puffs trail behind it, and it scuffs up dust with a little squash when it brakes on the ground.
+  - A beefier sound: a kick-off thump under a whoosh that sweeps past, a swish on top, and a scuff as it stops. Other players' dashes are heard online now too.
+  - In first person the arm pumps back and down with the burst.
+- All of it on the camera follows Settings, Camera effects (Full, Reduced, Off), and none of it moves your aim. The lens kicks are no longer smoothed away (they're added after the lens eases to its zoom), so every punch of the lens since 0.86 lands harder too.
+
 **Version 0.86: the soap washes splats off exactly, a camera with feel, and 12 bugs fixed** (`src/stains.js`, `src/surface.js`, `src/world.js`, `src/camfx.js` (new), `src/game.js`, `src/actors.js`, `src/fx.js`, `src/foods.js`, `src/main.js`, `src/input.js`, `src/arena.js`, `src/potwars.js`, `src/net.js`)
 
 - **The Soap Tide washes food off, to the pixel:** whatever part of a splat lies outside the safe circle is gone, cut cleanly along the soap's edge, so a splat half under the soap is half erased (walls and counters too). The puddles (soda, melted cheese, ice rinks, Juice Balls) wash off the same way, and where they're washed they no longer slow you or slide you (a map's own spills stay). The circles only shrink, each inside the last, so what's washed stays washed until the next round; a highlight reel shows the stains as they were at its moment. (In the splat shader: a clean, anti-aliased cut, no extra cost.)

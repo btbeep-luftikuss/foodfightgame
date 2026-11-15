@@ -20,6 +20,7 @@ const COST_JUMP = 18, COST_DOUBLE = 24, COST_DASH = 30, REGEN = 30, REGEN_DELAY 
 export const MAX_HP = 200;
 const RADIUS = 0.45, HEIGHT = 1.95;
 const _v = new THREE.Vector3(), _f = new THREE.Vector3(), _r = new THREE.Vector3();
+const _dd = new THREE.Vector3(), _dc = new THREE.Vector3();
 const _poseSph = new THREE.Sphere();
 
 function glintTexture() {
@@ -441,12 +442,8 @@ export class Actor {
       this.dodgeReadyAt = now + DASH_COOLDOWN; this.knockUntil = now + DASH_TIME; this.dashT = DASH_TIME;
       this.lastDodgeAt = now; this.noiseAt = now;
       for (const e of this.sticky) e.until -= 1; // dashing sheds 1 s of sticky
-      g.sfx.play('dodge', this.pos);
     }
-    if (this.dashT > 0) {
-      this.dashT -= dt;
-      g.fx.burst('dash', this.center(_f));
-    }
+    if (this.dashT > 0) this.dashT -= dt; // (0.87: its look and sound: updateVisual, for every Titan's dash, online too)
 
     if (this.onGround && Math.hypot(this.vel.x, this.vel.z) > 8.5) this.noiseAt = now; // sprinting footsteps
     this.vel.y -= G * dt;
@@ -571,6 +568,34 @@ export class Actor {
     this.primaryPrev = it.primary;
   }
 
+  // (0.87) A dash, seen from anywhere (mine, the bots', and online everyone's, from their dash flag): a gust
+  // kicked back from the feet, a whoosh and a squash as it starts; a trail of afterimages and puffs while it
+  // lasts; a scuff of dust and a little squash when it brakes on the ground.
+  _dashFx(dt, ghosts) {
+    const g = this.game, dashing = this.dashT > 0;
+    if (dashing !== !!this.wasDash) {
+      this.wasDash = dashing;
+      if (dashing) {
+        const hs = Math.hypot(this.vel.x, this.vel.z);
+        if (hs > 1) _dd.set(this.vel.x / hs, 0, this.vel.z / hs); else forwardOf(this.yaw, _dd);
+        g.fx.dashKick(this.pos, _dd);
+        g.sfx.play('dodge', this.pos, this === g.player ? 1 : 0.8);
+        this.squash = Math.max(this.squash, 0.5);
+        this.ghostT = 0; this.dashPuffT = 0;
+      } else if (this.onGround && this.alive) {
+        g.fx.burst('skid', this.pos);
+        g.sfx.play('skid', this.pos, 0.7);
+        this.squash = Math.max(this.squash, 0.3);
+      }
+    }
+    if (!dashing) return;
+    if ((this.dashPuffT -= dt) <= 0) { this.dashPuffT = 0.03; g.fx.burst('dash', this.center(_dc)); }
+    if ((this.ghostT -= dt) <= 0 && ghosts && this.root.visible && this.alive) {
+      this.ghostT = g.quality.name === 'Low' ? 0.08 : 0.04;
+      g.ghosts.spawn(this);
+    }
+  }
+
   _release(food, c) {
     const U = this.game.utensils;
     U.beginRelease(this, food, this.chargeT);
@@ -608,10 +633,13 @@ export class Actor {
     const vf = (this.vel.x * fwd.x + this.vel.z * fwd.z) / 8, vr = (this.vel.x * right.x + this.vel.z * right.z) / 8;
     let tiltX = clamp(vf, -1, 1) * 0.08, tiltZ = -clamp(vr, -1, 1) * 0.1;
     if (this.isTripped()) tiltX = -1.45;
-    if (this.dashT > 0) tiltX = 0.35; // lean hard into a dash
-    else if (this.airJumps > 0 && !this.onGround && this.vel.y > 0) tiltX = -0.6 + (JUMP2_V - this.vel.y) * 0.05; // flip-ish tuck
+    if (this.dashT > 0) { // lean hard into a dash (0.87: whichever way it goes, sideways too)
+      const hs = Math.hypot(this.vel.x, this.vel.z);
+      if (hs > 3) { tiltX = 0.45 * (this.vel.x * fwd.x + this.vel.z * fwd.z) / hs; tiltZ = -0.45 * (this.vel.x * right.x + this.vel.z * right.z) / hs; }
+      else tiltX = 0.35;
+    } else if (this.airJumps > 0 && !this.onGround && this.vel.y > 0) tiltX = -0.6 + (JUMP2_V - this.vel.y) * 0.05; // flip-ish tuck
     this.body.rotation.x = damp(this.body.rotation.x, tiltX, this.dashT > 0 ? 30 : 12, dt);
-    this.body.rotation.z = damp(this.body.rotation.z, tiltZ, 12, dt);
+    this.body.rotation.z = damp(this.body.rotation.z, tiltZ, this.dashT > 0 ? 30 : 12, dt);
     this.body.position.y += this.isTripped() ? 0.35 : 0;
 
     // Level of detail: the full model (fingers, eyelids, laces) up close, a 1.5k-vertex one further away.
@@ -637,6 +665,7 @@ export class Actor {
         heavy: this.heavy() && !this.shieldUp, holding: !!this.heldMesh, tool: !!this.uMesh && this.uHold === 'grip', toolPalm: !!this.uMesh && this.uHold !== 'grip', pitch: clamp(pitch, -1, 1), hit: this.hitFlash,
       }, pdt);
     }
+    this._dashFx(dt, inView && d2 < 60 * 60 && !(me && this.game.firstPerson));
     this.napkin.visible = this.gliding;
     if (this.gliding) this.napkin.rotation.z = Math.sin(t * 3) * 0.08;
     const rooted = this.isRooted();

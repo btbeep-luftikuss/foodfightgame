@@ -1562,6 +1562,7 @@ function boot() {
     if (busy) skipped++;
     else {
       if (composer) composer.render(dt); else renderer.render(scene, camera);
+      game.camfx.drawLines(renderer); // (0.87) speed lines over the finished frame, while you're fast
       drawn++;
       if (fenced) { const f = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); if (f) { fences.push(f); fenceAt.push(now); gl.flush(); } } // (sent now, or it never finishes)
     }
